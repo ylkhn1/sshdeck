@@ -21,7 +21,7 @@ use crate::session::Session;
 /// отказ в доступе). Остальные коды — это статус удалённой команды.
 const SSH_ERROR_CODE: i32 = 255;
 
-const INITIAL_PANEL_WIDTH: i32 = 420;
+const INITIAL_PANEL_WIDTH: i32 = 340;
 
 pub struct SessionTab {
     /// Корневой виджет вкладки; поверх него всплывают её уведомления.
@@ -46,6 +46,7 @@ impl SessionTab {
         tab_id: u32,
         runtime_dir: &Path,
         font: &str,
+        show_files: bool,
         startup: &str,
         on_finished: impl Fn() + 'static,
     ) -> Rc<Self> {
@@ -58,6 +59,7 @@ impl SessionTab {
         let scratch_dir = runtime_dir.join(format!("files-{}-{tab_id}", std::process::id()));
         let notifier = Notifier::new();
         let panel = FilePanel::new(&session, scratch_dir, notifier.clone());
+        panel.widget().set_visible(show_files);
         let TerminalView { term, widget } = {
             let notifier = notifier.clone();
             TerminalView::new(font, move |text| notifier.info(text))
@@ -78,6 +80,7 @@ impl SessionTab {
             .shrink_start_child(false)
             .shrink_end_child(false)
             .vexpand(true)
+            .css_classes(["sshdeck-split"])
             .build();
 
         let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -171,6 +174,12 @@ impl SessionTab {
 
     pub fn target(&self) -> &str {
         self.session.target()
+    }
+
+    /// Показывает или прячет панель файлов; терминал занимает освободившееся
+    /// место.
+    pub fn set_files_visible(&self, visible: bool) {
+        self.panel.widget().set_visible(visible);
     }
 
     pub fn set_font(&self, font: &str) {

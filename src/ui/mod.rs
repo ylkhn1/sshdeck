@@ -130,6 +130,18 @@ pub fn format_mtime(unix_secs: u64) -> String {
         .unwrap_or_default()
 }
 
+/// Кнопки окна (свернуть, развернуть, закрыть) для своей шапки. Какие кнопки
+/// и с какой стороны, решает система; пустой набор не занимает места.
+pub fn window_controls(side: gtk::PackType) -> gtk::WindowControls {
+    let controls = gtk::WindowControls::new(side);
+    controls
+        .bind_property("empty", &controls, "visible")
+        .invert_boolean()
+        .sync_create()
+        .build();
+    controls
+}
+
 /// Окно, в котором находится виджет (для системных диалогов выбора файлов).
 pub fn parent_window(widget: &impl IsA<gtk::Widget>) -> Option<gtk::Window> {
     widget.root().and_downcast::<gtk::Window>()

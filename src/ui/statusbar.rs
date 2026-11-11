@@ -34,7 +34,7 @@ struct Inner {
 
 impl StatusBar {
     pub fn new() -> Self {
-        let row = gtk::Box::new(gtk::Orientation::Horizontal, 14);
+        let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         row.add_css_class("sshdeck-statusbar");
         let item = |title: &str, tooltip: &str| {
             let value = gtk::Label::builder()
@@ -42,6 +42,7 @@ impl StatusBar {
                 .css_classes(["numeric"])
                 .build();
             let cell = gtk::Box::new(gtk::Orientation::Horizontal, 6);
+            cell.add_css_class("sshdeck-stat");
             cell.set_tooltip_text(Some(tooltip));
             cell.append(
                 &gtk::Label::builder()

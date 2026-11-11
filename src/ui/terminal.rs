@@ -30,24 +30,28 @@ pub struct Theme {
     palette: [&'static str; 16],
 }
 
-/// Цвета ANSI в гамме Adwaita — для темы, следующей за оформлением окна.
-const ADWAITA_PALETTE: [&str; 16] = [
-    "#241f31", "#c01c28", "#2ec27e", "#f5c211", "#1e78e4", "#9841bb", "#0ab9dc", "#c0bfbc",
-    "#5e5c64", "#ed333b", "#57e389", "#f8e45c", "#51a1ff", "#c061cb", "#4fd2fd", "#f6f5f4",
-];
-const ADWAITA_DARK: Theme = Theme {
+/// Собственная тёмная палитра sshdeck: стандартные «Как в системе» и
+/// «Тёмная» берут её, а не серые цвета Adwaita.
+const DECK_NIGHT: Theme = Theme {
     id: "system",
     name: "Как оформление окна",
-    foreground: "#eeeeec",
-    background: "#1d1d20",
-    palette: ADWAITA_PALETTE,
+    foreground: "#d6dae3",
+    background: "#15171d",
+    palette: [
+        "#20232b", "#ff6b7d", "#4ade80", "#f5c45e", "#6d8dff", "#c38bff", "#3fd2e6", "#c5cad6",
+        "#4d5363", "#ff8a98", "#7ff0a6", "#ffd98a", "#94acff", "#d6adff", "#78e3f2", "#f2f4f8",
+    ],
 };
-const ADWAITA_LIGHT: Theme = Theme {
+/// Светлая пара к [`DECK_NIGHT`].
+const DECK_DAY: Theme = Theme {
     id: "system",
     name: "Как оформление окна",
-    foreground: "#1e1e1e",
-    background: "#ffffff",
-    palette: ADWAITA_PALETTE,
+    foreground: "#1f2430",
+    background: "#fbfbfd",
+    palette: [
+        "#1f2430", "#d32f45", "#1a8f4a", "#a26a00", "#3e63e6", "#8a4fd8", "#0b7f8f", "#6b7280",
+        "#4b5263", "#e5484d", "#2bb062", "#c58a00", "#5b7cff", "#a774ef", "#1599ab", "#9aa1ad",
+    ],
 };
 
 const SOLARIZED_PALETTE: [&str; 16] = [
@@ -141,7 +145,7 @@ pub const THEMES: [Theme; 8] = [
 
 thread_local! {
     /// Выбранная тема; одна на все терминалы приложения.
-    static CURRENT_THEME: RefCell<String> = RefCell::new(ADWAITA_DARK.id.to_string());
+    static CURRENT_THEME: RefCell<String> = RefCell::new(DECK_NIGHT.id.to_string());
 }
 
 /// Оформление всего окна в цветах темы.
@@ -155,7 +159,17 @@ pub struct AppLook {
 /// Цвета интерфейса для темы с собственной палитрой; `None` для темы,
 /// следующей за системой, и для неизвестного идентификатора.
 pub fn app_look(id: &str) -> Option<AppLook> {
-    let theme = THEMES.iter().find(|theme| theme.id == id)?;
+    look_for(THEMES.iter().find(|theme| theme.id == id)?)
+}
+
+/// Фирменное оформление sshdeck в светлом или тёмном варианте — для
+/// стандартных тем «Как в системе», «Светлая» и «Тёмная».
+pub fn default_look(dark: bool) -> AppLook {
+    look_for(if dark { &DECK_NIGHT } else { &DECK_DAY })
+        .expect("встроенные палитры записаны в #rrggbb")
+}
+
+fn look_for(theme: &Theme) -> Option<AppLook> {
     let background = Rgb::parse(theme.background)?;
     let foreground = Rgb::parse(theme.foreground)?;
     // Синий из палитры темы служит акцентом: кнопки, выделение, фокус.
@@ -262,7 +276,7 @@ fn current_theme(dark: bool) -> &'static Theme {
     THEMES
         .iter()
         .find(|theme| theme.id == id)
-        .unwrap_or(if dark { &ADWAITA_DARK } else { &ADWAITA_LIGHT })
+        .unwrap_or(if dark { &DECK_NIGHT } else { &DECK_DAY })
 }
 
 pub struct TerminalView {
@@ -342,18 +356,39 @@ pub fn refresh_colors(term: &vte::Terminal) {
     term.set_colors(Some(&foreground), Some(&background), &palette);
 }
 
-/// Ctrl+Shift+C / Ctrl+Shift+V и масштаб Ctrl +/−/0. Триггеры GTK
-/// сопоставляются с учётом раскладки, поэтому сочетания работают и при
-/// русской раскладке.
+/// Ctrl+Shift+C / Ctrl+Shift+V и масштаб Ctrl +/−/0.
+///
+/// Копирование и вставка ловятся отдельным обработчиком клавиш, а не
+/// триггерами GTK: при нелатинской раскладке (русская, казахская) GTK
+/// получает `М` вместо `v` и, когда зажат Shift, не находит сочетание
+/// даже по физической клавише — тогда VTE отправлял в pty `^V`.
 fn install_shortcuts(term: &vte::Terminal) {
+    let keys = gtk::EventControllerKey::new();
+    keys.set_propagation_phase(gtk::PropagationPhase::Capture);
+    let weak = term.downgrade();
+    keys.connect_key_pressed(move |_, keyval, keycode, state| {
+        let Some(term) = weak.upgrade() else {
+            return glib::Propagation::Proceed;
+        };
+        let mods = state
+            & (gdk::ModifierType::CONTROL_MASK
+                | gdk::ModifierType::SHIFT_MASK
+                | gdk::ModifierType::ALT_MASK
+                | gdk::ModifierType::SUPER_MASK);
+        if mods != gdk::ModifierType::CONTROL_MASK | gdk::ModifierType::SHIFT_MASK {
+            return glib::Propagation::Proceed;
+        }
+        match latin_letter(&term, keyval, keycode) {
+            Some('c') => term.copy_clipboard_format(vte::Format::Text),
+            Some('v') => term.paste_clipboard(),
+            _ => return glib::Propagation::Proceed,
+        }
+        glib::Propagation::Stop
+    });
+    term.add_controller(keys);
+
     let controller = gtk::ShortcutController::new();
     controller.set_propagation_phase(gtk::PropagationPhase::Capture);
-    add_shortcut(&controller, "<Control><Shift>c", |term| {
-        term.copy_clipboard_format(vte::Format::Text);
-    });
-    add_shortcut(&controller, "<Control><Shift>v", |term| {
-        term.paste_clipboard();
-    });
     for trigger in ["<Control>plus", "<Control>equal", "<Control>KP_Add"] {
         add_shortcut(&controller, trigger, |term| zoom(term, ZOOM_STEP));
     }
@@ -362,6 +397,21 @@ fn install_shortcuts(term: &vte::Terminal) {
     }
     add_shortcut(&controller, "<Control>0", |term| term.set_font_scale(1.0));
     term.add_controller(controller);
+}
+
+/// Латинская буква нажатой клавиши независимо от раскладки: сам `keyval`,
+/// если он латинский, иначе буква той же физической клавиши из латинской
+/// раскладки (на ЙЦУКЕН клавиша `М` даёт `v`).
+fn latin_letter(widget: &impl IsA<gtk::Widget>, keyval: gdk::Key, keycode: u32) -> Option<char> {
+    let latin = |key: gdk::Key| key.to_lower().to_unicode().filter(char::is_ascii_lowercase);
+    latin(keyval).or_else(|| {
+        widget
+            .display()
+            .map_keycode(keycode)?
+            .into_iter()
+            .filter(|(entry, _)| entry.level() == 0)
+            .find_map(|(_, key)| latin(key))
+    })
 }
 
 fn zoom(term: &vte::Terminal, factor: f64) {
@@ -453,7 +503,7 @@ pub fn exit_code(wait_status: i32) -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{Rgb, THEMES, app_look};
+    use super::{DECK_DAY, DECK_NIGHT, Rgb, THEMES, app_look, default_look};
 
     #[test]
     fn theme_ids_are_unique_and_colors_are_hex() {
@@ -501,5 +551,17 @@ mod tests {
         }
         assert!(app_look("system").is_none());
         assert!(app_look("no-such-theme").is_none());
+    }
+
+    #[test]
+    fn default_look_matches_requested_variant() {
+        let night = default_look(true);
+        let day = default_look(false);
+        assert!(night.dark);
+        assert!(!day.dark);
+        let night_bg = format!("--view-bg-color: {};", DECK_NIGHT.background);
+        let day_bg = format!("--view-bg-color: {};", DECK_DAY.background);
+        assert!(night.css.contains(&night_bg));
+        assert!(day.css.contains(&day_bg));
     }
 }

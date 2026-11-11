@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use gtk::glib;
 
-pub const DEFAULT_FONT: &str = "Monospace 11";
+pub const DEFAULT_FONT: &str = "Monospace 10";
 /// Тема терминала, которая следует за светлым или тёмным оформлением окна.
 pub const DEFAULT_THEME: &str = "system";
 /// Оформление окна: `system`, `light` или `dark`.
@@ -19,6 +19,7 @@ const KEY_FONT: &str = "font";
 const KEY_THEME: &str = "theme";
 const GROUP_APPEARANCE: &str = "appearance";
 const KEY_SCHEME: &str = "scheme";
+const KEY_FILES_PANEL: &str = "files_panel";
 const GROUP_SNIPPET: &str = "snippet";
 const KEY_NAME: &str = "name";
 const KEY_COMMAND: &str = "command";
@@ -37,6 +38,8 @@ pub struct Settings {
     /// Идентификатор темы терминала (см. `ui::terminal::THEMES`).
     pub terminal_theme: String,
     pub color_scheme: String,
+    /// Видна ли панель файлов во вкладках.
+    pub show_files: bool,
     pub snippets: Vec<Snippet>,
 }
 
@@ -46,6 +49,7 @@ impl Default for Settings {
             terminal_font: DEFAULT_FONT.to_string(),
             terminal_theme: DEFAULT_THEME.to_string(),
             color_scheme: DEFAULT_SCHEME.to_string(),
+            show_files: true,
             snippets: Vec::new(),
         }
     }
@@ -100,6 +104,9 @@ impl Settings {
         if let Some(scheme) = field(GROUP_APPEARANCE, KEY_SCHEME) {
             settings.color_scheme = scheme;
         }
+        if let Ok(show) = key_file.boolean(GROUP_APPEARANCE, KEY_FILES_PANEL) {
+            settings.show_files = show;
+        }
         for group in key_file.groups().iter() {
             let group = group.as_str();
             if !group.starts_with(GROUP_SNIPPET) {
@@ -118,6 +125,7 @@ impl Settings {
         key_file.set_string(GROUP_TERMINAL, KEY_FONT, &self.terminal_font);
         key_file.set_string(GROUP_TERMINAL, KEY_THEME, &self.terminal_theme);
         key_file.set_string(GROUP_APPEARANCE, KEY_SCHEME, &self.color_scheme);
+        key_file.set_boolean(GROUP_APPEARANCE, KEY_FILES_PANEL, self.show_files);
         for (index, snippet) in self.snippets.iter().enumerate() {
             let group = format!("{GROUP_SNIPPET}-{}", index + 1);
             key_file.set_string(&group, KEY_NAME, &snippet.name);
@@ -146,6 +154,7 @@ mod tests {
         let settings = Settings::parse("[terminal]\nfont=JetBrains Mono 12\n");
         assert_eq!(settings.terminal_font, "JetBrains Mono 12");
         assert_eq!(settings.terminal_theme, DEFAULT_THEME);
+        assert!(settings.show_files);
         assert!(settings.snippets.is_empty());
     }
 
@@ -155,6 +164,7 @@ mod tests {
             terminal_font: "Fira Code 13".to_string(),
             terminal_theme: "dracula".to_string(),
             color_scheme: "dark".to_string(),
+            show_files: false,
             snippets: vec![
                 Snippet {
                     name: "Логи nginx".to_string(),

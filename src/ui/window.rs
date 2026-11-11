@@ -15,17 +15,132 @@ use super::{Notifier, dialogs};
 use crate::session;
 use crate::settings::Settings;
 
+/// Собственный облик поверх libadwaita. Цвета берутся из переменных
+/// libadwaita (`--window-bg-color` и т. п.), которые задаёт выбранная тема,
+/// поэтому правила одинаково работают в светлом и тёмном вариантах.
 const CSS: &str = "
-vte-terminal { padding: 6px 8px; }
+/* ---------- шапки: вкладки прямо в заголовке окна */
+.sshdeck-topbar, .sshdeck-sidebar-header { min-height: 40px; padding: 0 6px; }
+.sshdeck-sidebar-header { padding-left: 14px; }
+.sshdeck-topbar {
+  background-color: var(--headerbar-bg-color);
+  color: var(--headerbar-fg-color);
+  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 8%, transparent);
+}
+.sshdeck-topbar > button, .sshdeck-topbar > menubutton > button,
+.sshdeck-sidebar-header > button {
+  min-width: 28px; min-height: 28px; padding: 0; border-radius: 7px;
+}
+.sshdeck-topbar > button.toggle:checked {
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+  box-shadow: none;
+}
+.sshdeck-topbar > button.toggle:checked:hover {
+  background-color: color-mix(in srgb, currentColor 15%, transparent);
+}
+.sshdeck-topbar windowcontrols > button > image,
+.sshdeck-sidebar-header windowcontrols > button > image {
+  background: none; border-radius: 7px; padding: 5px;
+}
+.sshdeck-topbar windowcontrols > button:hover > image,
+.sshdeck-sidebar-header windowcontrols > button:hover > image {
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+.sshdeck-topbar windowcontrols > button.close:hover > image,
+.sshdeck-sidebar-header windowcontrols > button.close:hover > image {
+  background-color: #e5484d; color: #ffffff;
+}
+
+.sshdeck-topbar tabbar .box { background: none; box-shadow: none; padding: 0; }
+.sshdeck-topbar tabbar tabbox { padding-top: 0; padding-bottom: 0; min-height: 40px; }
+.sshdeck-topbar tabbar tabbox > separator { opacity: 0; }
+.sshdeck-topbar tabbar tab {
+  min-height: 22px; margin: 5px 0; padding: 2px 3px 2px 10px; border-radius: 8px;
+  color: color-mix(in srgb, currentColor 60%, transparent);
+}
+.sshdeck-topbar tabbar tab:hover { color: var(--headerbar-fg-color); }
+.sshdeck-topbar tabbar tab:selected,
+.sshdeck-topbar tabbar tabbox.single-tab tab:selected {
+  background-color: var(--view-bg-color);
+  color: var(--view-fg-color);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22),
+              inset 0 0 0 1px color-mix(in srgb, var(--view-fg-color) 7%, transparent);
+}
+.sshdeck-topbar tabbar tab:selected label { font-weight: 600; }
+
+/* ---------- боковая панель */
+.sshdeck-logo {
+  min-width: 22px; min-height: 22px; margin-right: 6px; border-radius: 7px;
+  background-color: var(--accent-bg-color); color: var(--accent-fg-color);
+  font-family: monospace; font-weight: 800; font-size: 0.85em;
+}
+.sshdeck-brand { font-weight: 800; font-size: 1.08em; }
+.sshdeck-address { margin: 2px 10px 6px 10px; min-height: 30px; border-radius: 8px; }
+.sshdeck-section-title {
+  margin: 8px 4px 2px 4px; font-size: 0.7em; font-weight: 800; letter-spacing: 0.1em;
+  color: color-mix(in srgb, currentColor 48%, transparent);
+}
+.sshdeck-note { margin: 6px 14px 10px 14px; }
+.sshdeck-hosts { background: none; }
+.sshdeck-hosts > row { margin: 0 6px 1px 6px; border-radius: 8px; }
+.sshdeck-hosts > row.activatable { min-height: 32px; }
+.sshdeck-hosts > row:selected {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 22%, transparent);
+}
+.sshdeck-hosts > row:selected:hover {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 28%, transparent);
+}
+.sshdeck-avatar {
+  min-width: 22px; min-height: 22px; border-radius: 6px;
+  font-weight: 800; font-size: 0.78em;
+}
+.sshdeck-avatar-0 { color: #5b7cff; background-color: color-mix(in srgb, #5b7cff 18%, transparent); }
+.sshdeck-avatar-1 { color: #9b6dff; background-color: color-mix(in srgb, #9b6dff 18%, transparent); }
+.sshdeck-avatar-2 { color: #e5559a; background-color: color-mix(in srgb, #e5559a 18%, transparent); }
+.sshdeck-avatar-3 { color: #e5484d; background-color: color-mix(in srgb, #e5484d 18%, transparent); }
+.sshdeck-avatar-4 { color: #e8803a; background-color: color-mix(in srgb, #e8803a 18%, transparent); }
+.sshdeck-avatar-5 { color: #c9921a; background-color: color-mix(in srgb, #c9921a 18%, transparent); }
+.sshdeck-avatar-6 { color: #2bb062; background-color: color-mix(in srgb, #2bb062 18%, transparent); }
+.sshdeck-avatar-7 { color: #14a3b8; background-color: color-mix(in srgb, #14a3b8 18%, transparent); }
+
+/* ---------- пустой экран */
+.sshdeck-empty > scrolledwindow > viewport > box > clamp > box > .icon {
+  color: var(--accent-color); -gtk-icon-size: 96px;
+}
+.sshdeck-empty .title { font-weight: 800; }
+
+/* ---------- вкладка: файлы | терминал */
+paned.sshdeck-split > separator {
+  background-color: color-mix(in srgb, currentColor 9%, transparent);
+}
+vte-terminal { padding: 4px 8px; }
+.sshdeck-files-toolbar { padding: 2px 2px 0 2px; }
 .sshdeck-files-toolbar > .toolbar + .toolbar { padding-top: 0; }
-columnview.sshdeck-files > listview > row > cell { padding-top: 3px; padding-bottom: 3px; }
+.sshdeck-files-toolbar button { border-radius: 8px; }
+.sshdeck-files-toolbar entry {
+  min-height: 26px; border-radius: 7px; font-family: monospace; font-size: 0.92em;
+}
+columnview.sshdeck-files > header > button { padding-top: 3px; padding-bottom: 3px; }
+columnview.sshdeck-files > header > button > box { font-size: 0.78em; font-weight: 700; }
+columnview.sshdeck-files > listview > row > cell { padding-top: 1px; padding-bottom: 1px; }
+columnview.sshdeck-files > listview > row:selected {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 22%, transparent);
+}
 .sshdeck-transfers { padding: 0 6px 6px 6px; }
 .sshdeck-transfer { padding: 6px 6px 10px 12px; }
-.sshdeck-address { margin: 4px 8px 2px 8px; }
 .sshdeck-section { margin: 10px 14px 2px 14px; }
-.sshdeck-note { margin: 6px 14px 10px 14px; }
-.sshdeck-hosts > row { min-height: 28px; }
-.sshdeck-statusbar { padding: 4px 12px; font-size: 0.9em; border-top: 1px solid alpha(currentColor, 0.12); }
+
+/* ---------- строка состояния сервера */
+.sshdeck-statusbar {
+  padding: 2px 8px; font-size: 0.85em;
+  background-color: var(--window-bg-color);
+  box-shadow: inset 0 1px color-mix(in srgb, currentColor 8%, transparent);
+}
+.sshdeck-stat {
+  padding: 1px 8px; border-radius: 99px;
+  background-color: color-mix(in srgb, currentColor 6%, transparent);
+}
+
 .sshdeck-folder-red { color: #ed333b; }
 .sshdeck-folder-orange { color: #ff7800; }
 .sshdeck-folder-yellow { color: #e5a50a; }
@@ -47,10 +162,12 @@ const SCHEMES: [(&str, &str); 3] = [
 
 /// Шрифт интерфейса, если системный оказался моноширинным.
 const UI_FONT_FAMILY: &str = "Adwaita Sans, Inter, Noto Sans, Cantarell, sans-serif";
+/// Во сколько раз шрифт интерфейса мельче системного.
+const UI_FONT_SCALE: f64 = 0.9;
 
 pub fn build(app: &adw::Application, initial_targets: &[String]) {
     install_css();
-    use_proportional_ui_font();
+    tune_ui_font();
     // Остатки аварийно завершившихся запусков: сокеты и временные файлы.
     if let Ok(dir) = session::runtime_dir() {
         session::cleanup_stale(&dir);
@@ -60,6 +177,15 @@ pub fn build(app: &adw::Application, initial_targets: &[String]) {
     for target in initial_targets {
         window.open_tab(target, None, "");
     }
+}
+
+/// Значок приложения для пустого экрана, растрированный с запасом (256 px),
+/// чтобы оставаться чётким на экранах с масштабом 2. `None`, если в системе
+/// нет загрузчика SVG.
+fn app_icon() -> Option<gdk::Texture> {
+    let svg = include_str!("../../data/dev.sshdeck.App.svg")
+        .replacen(r#"width="128" height="128""#, r#"width="256" height="256""#, 1);
+    gdk::Texture::from_bytes(&glib::Bytes::from_owned(svg.into_bytes())).ok()
 }
 
 fn install_css() {
@@ -100,20 +226,23 @@ fn apply_look(provider: &gtk::CssProvider, settings: &Settings) {
             });
         }
         None => {
-            provider.load_from_string("");
             style.set_color_scheme(match settings.color_scheme.as_str() {
                 "light" => adw::ColorScheme::ForceLight,
                 "dark" => adw::ColorScheme::ForceDark,
                 _ => adw::ColorScheme::Default,
             });
+            // Фирменная палитра в том варианте, который сейчас действует;
+            // при смене системной темы окно перекрашивается заново.
+            provider.load_from_string(&terminal::default_look(style.is_dark()).css);
         }
     }
 }
 
-/// Если системный шрифт интерфейса моноширинный (как бывает при настройке
-/// «один шрифт на всё»), кнопки и списки набираются обычным шрифтом того же
-/// размера. Терминал это не затрагивает: его шрифт задаётся отдельно.
-fn use_proportional_ui_font() {
+/// Шрифт интерфейса: на [`UI_FONT_SCALE`] мельче системного, чтобы списки
+/// и панели были плотнее. Если системный шрифт моноширинный (как бывает при
+/// настройке «один шрифт на всё»), кнопки и списки набираются обычным
+/// шрифтом. Терминал это не затрагивает: его шрифт задаётся отдельно.
+fn tune_ui_font() {
     let Some(settings) = gtk::Settings::default() else {
         return;
     };
@@ -121,28 +250,37 @@ fn use_proportional_ui_font() {
         return;
     };
     let mut description = pango::FontDescription::from_string(&name);
-    let Some(family) = description.family() else {
-        return;
-    };
-    let context = gtk::Label::new(None).pango_context();
-    let monospace = context
-        .list_families()
-        .iter()
-        .any(|candidate| candidate.name().eq_ignore_ascii_case(&family) && candidate.is_monospace());
-    if monospace {
-        description.set_family(UI_FONT_FAMILY);
-        settings.set_gtk_font_name(Some(&description.to_string()));
+    if let Some(family) = description.family() {
+        let context = gtk::Label::new(None).pango_context();
+        let monospace = context.list_families().iter().any(|candidate| {
+            candidate.name().eq_ignore_ascii_case(&family) && candidate.is_monospace()
+        });
+        if monospace {
+            description.set_family(UI_FONT_FAMILY);
+        }
     }
+    let size = f64::from(description.size()) * UI_FONT_SCALE;
+    if size > 0.0 {
+        if description.is_size_absolute() {
+            description.set_absolute_size(size);
+        } else {
+            description.set_size(size.round() as i32);
+        }
+    }
+    settings.set_gtk_font_name(Some(&description.to_string()));
 }
 
 struct AppWindow {
     window: adw::ApplicationWindow,
-    title: adw::WindowTitle,
     tab_view: adw::TabView,
     tab_bar: adw::TabBar,
     stack: gtk::Stack,
     notifier: Notifier,
     sidebar: HostsSidebar,
+    /// Список подключений и область вкладок.
+    split: adw::OverlaySplitView,
+    /// Кнопка панели файлов в шапке; видна, пока открыта хотя бы одна вкладка.
+    files_toggle: gtk::ToggleButton,
     tabs: RefCell<Vec<Rc<SessionTab>>>,
     settings: Rc<RefCell<Settings>>,
     /// Цвета выбранной темы для всего окна.
@@ -175,16 +313,23 @@ impl AppWindow {
         let tab_bar = adw::TabBar::builder()
             .view(&tab_view)
             .autohide(false)
+            .expand_tabs(false)
+            .hexpand(true)
             .visible(false)
             .build();
 
         let empty_page = adw::StatusPage::builder()
+            .css_classes(["sshdeck-empty"])
             .title("Нет открытых сессий")
             .description(
                 "Дважды щёлкните подключение слева или введите user@host и нажмите Enter",
             )
             .build();
         let stack = gtk::Stack::new();
+        match app_icon() {
+            Some(icon) => empty_page.set_paintable(Some(&icon)),
+            None => empty_page.set_icon_name(Some("utilities-terminal-symbolic")),
+        }
         stack.add_named(&empty_page, Some("empty"));
         stack.add_named(&tab_view, Some("tabs"));
 
@@ -237,20 +382,48 @@ impl AppWindow {
             .tooltip_text("Меню")
             .menu_model(&menu)
             .primary(true)
+            .css_classes(["flat"])
+            .valign(gtk::Align::Center)
             .build();
+        // По центру шапки, а не на всю её высоту: иначе нажатая кнопка
+        // подсвечивается высоким прямоугольником от края до края.
         let sidebar_toggle = gtk::ToggleButton::builder()
             .icon_name("sidebar-show-symbolic")
             .tooltip_text("Показать или скрыть список подключений")
+            .css_classes(["flat"])
+            .valign(gtk::Align::Center)
             .build();
-        let title = adw::WindowTitle::new(APP_TITLE, "");
-        let header = adw::HeaderBar::builder().title_widget(&title).build();
-        header.pack_start(&sidebar_toggle);
-        header.pack_end(&menu_button);
-        header.pack_end(snippets.widget());
+        let files_toggle = gtk::ToggleButton::builder()
+            .icon_name("folder-symbolic")
+            .tooltip_text("Показать или скрыть панель файлов")
+            .css_classes(["flat"])
+            .valign(gtk::Align::Center)
+            .active(settings.borrow().show_files)
+            .visible(false)
+            .build();
+        snippets.widget().add_css_class("flat");
+        snippets.widget().set_valign(gtk::Align::Center);
+
+        // Одна полоса вместо заголовка и отдельной строки вкладок: вкладки
+        // стоят прямо в шапке окна, как в браузере.
+        let tab_area = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        tab_area.set_hexpand(true);
+        tab_area.append(&tab_bar);
+        // Левые кнопки окна обычно стоят в шапке боковой панели; здесь они
+        // нужны, только когда панель скрыта.
+        let start_controls = gtk::WindowControls::new(gtk::PackType::Start);
+        let topbar = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        topbar.add_css_class("sshdeck-topbar");
+        topbar.append(&start_controls);
+        topbar.append(&sidebar_toggle);
+        topbar.append(&files_toggle);
+        topbar.append(&tab_area);
+        topbar.append(snippets.widget());
+        topbar.append(&menu_button);
+        topbar.append(&super::window_controls(gtk::PackType::End));
 
         let content = adw::ToolbarView::new();
-        content.add_top_bar(&header);
-        content.add_top_bar(&tab_bar);
+        content.add_top_bar(&gtk::WindowHandle::builder().child(&topbar).build());
         content.set_content(Some(notifier.widget()));
 
         let split = adw::OverlaySplitView::builder()
@@ -265,6 +438,17 @@ impl AppWindow {
             .bidirectional()
             .sync_create()
             .build();
+        {
+            let sync = {
+                let split = split.clone();
+                let controls = start_controls.clone();
+                move || controls.set_visible(!split.shows_sidebar() && !controls.is_empty())
+            };
+            sync();
+            let on_sidebar = sync.clone();
+            split.connect_show_sidebar_notify(move |_| on_sidebar());
+            start_controls.connect_empty_notify(move |_| sync());
+        }
 
         let window = adw::ApplicationWindow::builder()
             .application(app)
@@ -276,12 +460,13 @@ impl AppWindow {
 
         let this = Rc::new(Self {
             window,
-            title,
             tab_view,
             tab_bar,
             stack,
             notifier,
             sidebar,
+            split,
+            files_toggle,
             tabs: RefCell::new(Vec::new()),
             settings,
             theme_css,
@@ -309,6 +494,29 @@ impl AppWindow {
                     }
                     None => false,
                 }
+            });
+        }
+        {
+            // «Как в системе»: фирменная палитра следует за светлой или
+            // тёмной темой системы.
+            let weak = Rc::downgrade(&this);
+            adw::StyleManager::default().connect_dark_notify(move |_| {
+                if let Some(this) = weak.upgrade() {
+                    apply_look(&this.theme_css, &this.settings.borrow());
+                }
+            });
+        }
+        {
+            // Панель файлов одна на все вкладки, её состояние сохраняется.
+            let weak = Rc::downgrade(&this);
+            this.files_toggle.connect_toggled(move |button| {
+                let Some(this) = weak.upgrade() else { return };
+                let visible = button.is_active();
+                for tab in this.tabs.borrow().iter() {
+                    tab.set_files_visible(visible);
+                }
+                this.settings.borrow_mut().show_files = visible;
+                this.save_settings();
             });
         }
         {
@@ -442,18 +650,23 @@ impl AppWindow {
         this
     }
 
-    /// Пустой экран или вкладки; в заголовке — адрес текущей сессии.
+    /// Пустой экран или вкладки; в названии окна (его видно в панели задач)
+    /// — текущая сессия.
     fn sync_tabs_state(&self) {
         let has_tabs = self.tab_view.n_pages() > 0;
         self.tab_bar.set_visible(has_tabs);
+        self.files_toggle.set_visible(has_tabs);
+        if !has_tabs {
+            // Сессий не осталось — снова нужен список подключений.
+            self.split.set_show_sidebar(true);
+        }
         self.stack
             .set_visible_child_name(if has_tabs { "tabs" } else { "empty" });
-        let subtitle = self
-            .tab_view
-            .selected_page()
-            .map(|page| page.title().to_string())
-            .unwrap_or_default();
-        self.title.set_subtitle(&subtitle);
+        let title = match self.tab_view.selected_page() {
+            Some(page) => format!("{} — {APP_TITLE}", page.title()),
+            None => APP_TITLE.to_string(),
+        };
+        self.window.set_title(Some(&title));
     }
 
     /// Открывает вкладку; `false`, если адрес не прошёл проверку. `title` —
@@ -494,8 +707,19 @@ impl AppWindow {
                 }
             }
         };
-        let font = self.settings.borrow().terminal_font.clone();
-        let tab = SessionTab::new(&target, tab_id, &runtime_dir, &font, startup, on_finished);
+        let (font, show_files) = {
+            let settings = self.settings.borrow();
+            (settings.terminal_font.clone(), settings.show_files)
+        };
+        let tab = SessionTab::new(
+            &target,
+            tab_id,
+            &runtime_dir,
+            &font,
+            show_files,
+            startup,
+            on_finished,
+        );
         *slot.borrow_mut() = Some(Rc::downgrade(&tab));
 
         self.tabs.borrow_mut().push(Rc::clone(&tab));
@@ -515,6 +739,9 @@ impl AppWindow {
         }
         self.tab_view.set_selected_page(&page);
         self.sync_tabs_state();
+        // Сессия открыта — список подключений уступает место терминалу;
+        // вернуть его можно кнопкой в шапке.
+        self.split.set_show_sidebar(false);
         tab.focus_terminal();
         true
     }
@@ -575,3 +802,19 @@ impl AppWindow {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::CSS;
+    use crate::ui::hosts::AVATAR_COLORS;
+
+    #[test]
+    fn every_avatar_color_has_a_css_class() {
+        for index in 0..AVATAR_COLORS {
+            assert!(
+                CSS.contains(&format!(".sshdeck-avatar-{index} ")),
+                "{index}"
+            );
+        }
+        assert!(!CSS.contains(&format!(".sshdeck-avatar-{AVATAR_COLORS} ")));
+    }
+}

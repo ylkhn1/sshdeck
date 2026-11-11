@@ -77,6 +77,7 @@ impl HostsSidebar {
                 "Быстрое подключение: user@host, user@host -p 2222 \
                  или псевдоним из ~/.ssh/config",
             )
+            .primary_icon_name("system-search-symbolic")
             .secondary_icon_name("go-next-symbolic")
             .secondary_icon_tooltip_text("Подключиться")
             .css_classes(["sshdeck-address"])
@@ -108,19 +109,39 @@ impl HostsSidebar {
             .icon_name("list-add-symbolic")
             .tooltip_text("Сохранить новое подключение")
             .action_name("hosts.new")
+            .css_classes(["flat"])
             .build();
         let reload_button = gtk::Button::builder()
             .icon_name("view-refresh-symbolic")
             .tooltip_text("Перечитать сохранённые подключения и ~/.ssh/config")
             .action_name("hosts.reload")
+            .css_classes(["flat"])
             .build();
-        let header = adw::HeaderBar::builder()
-            .title_widget(&adw::WindowTitle::new("Подключения", ""))
+        // Своя шапка вместо стандартного заголовка: знак приложения и
+        // название, за неё можно таскать окно.
+        let header = gtk::Box::new(gtk::Orientation::Horizontal, 4);
+        header.add_css_class("sshdeck-sidebar-header");
+        // Кнопки окна, если система ставит их слева.
+        header.append(&super::window_controls(gtk::PackType::Start));
+        let logo = gtk::Label::builder()
+            .label("›_")
+            .valign(gtk::Align::Center)
+            .css_classes(["sshdeck-logo"])
             .build();
-        header.pack_start(&add_button);
-        header.pack_end(&reload_button);
+        header.append(&logo);
+        header.append(
+            &gtk::Label::builder()
+                .label("sshdeck")
+                .xalign(0.0)
+                .hexpand(true)
+                .css_classes(["sshdeck-brand"])
+                .build(),
+        );
+        header.append(&add_button);
+        header.append(&reload_button);
         let root = adw::ToolbarView::new();
-        root.add_top_bar(&header);
+        root.add_css_class("sshdeck-sidebar");
+        root.add_top_bar(&gtk::WindowHandle::builder().child(&header).build());
         root.set_content(Some(&content));
 
         let menu = gtk::PopoverMenu::from_model(gio::MenuModel::NONE);
@@ -897,12 +918,13 @@ fn sync_validity(dialog: &adw::AlertDialog, address_row: &adw::EntryRow) {
     }
 }
 
+/// Заголовок раздела: мелкие прописные буквы (в CSS GTK нет
+/// `text-transform`, поэтому регистр меняется здесь).
 fn heading_label(text: &str) -> gtk::Label {
     gtk::Label::builder()
-        .label(text)
+        .label(text.to_uppercase())
         .xalign(0.0)
-        .margin_top(8)
-        .css_classes(["caption-heading", "dim-label"])
+        .css_classes(["sshdeck-section-title"])
         .build()
 }
 
@@ -954,11 +976,65 @@ fn entry_row(title: &str, detail: &str, indented: bool) -> gtk::ListBoxRow {
     content.set_margin_top(ROW_MARGIN);
     content.set_margin_bottom(ROW_MARGIN);
     if indented {
-        content.set_margin_start(24);
+        content.set_margin_start(20);
     }
-    content.append(&gtk::Image::from_icon_name("network-server-symbolic"));
+    content.append(&avatar(title));
     content.append(&labels);
     gtk::ListBoxRow::builder()
         .child(&content)
         .build()
+}
+
+/// Сколько цветов у значков-аватаров (`.sshdeck-avatar-0` … в CSS окна).
+pub const AVATAR_COLORS: usize = 8;
+
+/// Квадратный значок с первой буквой названия. Цвет выбирается по
+/// названию, поэтому у одного и того же сервера он всегда одинаковый.
+fn avatar(title: &str) -> gtk::Label {
+    let letter: String = title
+        .chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_else(|| "#".to_string());
+    let label = gtk::Label::builder()
+        .label(letter)
+        .valign(gtk::Align::Center)
+        .css_classes(["sshdeck-avatar"])
+        .build();
+    label.add_css_class(&format!("sshdeck-avatar-{}", avatar_color(title)));
+    label
+}
+
+/// Номер цвета аватара: FNV-1a по названию — устойчиво между запусками,
+/// в отличие от `DefaultHasher`.
+fn avatar_color(title: &str) -> usize {
+    let hash = title.bytes().fold(0x811c_9dc5_u32, |hash, byte| {
+        (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193)
+    });
+    hash as usize % AVATAR_COLORS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AVATAR_COLORS, avatar_color};
+
+    #[test]
+    fn avatar_color_is_stable_and_in_range() {
+        for name in [
+            "",
+            "prod",
+            "Прод-веб",
+            "testlocal",
+            "очень длинное название сервера",
+        ] {
+            let color = avatar_color(name);
+            assert!(color < AVATAR_COLORS, "{name}");
+            assert_eq!(color, avatar_color(name), "{name}");
+        }
+        // FNV-1a: значение зафиксировано, чтобы цвета не менялись между версиями.
+        assert_eq!(
+            avatar_color("prod"),
+            0xed3e_3174_u32 as usize % AVATAR_COLORS
+        );
+    }
 }
