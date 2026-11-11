@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=sshdeck
+Comment=SSH-клиент с панелью файлов
+Exec=sshdeck
+Icon=dev.sshdeck.App
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupWMClass=dev.sshdeck.App

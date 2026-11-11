@@ -1,0 +1,54 @@
+# Сборка Cargo
+/target/
+
+# Cargo.lock намеренно НЕ игнорируется: это приложение, а не библиотека,
+# и зафиксированные версии зависимостей нужны для воспроизводимой сборки.
+
+# Резервные копии rustfmt и профилировка
+**/*.rs.bk
+*.profraw
+*.profdata
+perf.data
+perf.data.old
+flamegraph.svg
+
+# Дампы памяти
+/core
+/core.[0-9]*
+vgcore.*
+
+# Редакторы и IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+*.swp
+*.swo
+*~
+\#*\#
+.\#*
+
+# Инструменты ИИ: локальные настройки
+.claude/settings.local.json
+
+# Файловые менеджеры и ОС
+.directory
+.DS_Store
+Thumbs.db
+
+# Локальное окружение и секреты — в репозитории им не место
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+id_ecdsa*
+
+# Журналы и временные файлы
+*.log
+*.tmp
+/tmp/
