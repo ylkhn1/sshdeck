@@ -11,7 +11,7 @@ use super::hosts::HostsSidebar;
 use super::snippets::SnippetsButton;
 use super::terminal;
 use super::tab::SessionTab;
-use super::{Notifier, dialogs};
+use super::{ANIMATION_MS, Notifier, collapsing_revealer, dialogs, reveal};
 use crate::session;
 use crate::settings::Settings;
 
@@ -31,11 +31,13 @@ const CSS: &str = "
 .sshdeck-sidebar-header > button {
   min-width: 28px; min-height: 28px; padding: 0; border-radius: 7px;
 }
-.sshdeck-topbar > button.toggle:checked {
+.sshdeck-topbar > revealer > button { min-width: 28px; min-height: 28px; padding: 0; border-radius: 7px; }
+.sshdeck-topbar > button.toggle:checked, .sshdeck-topbar > revealer > button.toggle:checked {
   background-color: color-mix(in srgb, currentColor 10%, transparent);
   box-shadow: none;
 }
-.sshdeck-topbar > button.toggle:checked:hover {
+.sshdeck-topbar > button.toggle:checked:hover,
+.sshdeck-topbar > revealer > button.toggle:checked:hover {
   background-color: color-mix(in srgb, currentColor 15%, transparent);
 }
 .sshdeck-topbar windowcontrols > button > image,
@@ -84,6 +86,8 @@ const CSS: &str = "
 .sshdeck-hosts { background: none; }
 .sshdeck-hosts > row { margin: 0 6px 1px 6px; border-radius: 8px; }
 .sshdeck-hosts > row.activatable { min-height: 32px; }
+.sshdeck-hosts > row.sshdeck-host-row { min-height: 0; padding-top: 0; padding-bottom: 0; }
+.sshdeck-host-content { min-height: 28px; }
 .sshdeck-hosts > row:selected {
   background-color: color-mix(in srgb, var(--accent-bg-color) 22%, transparent);
 }
@@ -129,6 +133,15 @@ columnview.sshdeck-files > listview > row:selected {
 .sshdeck-transfers { padding: 0 6px 6px 6px; }
 .sshdeck-transfer { padding: 6px 6px 10px 12px; }
 .sshdeck-section { margin: 10px 14px 2px 14px; }
+
+/* ---------- плавные переходы (GTK отключает их, если анимации выключены) */
+.sshdeck-hosts > row, .sshdeck-topbar tabbar tab, .sshdeck-topbar > button,
+.sshdeck-topbar > revealer > button, .sshdeck-topbar > menubutton > button,
+columnview.sshdeck-files > listview > row, .sshdeck-stat {
+  transition: background-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out;
+}
+.sshdeck-folder-arrow { transition: transform 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94); }
+.sshdeck-folder-arrow.collapsed { transform: rotate(-90deg); }
 
 /* ---------- строка состояния сервера */
 .sshdeck-statusbar {
@@ -279,8 +292,10 @@ struct AppWindow {
     sidebar: HostsSidebar,
     /// Список подключений и область вкладок.
     split: adw::OverlaySplitView,
-    /// Кнопка панели файлов в шапке; видна, пока открыта хотя бы одна вкладка.
+    /// Кнопка панели файлов в шапке.
     files_toggle: gtk::ToggleButton,
+    /// Обёртка кнопки: та выезжает, пока открыта хотя бы одна вкладка.
+    files_reveal: gtk::Revealer,
     tabs: RefCell<Vec<Rc<SessionTab>>>,
     settings: Rc<RefCell<Settings>>,
     /// Цвета выбранной темы для всего окна.
@@ -325,7 +340,10 @@ impl AppWindow {
                 "Дважды щёлкните подключение слева или введите user@host и нажмите Enter",
             )
             .build();
-        let stack = gtk::Stack::new();
+        let stack = gtk::Stack::builder()
+            .transition_type(gtk::StackTransitionType::Crossfade)
+            .transition_duration(ANIMATION_MS)
+            .build();
         match app_icon() {
             Some(icon) => empty_page.set_paintable(Some(&icon)),
             None => empty_page.set_icon_name(Some("utilities-terminal-symbolic")),
@@ -399,8 +417,10 @@ impl AppWindow {
             .css_classes(["flat"])
             .valign(gtk::Align::Center)
             .active(settings.borrow().show_files)
-            .visible(false)
             .build();
+        let files_reveal =
+            collapsing_revealer(gtk::RevealerTransitionType::SlideRight, &files_toggle);
+        files_reveal.set_visible(false);
         snippets.widget().add_css_class("flat");
         snippets.widget().set_valign(gtk::Align::Center);
 
@@ -416,7 +436,7 @@ impl AppWindow {
         topbar.add_css_class("sshdeck-topbar");
         topbar.append(&start_controls);
         topbar.append(&sidebar_toggle);
-        topbar.append(&files_toggle);
+        topbar.append(&files_reveal);
         topbar.append(&tab_area);
         topbar.append(snippets.widget());
         topbar.append(&menu_button);
@@ -467,6 +487,7 @@ impl AppWindow {
             sidebar,
             split,
             files_toggle,
+            files_reveal,
             tabs: RefCell::new(Vec::new()),
             settings,
             theme_css,
@@ -655,7 +676,7 @@ impl AppWindow {
     fn sync_tabs_state(&self) {
         let has_tabs = self.tab_view.n_pages() > 0;
         self.tab_bar.set_visible(has_tabs);
-        self.files_toggle.set_visible(has_tabs);
+        reveal(&self.files_reveal, &self.files_reveal, has_tabs, true);
         if !has_tabs {
             // Сессий не осталось — снова нужен список подключений.
             self.split.set_show_sidebar(true);

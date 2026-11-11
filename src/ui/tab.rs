@@ -1,7 +1,7 @@
 //! Вкладка сессии: панель файлов слева, терминал справа, внизу — строка
 //! состояния сервера.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::Path;
 use std::rc::Rc;
 
@@ -12,7 +12,7 @@ use vte::prelude::*;
 use super::files::FilePanel;
 use super::statusbar::StatusBar;
 use super::terminal::{self, TerminalView};
-use super::{Notifier, dialogs};
+use super::{ANIMATION_MS, Notifier, dialogs};
 use crate::keysetup::{self, Installed};
 use crate::remote::{self, CwdTracking};
 use crate::session::Session;
@@ -28,6 +28,12 @@ pub struct SessionTab {
     notifier: Notifier,
     term: vte::Terminal,
     panel: FilePanel,
+    /// Панель файлов | терминал.
+    paned: gtk::Paned,
+    /// Ширина панели файлов до того, как её спрятали.
+    panel_width: Cell<i32>,
+    /// Идущая анимация показа или скрытия панели файлов.
+    panel_animation: RefCell<Option<adw::TimedAnimation>>,
     status: StatusBar,
     session: Session,
     /// Полоса «соединение разорвано» с кнопкой переподключения.
@@ -93,6 +99,9 @@ impl SessionTab {
             notifier,
             term,
             panel,
+            paned,
+            panel_width: Cell::new(INITIAL_PANEL_WIDTH),
+            panel_animation: RefCell::new(None),
             status,
             session,
             exit_banner,
@@ -176,10 +185,56 @@ impl SessionTab {
         self.session.target()
     }
 
-    /// Показывает или прячет панель файлов; терминал занимает освободившееся
-    /// место.
+    /// Плавно показывает или прячет панель файлов: она выезжает слева,
+    /// терминал занимает освободившееся место.
     pub fn set_files_visible(&self, visible: bool) {
-        self.panel.widget().set_visible(visible);
+        // Прошлая анимация доигрывается мгновенно, чтобы начать с конечного
+        // состояния.
+        if let Some(previous) = self.panel_animation.take() {
+            previous.skip();
+        }
+        let panel = self.panel.widget().clone();
+        if panel.is_visible() == visible {
+            return;
+        }
+        let paned = self.paned.clone();
+        if !visible && paned.position() > 0 {
+            self.panel_width.set(paned.position());
+        }
+        let width = f64::from(self.panel_width.get().max(1));
+
+        // На время анимации панель можно сжимать меньше её минимума.
+        paned.set_shrink_start_child(true);
+        if visible {
+            panel.set_opacity(0.0);
+            paned.set_position(0);
+            panel.set_visible(true);
+        }
+        let (from, to) = if visible { (0.0, width) } else { (width, 0.0) };
+        let target = adw::CallbackAnimationTarget::new({
+            let paned = paned.clone();
+            let panel = panel.clone();
+            move |value| {
+                paned.set_position(value.round() as i32);
+                panel.set_opacity((value / width).clamp(0.0, 1.0));
+            }
+        });
+        let animation = adw::TimedAnimation::builder()
+            .widget(&paned)
+            .value_from(from)
+            .value_to(to)
+            .duration(ANIMATION_MS + 40)
+            .easing(adw::Easing::EaseOutCubic)
+            .target(&target)
+            .build();
+        animation.connect_done(move |_| {
+            panel.set_visible(visible);
+            panel.set_opacity(1.0);
+            paned.set_position(width as i32);
+            paned.set_shrink_start_child(false);
+        });
+        animation.play();
+        *self.panel_animation.borrow_mut() = Some(animation);
     }
 
     pub fn set_font(&self, font: &str) {

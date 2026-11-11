@@ -16,7 +16,10 @@ use adw::prelude::*;
 use gtk::{gdk, gio, glib, graphene, pango};
 
 use super::dnd::RemoteFilesProvider;
-use super::{Notifier, dialogs, format_mtime, format_size, parent_window};
+use super::{
+    ANIMATION_MS, Notifier, collapsing_revealer, dialogs, format_mtime, format_size,
+    parent_window, reveal,
+};
 use crate::session::{self, Session};
 use crate::sftp::{
     self, Command, ConnState, EntryKind, Event, RemoteEntry, SftpWorker, TransferId,
@@ -55,6 +58,8 @@ struct Inner {
     root_store: gio::ListStore,
     context_menu: gtk::PopoverMenu,
     transfers_box: gtk::Box,
+    /// Выезжает снизу, пока есть активные передачи.
+    transfers_revealer: gtk::Revealer,
     /// Уведомления вкладки (общие с терминалом).
     notifier: Notifier,
     /// Каталог вкладки для временных файлов (правка, перетаскивание).
@@ -329,6 +334,8 @@ impl Inner {
         stack.add_named(&status_page, Some("status"));
         stack.add_named(&scroll, Some("files"));
         stack.set_vexpand(true);
+        stack.set_transition_type(gtk::StackTransitionType::Crossfade);
+        stack.set_transition_duration(ANIMATION_MS);
 
         // --- контекстное меню
         let menu = gio::Menu::new();
@@ -358,13 +365,15 @@ impl Inner {
         // Показывается, только пока есть активные передачи.
         let transfers_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
         transfers_box.add_css_class("sshdeck-transfers");
-        transfers_box.set_visible(false);
+        let transfers_revealer =
+            collapsing_revealer(gtk::RevealerTransitionType::SlideUp, &transfers_box);
+        transfers_revealer.set_visible(false);
 
         let root = gtk::Box::new(gtk::Orientation::Vertical, 0);
         root.set_width_request(300);
         root.append(&toolbar);
         root.append(&stack);
-        root.append(&transfers_box);
+        root.append(&transfers_revealer);
 
         // --- действия
         let actions = gio::SimpleActionGroup::new();
@@ -488,6 +497,7 @@ impl Inner {
             root_store,
             context_menu,
             transfers_box,
+            transfers_revealer,
             notifier,
             scratch_dir,
             worker: RefCell::new(None),
@@ -1396,8 +1406,14 @@ impl Inner {
         widget.add_css_class("sshdeck-transfer");
         widget.append(&header);
         widget.append(&bar);
+        // Карточки завершённых передач, оставленные на время сворачивания.
+        if !self.transfers_revealer.reveals_child() {
+            while let Some(child) = self.transfers_box.first_child() {
+                self.transfers_box.remove(&child);
+            }
+        }
         self.transfers_box.append(&widget);
-        self.transfers_box.set_visible(true);
+        reveal(&self.transfers_revealer, &self.transfers_revealer, true, true);
 
         let weak = Rc::downgrade(self);
         cancel.connect_clicked(move |button| {
@@ -1444,9 +1460,11 @@ impl Inner {
         let Some(row) = self.state.borrow_mut().transfers.remove(&id) else {
             return;
         };
-        self.transfers_box.remove(&row.widget);
         if self.state.borrow().transfers.is_empty() {
-            self.transfers_box.set_visible(false);
+            // Последняя карточка уезжает вниз вместе с блоком.
+            reveal(&self.transfers_revealer, &self.transfers_revealer, false, true);
+        } else {
+            self.transfers_box.remove(&row.widget);
         }
         match &outcome {
             TransferOutcome::Completed { skipped } => {

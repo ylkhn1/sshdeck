@@ -12,6 +12,9 @@ mod tab;
 mod terminal;
 pub mod window;
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use adw::prelude::*;
 use gtk::glib;
 
@@ -140,6 +143,64 @@ pub fn window_controls(side: gtk::PackType) -> gtk::WindowControls {
         .sync_create()
         .build();
     controls
+}
+
+/// Длительность коротких переходов интерфейса, мс.
+pub const ANIMATION_MS: u32 = 200;
+
+/// `Revealer` для [`reveal`]: плавно разворачивает и сворачивает `child`.
+pub fn collapsing_revealer(
+    transition: gtk::RevealerTransitionType,
+    child: &impl IsA<gtk::Widget>,
+) -> gtk::Revealer {
+    gtk::Revealer::builder()
+        .transition_type(transition)
+        .transition_duration(ANIMATION_MS)
+        .child(child)
+        .build()
+}
+
+/// Плавно показывает (`shown`) или прячет `revealer`. `outer` — виджет,
+/// который после сворачивания скрывается целиком (сам `revealer` или
+/// строка списка, в которой он лежит), чтобы пустое место не занимало
+/// отступов. Без `animate` состояние меняется сразу.
+pub fn reveal(
+    revealer: &gtk::Revealer,
+    outer: &impl IsA<gtk::Widget>,
+    shown: bool,
+    animate: bool,
+) {
+    let outer = outer.as_ref();
+    revealer.set_transition_duration(if animate { ANIMATION_MS } else { 0 });
+    if shown {
+        outer.set_visible(true);
+        revealer.set_reveal_child(true);
+        return;
+    }
+    if !animate || !outer.is_visible() {
+        revealer.set_reveal_child(false);
+        outer.set_visible(false);
+        return;
+    }
+    revealer.set_reveal_child(false);
+    let weak = outer.downgrade();
+    let handler: Rc<Cell<Option<glib::SignalHandlerId>>> = Rc::default();
+    let slot = Rc::clone(&handler);
+    let id = revealer.connect_child_revealed_notify(move |revealer| {
+        if revealer.is_child_revealed() {
+            return;
+        }
+        // Пока шла анимация, виджет могли снова показать.
+        if !revealer.reveals_child()
+            && let Some(outer) = weak.upgrade()
+        {
+            outer.set_visible(false);
+        }
+        if let Some(id) = slot.take() {
+            revealer.disconnect(id);
+        }
+    });
+    handler.set(Some(id));
 }
 
 /// Окно, в котором находится виджет (для системных диалогов выбора файлов).

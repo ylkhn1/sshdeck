@@ -9,7 +9,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gdk, gio, glib, pango};
 
-use super::{Notifier, dialogs};
+use super::{Notifier, collapsing_revealer, dialogs, reveal};
 use crate::connections::{self, Connection, Connections, FOLDER_COLORS};
 use crate::session;
 use crate::ssh_config::{self, HostEntry};
@@ -17,8 +17,8 @@ use crate::ssh_config::{self, HostEntry};
 const CANCEL: &str = "cancel";
 const ACCEPT: &str = "accept";
 
-const ICON_EXPANDED: &str = "pan-down-symbolic";
-const ICON_COLLAPSED: &str = "pan-end-symbolic";
+/// Стрелка папки; у свёрнутой папки CSS поворачивает её на четверть оборота.
+const ICON_FOLDER_ARROW: &str = "pan-down-symbolic";
 
 /// Поля над и под содержимым строки списка.
 const ROW_MARGIN: i32 = 2;
@@ -43,6 +43,9 @@ struct Row {
     widget: gtk::ListBoxRow,
     /// Стрелка «свёрнуто/развёрнуто» у строки папки.
     arrow: Option<gtk::Image>,
+    /// Обёртка содержимого строки подключения: через неё строка плавно
+    /// сворачивается вместе с папкой.
+    revealer: Option<gtk::Revealer>,
 }
 
 pub struct HostsSidebar {
@@ -216,7 +219,7 @@ impl Inner {
             let weak = weak.clone();
             self.entry.connect_changed(move |_| {
                 if let Some(this) = weak.upgrade() {
-                    this.apply_collapsed();
+                    this.apply_collapsed(false);
                 }
             });
         }
@@ -408,10 +411,13 @@ impl Inner {
                         connections.folder_color(&item.folder),
                     ));
                 }
+                let (widget, revealer) =
+                    entry_row(&item.name, &item.address, !item.folder.is_empty());
                 rows.push(Row {
                     kind: RowKind::Connection(index),
-                    widget: entry_row(&item.name, &item.address, !item.folder.is_empty()),
+                    widget,
                     arrow: None,
+                    revealer: Some(revealer),
                 });
             }
 
@@ -420,10 +426,12 @@ impl Inner {
                 rows.push(static_row(heading_label("Из ~/.ssh/config")));
             }
             for (index, host) in hosts.iter().enumerate() {
+                let (widget, revealer) = entry_row(&host.alias, &host.detail(), false);
                 rows.push(Row {
                     kind: RowKind::Host(index),
-                    widget: entry_row(&host.alias, &host.detail(), false),
+                    widget,
                     arrow: None,
+                    revealer: Some(revealer),
                 });
             }
         }
@@ -431,11 +439,12 @@ impl Inner {
             self.list.append(&row.widget);
         }
         *self.rows.borrow_mut() = rows;
-        self.apply_collapsed();
+        self.apply_collapsed(false);
     }
 
     fn folder_row(&self, folder: &str, count: usize, color: Option<&str>) -> Row {
-        let arrow = gtk::Image::from_icon_name(ICON_EXPANDED);
+        let arrow = gtk::Image::from_icon_name(ICON_FOLDER_ARROW);
+        arrow.add_css_class("sshdeck-folder-arrow");
         let content = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         content.set_margin_top(ROW_MARGIN);
         content.set_margin_bottom(ROW_MARGIN);
@@ -485,6 +494,7 @@ impl Inner {
             kind: RowKind::Folder(folder.to_string()),
             widget,
             arrow: Some(arrow),
+            revealer: None,
         }
     }
 
@@ -495,12 +505,13 @@ impl Inner {
                 collapsed.insert(folder.to_string());
             }
         }
-        self.apply_collapsed();
+        self.apply_collapsed(true);
     }
 
     /// Показывает и прячет строки: свёрнутые папки и поиск по тексту,
-    /// набранному в поле адреса.
-    fn apply_collapsed(&self) {
+    /// набранному в поле адреса. С `animate` строки сворачиваются плавно
+    /// (щелчок по папке); фильтр при наборе текста срабатывает сразу.
+    fn apply_collapsed(&self, animate: bool) {
         let needle = self.entry.text().trim().to_lowercase();
         let matches = |title: &str, detail: &str| {
             needle.is_empty()
@@ -514,11 +525,11 @@ impl Inner {
             match &row.kind {
                 RowKind::Folder(folder) => {
                     if let Some(arrow) = &row.arrow {
-                        arrow.set_icon_name(Some(if collapsed.contains(folder) {
-                            ICON_COLLAPSED
+                        if collapsed.contains(folder) {
+                            arrow.add_css_class("collapsed");
                         } else {
-                            ICON_EXPANDED
-                        }));
+                            arrow.remove_css_class("collapsed");
+                        }
                     }
                     // При поиске папка видна, только если в ней есть находки.
                     let any = connections
@@ -535,13 +546,13 @@ impl Inner {
                             matches(&c.name, &c.address) || matches(&c.folder, "")
                         }
                     });
-                    row.widget.set_visible(visible);
+                    row.set_shown(visible, animate);
                 }
                 RowKind::Host(index) => {
                     let visible = hosts
                         .get(*index)
                         .is_some_and(|h| matches(&h.alias, &h.detail()));
-                    row.widget.set_visible(visible);
+                    row.set_shown(visible, animate);
                 }
                 RowKind::Static => {}
             }
@@ -948,11 +959,22 @@ fn static_row(label: gtk::Label) -> Row {
             .can_focus(false)
             .build(),
         arrow: None,
+        revealer: None,
+    }
+}
+
+impl Row {
+    fn set_shown(&self, shown: bool, animate: bool) {
+        match &self.revealer {
+            Some(revealer) => reveal(revealer, &self.widget, shown, animate),
+            None => self.widget.set_visible(shown),
+        }
     }
 }
 
 /// Строка подключения или хоста: значок, название и адрес мелким шрифтом.
-fn entry_row(title: &str, detail: &str, indented: bool) -> gtk::ListBoxRow {
+/// Содержимое лежит в `Revealer`, чтобы строку можно было плавно свернуть.
+fn entry_row(title: &str, detail: &str, indented: bool) -> (gtk::ListBoxRow, gtk::Revealer) {
     let labels = gtk::Box::new(gtk::Orientation::Vertical, 0);
     labels.set_valign(gtk::Align::Center);
     labels.append(
@@ -980,9 +1002,14 @@ fn entry_row(title: &str, detail: &str, indented: bool) -> gtk::ListBoxRow {
     }
     content.append(&avatar(title));
     content.append(&labels);
-    gtk::ListBoxRow::builder()
-        .child(&content)
-        .build()
+    content.add_css_class("sshdeck-host-content");
+    let revealer = collapsing_revealer(gtk::RevealerTransitionType::SlideDown, &content);
+    revealer.set_reveal_child(true);
+    let row = gtk::ListBoxRow::builder()
+        .child(&revealer)
+        .css_classes(["sshdeck-host-row"])
+        .build();
+    (row, revealer)
 }
 
 /// Сколько цветов у значков-аватаров (`.sshdeck-avatar-0` … в CSS окна).
