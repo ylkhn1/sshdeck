@@ -5,6 +5,7 @@
 
 mod connections;
 mod keysetup;
+mod probe;
 mod remote;
 mod session;
 mod settings;

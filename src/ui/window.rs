@@ -134,6 +134,23 @@ columnview.sshdeck-files > listview > row:selected {
 .sshdeck-transfer { padding: 6px 6px 10px 12px; }
 .sshdeck-section { margin: 10px 14px 2px 14px; }
 
+/* ---------- доступность сервера: точка в углу значка. Цвета заданы в sRGB:
+   --success-color в libadwaita считается в oklab и не везде рисуется верно */
+.sshdeck-status {
+  min-width: 8px; min-height: 8px; border-radius: 99px;
+  margin: 0 -2px -2px 0;
+  box-shadow: 0 0 0 2px var(--sidebar-bg-color);
+  background-color: color-mix(in srgb, currentColor 35%, transparent);
+  transition: background-color 300ms ease-out;
+}
+.sshdeck-status.online { background-color: #2ec27e; }
+.sshdeck-status.offline { background-color: #e5484d; }
+.sshdeck-status.checking { animation: sshdeck-pulse 1.4s ease-in-out infinite; }
+@keyframes sshdeck-pulse { 0% { opacity: 0.35; } 50% { opacity: 1; } 100% { opacity: 0.35; } }
+.sshdeck-host-content.offline .sshdeck-avatar { opacity: 0.45; }
+.sshdeck-host-content > box > label { transition: opacity 300ms ease-out; }
+.sshdeck-host-content.offline > box > label { opacity: 0.6; }
+
 /* ---------- плавные переходы (GTK отключает их, если анимации выключены) */
 .sshdeck-hosts > row, .sshdeck-topbar tabbar tab, .sshdeck-topbar > button,
 .sshdeck-topbar > revealer > button, .sshdeck-topbar > menubutton > button,

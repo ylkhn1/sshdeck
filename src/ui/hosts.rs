@@ -2,7 +2,7 @@
 //! (с названиями и папками) и хосты из ssh-конфига.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
@@ -11,6 +11,7 @@ use gtk::{gdk, gio, glib, pango};
 
 use super::{Notifier, collapsing_revealer, dialogs, reveal};
 use crate::connections::{self, Connection, Connections, FOLDER_COLORS};
+use crate::probe::{self, Status};
 use crate::session;
 use crate::ssh_config::{self, HostEntry};
 
@@ -22,6 +23,14 @@ const ICON_FOLDER_ARROW: &str = "pan-down-symbolic";
 
 /// Поля над и под содержимым строки списка.
 const ROW_MARGIN: i32 = 2;
+
+/// Как часто перепроверять доступность серверов. Каждая проверка — одно
+/// TCP-соединение без входа; редкие проверки не насторожат fail2ban даже
+/// в строгом режиме.
+const PROBE_INTERVAL_SECS: u32 = 180;
+
+/// Классы значка состояния (`.sshdeck-status.*` в CSS окна).
+const STATUS_CLASSES: [&str; 4] = ["checking", "online", "offline", "unknown"];
 
 /// Открывает вкладку: адрес, необязательное название и команда после входа. Возвращает `false`,
 /// если адрес не подошёл.
@@ -46,6 +55,41 @@ struct Row {
     /// Обёртка содержимого строки подключения: через неё строка плавно
     /// сворачивается вместе с папкой.
     revealer: Option<gtk::Revealer>,
+    /// Значок «в сети / недоступен» у подключения и хоста.
+    status: Option<StatusView>,
+}
+
+/// Отображение доступности сервера в строке списка.
+struct StatusView {
+    /// Адрес в том виде, в каком его получает ssh; по нему хранится
+    /// результат проверки.
+    address: String,
+    dot: gtk::Box,
+    content: gtk::Box,
+}
+
+impl StatusView {
+    fn paint(&self, status: Option<&Status>) {
+        let (class, text) = match status {
+            None => ("checking", "Проверяю доступность…".to_string()),
+            Some(status @ Status::Online { .. }) => ("online", status.describe()),
+            Some(status @ Status::Offline(_)) => ("offline", status.describe()),
+            Some(status @ Status::Unknown(_)) => ("unknown", status.describe()),
+        };
+        for other in STATUS_CLASSES {
+            if other != class {
+                self.dot.remove_css_class(other);
+            }
+        }
+        self.dot.add_css_class(class);
+        if class == "offline" {
+            self.content.add_css_class("offline");
+        } else {
+            self.content.remove_css_class("offline");
+        }
+        self.content
+            .set_tooltip_text(Some(&format!("{}\n{text}", self.address)));
+    }
 }
 
 pub struct HostsSidebar {
@@ -69,6 +113,10 @@ struct Inner {
     collapsed: RefCell<HashSet<String>>,
     /// Строка, для которой открыто контекстное меню.
     menu_row: Cell<Option<usize>>,
+    /// Последний результат проверки по адресу.
+    statuses: RefCell<HashMap<String, Status>>,
+    /// Адреса, проверка которых ещё идёт.
+    checking: RefCell<HashSet<String>>,
     open: RefCell<Option<OpenHandler>>,
 }
 
@@ -171,10 +219,22 @@ impl HostsSidebar {
             rows: RefCell::new(Vec::new()),
             collapsed: RefCell::new(HashSet::new()),
             menu_row: Cell::new(None),
+            statuses: RefCell::new(HashMap::new()),
+            checking: RefCell::new(HashSet::new()),
             open: RefCell::new(None),
         });
         inner.connect_signals();
         inner.reload();
+        {
+            let weak = Rc::downgrade(&inner);
+            glib::timeout_add_seconds_local(PROBE_INTERVAL_SECS, move || match weak.upgrade() {
+                Some(this) => {
+                    this.probe(false);
+                    glib::ControlFlow::Continue
+                }
+                None => glib::ControlFlow::Break,
+            });
+        }
         Self { inner }
     }
 
@@ -351,6 +411,7 @@ impl Inner {
             }
         }
         self.rebuild();
+        self.probe(false);
     }
 
     /// Записывает список на диск и перерисовывает панель.
@@ -360,6 +421,53 @@ impl Inner {
                 .error(&format!("Не удалось сохранить подключения: {err}"));
         }
         self.rebuild();
+        self.probe(true);
+    }
+
+    // ----- доступность серверов
+
+    /// Проверяет серверы из списка в фоне. С `only_new` — только те,
+    /// о которых ещё ничего не известно (после правки списка).
+    fn probe(&self, only_new: bool) {
+        let addresses: HashSet<String> = self
+            .rows
+            .borrow()
+            .iter()
+            .filter_map(|row| row.status.as_ref().map(|view| view.address.clone()))
+            .collect();
+        let config = session::config_override();
+        for address in addresses {
+            if self.checking.borrow().contains(&address)
+                || (only_new && self.statuses.borrow().contains_key(&address))
+            {
+                continue;
+            }
+            self.checking.borrow_mut().insert(address.clone());
+            let weak = self.me.clone();
+            let config = config.clone();
+            glib::spawn_future_local(async move {
+                let target = address.clone();
+                // ssh -G и TCP-соединение блокируют: работаем вне потока GTK.
+                let status =
+                    gio::spawn_blocking(move || probe::check(&target, config.as_deref()))
+                        .await
+                        .unwrap_or_else(|_| Status::Unknown("проверка прервалась".to_string()));
+                let Some(this) = weak.upgrade() else { return };
+                this.checking.borrow_mut().remove(&address);
+                this.statuses.borrow_mut().insert(address, status);
+                this.show_statuses();
+            });
+        }
+    }
+
+    /// Перекрашивает значки по последним результатам. Пока проверки нет,
+    /// значок серый и пульсирует; при повторной проверке остаётся прежний
+    /// результат, пока не придёт новый.
+    fn show_statuses(&self) {
+        let statuses = self.statuses.borrow();
+        for view in self.rows.borrow().iter().filter_map(|row| row.status.as_ref()) {
+            view.paint(statuses.get(&view.address));
+        }
     }
 
     fn store(&self, connection: Connection, original: Option<Connection>) {
@@ -411,13 +519,14 @@ impl Inner {
                         connections.folder_color(&item.folder),
                     ));
                 }
-                let (widget, revealer) =
-                    entry_row(&item.name, &item.address, !item.folder.is_empty());
+                let (widget, revealer, status) =
+                    entry_row(&item.name, &item.address, &item.address, !item.folder.is_empty());
                 rows.push(Row {
                     kind: RowKind::Connection(index),
                     widget,
                     arrow: None,
                     revealer: Some(revealer),
+                    status: Some(status),
                 });
             }
 
@@ -426,12 +535,14 @@ impl Inner {
                 rows.push(static_row(heading_label("Из ~/.ssh/config")));
             }
             for (index, host) in hosts.iter().enumerate() {
-                let (widget, revealer) = entry_row(&host.alias, &host.detail(), false);
+                let (widget, revealer, status) =
+                    entry_row(&host.alias, &host.detail(), &host.alias, false);
                 rows.push(Row {
                     kind: RowKind::Host(index),
                     widget,
                     arrow: None,
                     revealer: Some(revealer),
+                    status: Some(status),
                 });
             }
         }
@@ -440,6 +551,7 @@ impl Inner {
         }
         *self.rows.borrow_mut() = rows;
         self.apply_collapsed(false);
+        self.show_statuses();
     }
 
     fn folder_row(&self, folder: &str, count: usize, color: Option<&str>) -> Row {
@@ -495,6 +607,7 @@ impl Inner {
             widget,
             arrow: Some(arrow),
             revealer: None,
+            status: None,
         }
     }
 
@@ -960,6 +1073,7 @@ fn static_row(label: gtk::Label) -> Row {
             .build(),
         arrow: None,
         revealer: None,
+        status: None,
     }
 }
 
@@ -972,9 +1086,15 @@ impl Row {
     }
 }
 
-/// Строка подключения или хоста: значок, название и адрес мелким шрифтом.
-/// Содержимое лежит в `Revealer`, чтобы строку можно было плавно свернуть.
-fn entry_row(title: &str, detail: &str, indented: bool) -> (gtk::ListBoxRow, gtk::Revealer) {
+/// Строка подключения или хоста: значок с точкой доступности, название и
+/// адрес мелким шрифтом. Содержимое лежит в `Revealer`, чтобы строку можно
+/// было плавно свернуть. `address` — то, что получит ssh.
+fn entry_row(
+    title: &str,
+    detail: &str,
+    address: &str,
+    indented: bool,
+) -> (gtk::ListBoxRow, gtk::Revealer, StatusView) {
     let labels = gtk::Box::new(gtk::Orientation::Vertical, 0);
     labels.set_valign(gtk::Align::Center);
     labels.append(
@@ -1000,7 +1120,18 @@ fn entry_row(title: &str, detail: &str, indented: bool) -> (gtk::ListBoxRow, gtk
     if indented {
         content.set_margin_start(20);
     }
-    content.append(&avatar(title));
+    let dot = gtk::Box::builder()
+        .halign(gtk::Align::End)
+        .valign(gtk::Align::End)
+        .can_target(false)
+        .css_classes(["sshdeck-status", "checking"])
+        .build();
+    let badge = gtk::Overlay::builder()
+        .child(&avatar(title))
+        .valign(gtk::Align::Center)
+        .build();
+    badge.add_overlay(&dot);
+    content.append(&badge);
     content.append(&labels);
     content.add_css_class("sshdeck-host-content");
     let revealer = collapsing_revealer(gtk::RevealerTransitionType::SlideDown, &content);
@@ -1009,7 +1140,12 @@ fn entry_row(title: &str, detail: &str, indented: bool) -> (gtk::ListBoxRow, gtk
         .child(&revealer)
         .css_classes(["sshdeck-host-row"])
         .build();
-    (row, revealer)
+    let status = StatusView {
+        address: address.to_string(),
+        dot,
+        content,
+    };
+    (row, revealer, status)
 }
 
 /// Сколько цветов у значков-аватаров (`.sshdeck-avatar-0` … в CSS окна).
