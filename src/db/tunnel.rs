@@ -3,7 +3,8 @@
 //! Порт базы пробрасывается не на локальный TCP-порт, а в Unix-сокет в
 //! личном каталоге приложения (`$XDG_RUNTIME_DIR/sshdeck/db-<pid>-<n>`):
 //! так не нужно искать свободный порт, и к туннелю не могут подключиться
-//! другие пользователи машины.
+//! другие пользователи машины. Расширениям нужен адрес и порт, поэтому для
+//! них проброс идёт на свободный порт `127.0.0.1`.
 //!
 //! Если для этого сервера уже открыта вкладка, проброс добавляется в её
 //! мастер-соединение (`ssh -O forward`) — пароль вводить не придётся.
@@ -36,14 +37,25 @@ pub struct Spec<'a> {
     /// Сервер базы так, как его видит SSH-сервер.
     pub host: &'a str,
     pub port: u16,
-    /// Имя сокета в каталоге туннеля (PostgreSQL ищет `.s.PGSQL.<порт>`).
-    pub socket_name: &'a str,
+    /// Куда пробрасывать на этой машине.
+    pub local: Local<'a>,
+}
+
+/// Локальный конец туннеля.
+pub enum Local<'a> {
+    /// Сокет с этим именем в каталоге туннеля (PostgreSQL ищет
+    /// `.s.PGSQL.<порт>`).
+    Socket(&'a str),
+    /// Свободный TCP-порт на 127.0.0.1.
+    Tcp,
 }
 
 /// Работающий туннель; закрывается вместе со значением.
 pub struct Tunnel {
     dir: PathBuf,
     socket: PathBuf,
+    /// Порт на 127.0.0.1 для `Local::Tcp`.
+    port: Option<u16>,
     mode: Mode,
 }
 
@@ -64,6 +76,11 @@ impl Tunnel {
     /// Сам сокет.
     pub fn socket(&self) -> &Path {
         &self.socket
+    }
+
+    /// Локальный порт (для `Local::Tcp`).
+    pub fn port(&self) -> Option<u16> {
+        self.port
     }
 
     /// Идёт ли туннель через соединение открытой вкладки.
@@ -100,14 +117,44 @@ fn base_argv() -> Vec<String> {
     argv
 }
 
-/// `сокет:хост:порт` для `ssh -L`; адрес IPv6 берётся в скобки.
-fn forward_spec(socket: &Path, host: &str, port: u16) -> String {
-    let host = if host.contains(':') && !host.starts_with('[') {
+/// Адрес IPv6 для `ssh -L` берётся в скобки.
+fn bracketed(host: &str) -> String {
+    if host.contains(':') && !host.starts_with('[') {
         format!("[{host}]")
     } else {
         host.to_string()
-    };
-    format!("{}:{host}:{port}", socket.display())
+    }
+}
+
+/// `сокет:хост:порт` для `ssh -L`.
+fn forward_spec(socket: &Path, host: &str, port: u16) -> String {
+    format!("{}:{}:{port}", socket.display(), bracketed(host))
+}
+
+/// `127.0.0.1:локальный:хост:порт` для `ssh -L`.
+fn tcp_forward_spec(local: u16, host: &str, port: u16) -> String {
+    format!("127.0.0.1:{local}:{}:{port}", bracketed(host))
+}
+
+/// Свободный порт на 127.0.0.1 (его занимает ssh сразу после проверки).
+fn free_port() -> Result<u16, String> {
+    std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .map(|addr| addr.port())
+        .map_err(|err| format!("Не удалось найти свободный порт: {err}"))
+}
+
+/// Готов ли локальный конец туннеля.
+async fn ready(socket: &Path, port: Option<u16>) -> bool {
+    match port {
+        Some(port) => tokio::time::timeout(
+            Duration::from_secs(1),
+            tokio::net::TcpStream::connect(("127.0.0.1", port)),
+        )
+        .await
+        .is_ok_and(|result| result.is_ok()),
+        None => socket.exists(),
+    }
 }
 
 fn control_argv(control: &Path, op: &str, forward: &str, target: &str) -> Vec<String> {
@@ -177,15 +224,15 @@ fn ssh_message(stderr: &[u8], fallback: &str) -> String {
     }
 }
 
-async fn wait_for_socket(socket: &Path) -> bool {
+async fn wait_for_socket(socket: &Path, port: Option<u16>) -> bool {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
     while tokio::time::Instant::now() < deadline {
-        if socket.exists() {
+        if ready(socket, port).await {
             return true;
         }
         tokio::time::sleep(POLL).await;
     }
-    socket.exists()
+    ready(socket, port).await
 }
 
 /// Поднимает туннель и ждёт, пока сокет будет готов принимать соединения.
@@ -197,8 +244,21 @@ pub async fn open(spec: Spec<'_>) -> Result<Tunnel, String> {
     let _ = std::fs::remove_dir_all(&dir);
     session::ensure_private_dir(&dir)
         .map_err(|err| format!("Не удалось создать {}: {err}", dir.display()))?;
-    let socket = dir.join(spec.socket_name);
-    let forward = forward_spec(&socket, spec.host, spec.port);
+    let (socket, port, forward) = match spec.local {
+        Local::Socket(name) => {
+            let socket = dir.join(name);
+            let forward = forward_spec(&socket, spec.host, spec.port);
+            (socket, None, forward)
+        }
+        Local::Tcp => {
+            let local = free_port()?;
+            (
+                dir.join("tcp"),
+                Some(local),
+                tcp_forward_spec(local, spec.host, spec.port),
+            )
+        }
+    };
 
     // Через мастер открытой вкладки, если он жив.
     if let Some(control) = spec.control.filter(|path| path.exists()) {
@@ -212,9 +272,10 @@ pub async fn open(spec: Spec<'_>) -> Result<Tunnel, String> {
             let tunnel = Tunnel {
                 dir: dir.clone(),
                 socket: socket.clone(),
+                port,
                 mode: Mode::Shared { cancel },
             };
-            if wait_for_socket(&socket).await {
+            if wait_for_socket(&socket, port).await {
                 return Ok(tunnel);
             }
             drop(tunnel);
@@ -229,10 +290,11 @@ pub async fn open(spec: Spec<'_>) -> Result<Tunnel, String> {
         .map_err(|err| format!("Не удалось запустить ssh: {err}"))?;
     let deadline = tokio::time::Instant::now() + OPEN_TIMEOUT;
     loop {
-        if socket.exists() {
+        if ready(&socket, port).await {
             return Ok(Tunnel {
                 dir,
                 socket,
+                port,
                 mode: Mode::Own { _child: child },
             });
         }
@@ -276,6 +338,11 @@ mod tests {
             forward_spec(socket, "::1", 5432),
             "/run/user/1/sshdeck/db-1-1/.s.PGSQL.5432:[::1]:5432"
         );
+        assert_eq!(
+            tcp_forward_spec(40000, "db", 8123),
+            "127.0.0.1:40000:db:8123"
+        );
+        assert!(free_port().is_ok_and(|port| port > 0));
     }
 
     #[test]

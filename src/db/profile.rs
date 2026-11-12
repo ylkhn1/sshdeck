@@ -19,16 +19,20 @@ const KEY_DATABASE: &str = "database";
 const KEY_PATH: &str = "path";
 const KEY_SSH: &str = "ssh";
 const KEY_TLS: &str = "tls";
+const KEY_DRIVER: &str = "driver";
 
-/// Поддерживаемые СУБД.
+/// Поддерживаемые СУБД. `Extension` — СУБД из установленного расширения
+/// (какого именно, говорит [`DbProfile::driver`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum DbKind {
     Postgres,
     MySql,
     Sqlite,
+    Extension,
 }
 
 impl DbKind {
+    /// Встроенные драйверы.
     pub const ALL: [DbKind; 3] = [DbKind::Postgres, DbKind::MySql, DbKind::Sqlite];
 
     /// Идентификатор в файле настроек.
@@ -37,11 +41,15 @@ impl DbKind {
             DbKind::Postgres => "postgres",
             DbKind::MySql => "mysql",
             DbKind::Sqlite => "sqlite",
+            DbKind::Extension => "extension",
         }
     }
 
     pub fn from_id(id: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|kind| kind.id() == id)
+        Self::ALL
+            .into_iter()
+            .chain([DbKind::Extension])
+            .find(|kind| kind.id() == id)
     }
 
     /// Название для людей.
@@ -50,6 +58,7 @@ impl DbKind {
             DbKind::Postgres => "PostgreSQL",
             DbKind::MySql => "MySQL / MariaDB",
             DbKind::Sqlite => "SQLite",
+            DbKind::Extension => "Расширение",
         }
     }
 
@@ -59,6 +68,7 @@ impl DbKind {
             DbKind::Postgres => "PG",
             DbKind::MySql => "MY",
             DbKind::Sqlite => "SL",
+            DbKind::Extension => "EX",
         }
     }
 
@@ -66,7 +76,7 @@ impl DbKind {
         match self {
             DbKind::Postgres => 5432,
             DbKind::MySql => 3306,
-            DbKind::Sqlite => 0,
+            DbKind::Sqlite | DbKind::Extension => 0,
         }
     }
 
@@ -74,7 +84,7 @@ impl DbKind {
         match self {
             DbKind::Postgres => "postgres",
             DbKind::MySql => "root",
-            DbKind::Sqlite => "",
+            DbKind::Sqlite | DbKind::Extension => "",
         }
     }
 
@@ -103,25 +113,96 @@ pub struct DbProfile {
     pub ssh: String,
     /// Требовать шифрование соединения.
     pub tls: bool,
+    /// Идентификатор расширения для `DbKind::Extension`.
+    pub driver: String,
 }
 
 impl DbProfile {
     /// Профиль с типовыми значениями для выбранной СУБД.
     pub fn template(kind: DbKind) -> Self {
-        Self {
+        Self::template_for(kind, String::new())
+    }
+
+    /// Профиль для СУБД из расширения `driver`.
+    pub fn template_for(kind: DbKind, driver: String) -> Self {
+        let mut profile = Self {
             name: String::new(),
             kind,
-            host: if kind.is_networked() {
-                "localhost".to_string()
-            } else {
-                String::new()
-            },
-            port: kind.default_port(),
-            user: kind.default_user().to_string(),
+            host: String::new(),
+            port: 0,
+            user: String::new(),
             database: String::new(),
             path: String::new(),
             ssh: String::new(),
             tls: false,
+            driver,
+        };
+        if profile.is_networked() {
+            profile.host = "localhost".to_string();
+        }
+        profile.port = profile.default_port();
+        profile.user = profile.default_user();
+        profile
+    }
+
+    /// Расширение профиля, если оно установлено.
+    pub fn extension(&self) -> Option<super::extension::ExtensionInfo> {
+        (self.kind == DbKind::Extension)
+            .then(|| super::extension::find(&self.driver))
+            .flatten()
+    }
+
+    /// Сетевая СУБД: сервер, порт, пароль, SSH-туннель. Для расширения это
+    /// говорит само расширение (неустановленное считается сетевым).
+    pub fn is_networked(&self) -> bool {
+        match self.kind {
+            DbKind::Extension => self.extension().is_none_or(|ext| !ext.file),
+            kind => kind.is_networked(),
+        }
+    }
+
+    pub fn default_port(&self) -> u16 {
+        match self.kind {
+            DbKind::Extension => self.extension().map_or(0, |ext| ext.default_port),
+            kind => kind.default_port(),
+        }
+    }
+
+    pub fn default_user(&self) -> String {
+        match self.kind {
+            DbKind::Extension => self
+                .extension()
+                .map(|ext| ext.default_user)
+                .unwrap_or_default(),
+            kind => kind.default_user().to_string(),
+        }
+    }
+
+    /// Название СУБД для людей.
+    pub fn kind_label(&self) -> String {
+        match self.kind {
+            DbKind::Extension => self.extension().map_or_else(
+                || format!("{} (расширение не установлено)", self.driver),
+                |ext| ext.name,
+            ),
+            kind => kind.label().to_string(),
+        }
+    }
+
+    /// Короткая метка для значка.
+    pub fn badge(&self) -> String {
+        match self.kind {
+            DbKind::Extension => self.extension().map_or_else(
+                || {
+                    self.driver
+                        .chars()
+                        .take(2)
+                        .collect::<String>()
+                        .to_uppercase()
+                },
+                |ext| ext.badge,
+            ),
+            kind => kind.badge().to_string(),
         }
     }
 
@@ -134,8 +215,9 @@ impl DbProfile {
         self.path = self.path.trim().to_string();
         self.ssh = clean(&self.ssh);
         self.name = clean(&self.name);
+        self.driver = clean(&self.driver);
         if self.port == 0 {
-            self.port = self.kind.default_port();
+            self.port = self.default_port();
         }
         if self.name.is_empty() {
             self.name = self.summary();
@@ -145,7 +227,7 @@ impl DbProfile {
 
     /// Куда подключаемся, одной строкой: `postgres@db:5432/app`, имя файла.
     pub fn summary(&self) -> String {
-        if !self.kind.is_networked() {
+        if !self.is_networked() {
             return Path::new(&self.path).file_name().map_or_else(
                 || self.path.clone(),
                 |name| name.to_string_lossy().into_owned(),
@@ -157,7 +239,7 @@ impl DbProfile {
             text.push('@');
         }
         text.push_str(&self.host);
-        if self.port != self.kind.default_port() {
+        if self.port != self.default_port() {
             text.push_str(&format!(":{}", self.port));
         }
         if !self.database.is_empty() {
@@ -169,7 +251,14 @@ impl DbProfile {
 
     /// Чего не хватает, чтобы подключиться; `None` — профиль годится.
     pub fn problem(&self) -> Option<String> {
-        if self.kind.is_networked() {
+        if self.kind == DbKind::Extension && self.extension().is_none() {
+            return Some(format!(
+                "Расширение «{}» не установлено. Положите его в {}",
+                self.driver,
+                super::extension::drivers_dir().display()
+            ));
+        }
+        if self.is_networked() {
             if self.host.trim().is_empty() {
                 return Some("Укажите сервер базы данных".to_string());
             }
@@ -244,8 +333,12 @@ impl Profiles {
                 path: field(KEY_PATH),
                 ssh: field(KEY_SSH),
                 tls: key_file.boolean(group, KEY_TLS).unwrap_or(false),
+                driver: field(KEY_DRIVER),
             }
             .normalized();
+            if profile.kind == DbKind::Extension && profile.driver.is_empty() {
+                continue;
+            }
             items.push(profile);
         }
         let mut profiles = Self { items };
@@ -259,7 +352,12 @@ impl Profiles {
             let group = format!("{GROUP_PREFIX}-{}", index + 1);
             key_file.set_string(&group, KEY_NAME, &profile.name);
             key_file.set_string(&group, KEY_KIND, profile.kind.id());
-            if profile.kind.is_networked() {
+            if profile.kind == DbKind::Extension {
+                key_file.set_string(&group, KEY_DRIVER, &profile.driver);
+            }
+            // Неустановленное расширение: сохраняется всё, что было.
+            let networked = profile.is_networked();
+            if networked || profile.kind == DbKind::Extension {
                 key_file.set_string(&group, KEY_HOST, &profile.host);
                 key_file.set_string(&group, KEY_PORT, &profile.port.to_string());
                 key_file.set_string(&group, KEY_USER, &profile.user);
@@ -268,7 +366,8 @@ impl Profiles {
                     key_file.set_string(&group, KEY_SSH, &profile.ssh);
                 }
                 key_file.set_boolean(&group, KEY_TLS, profile.tls);
-            } else {
+            }
+            if !networked || (profile.kind == DbKind::Extension && !profile.path.is_empty()) {
                 key_file.set_string(&group, KEY_PATH, &profile.path);
             }
         }
@@ -344,8 +443,29 @@ mod tests {
     #[test]
     fn unknown_kinds_and_other_groups_are_skipped() {
         let parsed =
-            Profiles::parse("[database-1]\nkind=oracle\nname=x\n[other]\nkind=postgres\n").unwrap();
+            Profiles::parse("[database-1]\nkind=oracle\nname=x\n[other]\nkind=postgres\n[database-2]\nkind=extension\n").unwrap();
         assert!(parsed.items().is_empty());
+    }
+
+    #[test]
+    fn extension_profiles_survive_without_extension() {
+        let profile = DbProfile {
+            name: "Аналитика".to_string(),
+            host: "ch".to_string(),
+            port: 8123,
+            user: "default".to_string(),
+            ..DbProfile::template_for(DbKind::Extension, "nonexistent-test-driver".to_string())
+        };
+        let mut profiles = Profiles::default();
+        profiles.upsert(profile.clone(), None);
+        let parsed = Profiles::parse(&profiles.serialize()).expect("parse");
+        assert_eq!(parsed.items(), std::slice::from_ref(&profile));
+        assert_eq!(profile.badge(), "NO");
+        assert!(
+            profile
+                .problem()
+                .is_some_and(|p| p.contains("не установлено"))
+        );
     }
 
     #[test]

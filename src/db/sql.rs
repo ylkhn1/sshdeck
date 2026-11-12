@@ -326,8 +326,55 @@ pub fn highlight(text: &str, kind: DbKind) -> Vec<(Range<usize>, Token)> {
 pub fn quote_ident(name: &str, kind: DbKind) -> String {
     match kind {
         DbKind::MySql => format!("`{}`", name.replace('`', "``")),
-        DbKind::Postgres | DbKind::Sqlite => format!("\"{}\"", name.replace('"', "\"\"")),
+        DbKind::Postgres | DbKind::Sqlite | DbKind::Extension => {
+            format!("\"{}\"", name.replace('"', "\"\""))
+        }
     }
+}
+
+/// Строковая константа SQL.
+pub fn string_literal(value: &str, kind: DbKind) -> String {
+    match kind {
+        // В MySQL обратная косая черта — экранирующий символ.
+        DbKind::MySql => {
+            let mut text = String::with_capacity(value.len() + 2);
+            text.push('\'');
+            for c in value.chars() {
+                match c {
+                    '\\' => text.push_str("\\\\"),
+                    '\'' => text.push_str("''"),
+                    '\0' => text.push_str("\\0"),
+                    c => text.push(c),
+                }
+            }
+            text.push('\'');
+            text
+        }
+        // Без E'' обратная косая черта в PostgreSQL — обычный символ, но
+        // только при standard_conforming_strings (по умолчанию включено);
+        // E'' от настройки не зависит.
+        DbKind::Postgres if value.contains('\\') => {
+            format!("E'{}'", value.replace('\\', "\\\\").replace('\'', "''"))
+        }
+        _ => format!("'{}'", value.replace('\'', "''")),
+    }
+}
+
+/// Похоже ли значение на число, которое можно вставить в SQL без кавычек.
+pub fn is_plain_number(value: &str) -> bool {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    let (mantissa, exponent) = match digits.find(['e', 'E']) {
+        Some(at) => (&digits[..at], Some(&digits[at + 1..])),
+        None => (digits, None),
+    };
+    let (whole, fraction) = match mantissa.split_once('.') {
+        Some((whole, fraction)) => (whole, Some(fraction)),
+        None => (mantissa, None),
+    };
+    let all_digits = |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit());
+    all_digits(whole)
+        && fraction.is_none_or(all_digits)
+        && exponent.is_none_or(|exp| all_digits(exp.strip_prefix(['+', '-']).unwrap_or(exp)))
 }
 
 /// Полное имя таблицы: `схема.таблица` (для SQLite основная схема
@@ -346,6 +393,46 @@ pub fn select_preview(schema: &str, table: &str, kind: DbKind, limit: usize) -> 
         "SELECT * FROM {} LIMIT {limit};",
         qualified(schema, table, kind)
     )
+}
+
+/// Только ли читает запрос (его можно безопасно выполнить ещё раз, например
+/// чтобы выгрузить все строки). Сомнительное считается изменяющим.
+pub fn is_read_only(sql: &str) -> bool {
+    let mut text = sql.trim_start();
+    // Комментарии в начале.
+    loop {
+        if let Some(rest) = text.strip_prefix("--") {
+            text = rest
+                .split_once('\n')
+                .map_or("", |(_, tail)| tail)
+                .trim_start();
+        } else if let Some(rest) = text.strip_prefix("/*") {
+            text = rest
+                .split_once("*/")
+                .map_or("", |(_, tail)| tail)
+                .trim_start();
+        } else {
+            break;
+        }
+    }
+    let words: Vec<String> = sql
+        .to_lowercase()
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .filter(|word| !word.is_empty())
+        .map(str::to_string)
+        .collect();
+    let writes = [
+        "insert", "update", "delete", "merge", "into", "drop", "alter", "create",
+    ];
+    let first = text
+        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+        .next()
+        .unwrap_or("")
+        .to_lowercase();
+    matches!(
+        first.as_str(),
+        "select" | "table" | "values" | "show" | "with"
+    ) && !words.iter().any(|word| writes.contains(&word.as_str()))
 }
 
 #[cfg(test)]
@@ -462,6 +549,35 @@ mod tests {
         assert_eq!(my[2].1, Token::Comment);
         // Слова с кириллицей и цифрами не разбиваются на ключевые слова.
         assert!(highlight("selectы from1", DbKind::Sqlite).is_empty());
+    }
+
+    #[test]
+    fn read_only_queries() {
+        assert!(is_read_only("select * from t"));
+        assert!(is_read_only("-- комментарий\n  SELECT 1"));
+        assert!(is_read_only("/* x */ WITH a AS (SELECT 1) SELECT * FROM a"));
+        assert!(!is_read_only(
+            "WITH d AS (DELETE FROM t RETURNING *) SELECT * FROM d"
+        ));
+        assert!(!is_read_only("UPDATE t SET a = 1 RETURNING *"));
+        assert!(!is_read_only("SELECT * INTO copy FROM t"));
+        assert!(!is_read_only(""));
+    }
+
+    #[test]
+    fn literals() {
+        assert_eq!(string_literal("it's", DbKind::Postgres), "'it''s'");
+        assert_eq!(string_literal(r"a\b'", DbKind::Postgres), r"E'a\\b'''");
+        assert_eq!(string_literal(r"a\b'", DbKind::MySql), r"'a\\b'''");
+        assert_eq!(string_literal(r"a\b", DbKind::Sqlite), r"'a\b'");
+        for number in ["0", "-12", "3.25", "1e10", "-1.5E-3"] {
+            assert!(is_plain_number(number), "{number}");
+        }
+        for text in [
+            "", "-", "1.", ".5", "1e", "0x10", "NaN", "Infinity", "1 2", "+1",
+        ] {
+            assert!(!is_plain_number(text), "{text}");
+        }
     }
 
     #[test]

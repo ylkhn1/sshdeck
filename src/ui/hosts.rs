@@ -9,7 +9,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gdk, gio, glib, pango};
 
-use super::databases::{Databases, describe as describe_db, kind_badge};
+use super::databases::{Databases, describe as describe_db, profile_badge};
 use super::{Notifier, collapsing_revealer, dialogs, reveal};
 use crate::db::DbProfile;
 use crate::connections::{self, Connection, Connections, FOLDER_COLORS};
@@ -1285,12 +1285,12 @@ fn database_row(profile: &DbProfile) -> (gtk::ListBoxRow, gtk::Revealer) {
     let content = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     content.set_margin_top(ROW_MARGIN);
     content.set_margin_bottom(ROW_MARGIN);
-    content.append(&kind_badge(profile.kind));
+    content.append(&profile_badge(profile));
     content.append(&labels);
     content.add_css_class("sshdeck-host-content");
     content.set_tooltip_text(Some(&format!(
         "{} — {detail}\nДвойной щелчок — подключиться",
-        profile.kind.label()
+        profile.kind_label()
     )));
     let revealer = collapsing_revealer(gtk::RevealerTransitionType::SlideDown, &content);
     revealer.set_reveal_child(true);

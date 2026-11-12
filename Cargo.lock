@@ -2239,6 +2239,7 @@ name = "sshdeck"
 version = "0.1.0"
 dependencies = [
  "async-channel",
+ "bytes",
  "futures-util",
  "gtk4",
  "libadwaita",
@@ -2248,6 +2249,7 @@ dependencies = [
  "openssh-sftp-client",
  "postgres-native-tls",
  "rusqlite",
+ "serde_json",
  "tempfile",
  "tokio",
  "tokio-postgres",

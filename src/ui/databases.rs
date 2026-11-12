@@ -20,19 +20,23 @@ const ACCEPT: &str = "accept";
 /// Открывает вкладку базы с уже известным паролем.
 type OpenHandler = Box<dyn Fn(&DbProfile, String)>;
 
-/// Квадратный значок СУБД: `PG`, `MY`, `SL`.
-pub fn kind_badge(kind: DbKind) -> gtk::Label {
+/// Квадратный значок СУБД: `PG`, `MY`, `SL`, у расширений — свой.
+pub fn profile_badge(profile: &DbProfile) -> gtk::Label {
     gtk::Label::builder()
-        .label(kind.badge())
+        .label(profile.badge())
         .valign(gtk::Align::Center)
-        .css_classes(["sshdeck-db-badge", &format!("sshdeck-db-{}", kind.id())])
+        .tooltip_text(profile.kind_label())
+        .css_classes([
+            "sshdeck-db-badge",
+            &format!("sshdeck-db-{}", profile.kind.id()),
+        ])
         .build()
 }
 
 /// Описание профиля одной строкой для списка и подсказок.
 pub fn describe(profile: &DbProfile) -> String {
     let mut text = profile.summary();
-    if profile.kind.is_networked() && !profile.ssh.is_empty() {
+    if profile.is_networked() && !profile.ssh.is_empty() {
         text.push_str(&format!(" · через {}", profile.ssh));
     }
     text
@@ -74,6 +78,19 @@ impl Databases {
             open: RefCell::new(None),
             changed: RefCell::new(Vec::new()),
             passwords: RefCell::new(HashMap::new()),
+        });
+        // Расширения ищутся в фоне; когда найдутся, список перерисуется
+        // (значки и названия СУБД из расширений).
+        let scan = db::scan_extensions();
+        let weak = Rc::downgrade(&inner);
+        glib::spawn_future_local(async move {
+            if scan.recv().await.is_ok()
+                && let Some(inner) = weak.upgrade()
+            {
+                for handler in inner.changed.borrow().iter() {
+                    handler();
+                }
+            }
         });
         Self { inner }
     }
@@ -156,7 +173,7 @@ impl Inner {
     }
 
     fn connect(&self, profile: &DbProfile) {
-        if !profile.kind.is_networked() {
+        if !profile.is_networked() {
             self.open(profile, String::new());
             return;
         }
@@ -254,7 +271,7 @@ impl Inner {
             .build();
         fields.append(&password_row);
         fields.append(&keep_row);
-        let mut body = format!("{} — {}", profile.kind.label(), describe(profile));
+        let mut body = format!("{} — {}", profile.kind_label(), describe(profile));
         if let Some(reason) = reason {
             body = format!("{reason}\n\n{body}");
         }
@@ -310,7 +327,7 @@ impl Inner {
                     .items()
                     .iter()
                     .any(|other| secrets::key(other) == key);
-                if !shared && profile.kind.is_networked() {
+                if !shared && profile.is_networked() {
                     this.forget(key);
                 }
                 this.commit();
@@ -327,7 +344,7 @@ impl Inner {
             .unwrap_or_else(|| DbProfile::template(DbKind::Postgres));
         let form = ProfileForm::new(start.clone());
         // Пароль из хранилища подставляется в поле, когда придёт.
-        if start.kind.is_networked() {
+        if start.is_networked() {
             let key = secrets::key(&start);
             let cached = self.passwords.borrow().get(&key).cloned();
             match cached {
@@ -392,13 +409,11 @@ impl Inner {
     /// Пароль из формы: сохраняется, переносится на новый ключ (если
     /// сменились сервер или пользователь) или удаляется (поле очистили).
     fn save_password(&self, original: Option<&DbProfile>, profile: &DbProfile, form: &ProfileForm) {
-        if !profile.kind.is_networked() {
+        if !profile.is_networked() {
             return;
         }
         let key = secrets::key(profile);
-        let old_key = original
-            .filter(|old| old.kind.is_networked())
-            .map(secrets::key);
+        let old_key = original.filter(|old| old.is_networked()).map(secrets::key);
         let moved = old_key.as_ref().is_some_and(|old| *old != key);
         let Some(password) = form.password_to_save() else {
             // Пароль не трогали и он ещё не загружен — ничего не меняем.
@@ -425,10 +440,56 @@ impl Inner {
     }
 }
 
+/// Вариант в списке СУБД: встроенный драйвер или расширение.
+#[derive(Clone)]
+struct KindChoice {
+    kind: DbKind,
+    driver: String,
+    label: String,
+}
+
+impl KindChoice {
+    fn template(&self) -> DbProfile {
+        DbProfile::template_for(self.kind, self.driver.clone())
+    }
+}
+
+/// Встроенные СУБД, затем установленные расширения (список обновляется при
+/// каждом открытии диалога: новое расширение появляется без перезапуска),
+/// затем — расширение профиля, если его удалили.
+fn kind_choices(current: &DbProfile) -> Vec<KindChoice> {
+    let mut choices: Vec<KindChoice> = DbKind::ALL
+        .iter()
+        .map(|kind| KindChoice {
+            kind: *kind,
+            driver: String::new(),
+            label: kind.label().to_string(),
+        })
+        .collect();
+    for ext in db::extension::scan() {
+        choices.push(KindChoice {
+            kind: DbKind::Extension,
+            label: format!("{} (расширение)", ext.name),
+            driver: ext.id,
+        });
+    }
+    if current.kind == DbKind::Extension
+        && !choices.iter().any(|choice| choice.driver == current.driver)
+    {
+        choices.push(KindChoice {
+            kind: DbKind::Extension,
+            driver: current.driver.clone(),
+            label: current.kind_label(),
+        });
+    }
+    choices
+}
+
 /// Поля диалога подключения. Набор видимых полей зависит от СУБД.
 struct ProfileForm {
     widget: gtk::ListBox,
     kind: adw::ComboRow,
+    choices: Vec<KindChoice>,
     name: adw::EntryRow,
     host: adw::EntryRow,
     port: adw::EntryRow,
@@ -449,14 +510,17 @@ struct ProfileForm {
 
 impl ProfileForm {
     fn new(profile: DbProfile) -> Rc<Self> {
-        let labels: Vec<&str> = DbKind::ALL.iter().map(|kind| kind.label()).collect();
+        let choices = kind_choices(&profile);
+        let labels: Vec<&str> = choices.iter().map(|choice| choice.label.as_str()).collect();
         let kind = adw::ComboRow::builder()
             .title("СУБД")
             .model(&gtk::StringList::new(&labels))
             .selected(
-                DbKind::ALL
+                choices
                     .iter()
-                    .position(|kind| *kind == profile.kind)
+                    .position(|choice| {
+                        choice.kind == profile.kind && choice.driver == profile.driver
+                    })
                     .unwrap_or(0) as u32,
             )
             .build();
@@ -491,6 +555,7 @@ impl ProfileForm {
             .width_request(420)
             .build();
         widget.append(&kind);
+        widget.append(&extensions_row());
         widget.append(&name);
         widget.append(&host);
         widget.append(&port);
@@ -504,6 +569,7 @@ impl ProfileForm {
         let form = Rc::new(Self {
             widget,
             kind,
+            choices,
             name,
             host,
             port,
@@ -539,7 +605,7 @@ impl ProfileForm {
             let weak = Rc::downgrade(&form);
             pick.connect_clicked(move |button| {
                 let dialog = gtk::FileDialog::builder()
-                    .title("Файл базы SQLite")
+                    .title("Файл базы данных")
                     .modal(true)
                     .build();
                 let weak = weak.clone();
@@ -563,19 +629,22 @@ impl ProfileForm {
             // Порт и пользователь по умолчанию следуют за СУБД, если их не
             // меняли.
             let weak = Rc::downgrade(&form);
-            let previous = Cell::new(profile.kind);
+            let previous = RefCell::new(DbProfile::template_for(
+                profile.kind,
+                profile.driver.clone(),
+            ));
             form.kind.connect_selected_notify(move |_| {
                 let Some(form) = weak.upgrade() else { return };
-                let kind = form.selected_kind();
-                let old = previous.replace(kind);
+                let new = form.selected().template();
+                let old = previous.replace(new.clone());
                 let port = form.port.text();
                 if port.trim().is_empty() || port.trim() == old.default_port().to_string() {
-                    form.port.set_text(&kind.default_port().to_string());
+                    form.port.set_text(&new.default_port().to_string());
                 }
                 if form.user.text().trim() == old.default_user() {
-                    form.user.set_text(kind.default_user());
+                    form.user.set_text(&new.default_user());
                 }
-                if kind.is_networked() && form.host.text().trim().is_empty() {
+                if new.is_networked() && form.host.text().trim().is_empty() {
                     form.host.set_text("localhost");
                 }
                 form.sync_visibility();
@@ -585,15 +654,15 @@ impl ProfileForm {
         form
     }
 
-    fn selected_kind(&self) -> DbKind {
-        DbKind::ALL
+    fn selected(&self) -> KindChoice {
+        self.choices
             .get(self.kind.selected() as usize)
-            .copied()
-            .unwrap_or(DbKind::Postgres)
+            .cloned()
+            .unwrap_or_else(|| self.choices[0].clone())
     }
 
     fn sync_visibility(&self) {
-        let networked = self.selected_kind().is_networked();
+        let networked = self.selected().template().is_networked();
         self.host.set_visible(networked);
         self.port.set_visible(networked);
         self.user.set_visible(networked);
@@ -632,25 +701,27 @@ impl ProfileForm {
     }
 
     /// Порт из поля; `None` — в поле не число от 1 до 65535.
-    fn port(&self, kind: DbKind) -> Option<u16> {
+    fn port(&self, template: &DbProfile) -> Option<u16> {
         let text = self.port.text();
         match text.trim() {
-            "" => Some(kind.default_port()),
+            "" => Some(template.default_port()),
             text => text.parse::<u16>().ok().filter(|port| *port > 0),
         }
     }
 
     /// Профиль из полей; `None`, если чего-то не хватает.
     fn profile(&self) -> Option<DbProfile> {
-        let kind = self.selected_kind();
-        let port = match self.port(kind) {
+        let choice = self.selected();
+        let template = choice.template();
+        let port = match self.port(&template) {
             Some(port) => port,
-            None if kind.is_networked() => return None,
+            None if template.is_networked() => return None,
             None => 0,
         };
         let profile = DbProfile {
             name: self.name.text().to_string(),
-            kind,
+            kind: choice.kind,
+            driver: choice.driver,
             host: self.host.text().to_string(),
             port,
             user: self.user.text().to_string(),
@@ -665,7 +736,7 @@ impl ProfileForm {
 
     /// Подсвечивает поля с ошибкой; причина — во всплывающей подсказке.
     fn mark_errors(&self) {
-        let kind = self.selected_kind();
+        let template = self.selected().template();
         let mark = |row: &adw::EntryRow, error: Option<String>| match error {
             Some(message) => {
                 row.add_css_class("error");
@@ -678,7 +749,7 @@ impl ProfileForm {
         };
         mark(
             &self.port,
-            (kind.is_networked() && self.port(kind).is_none())
+            (template.is_networked() && self.port(&template).is_none())
                 .then(|| "Порт — число от 1 до 65535".to_string()),
         );
         let ssh = self.ssh.text();
@@ -723,4 +794,41 @@ impl ProfileForm {
         }
         notify();
     }
+}
+
+/// Строка о расширениях: где они лежат, и кнопка «открыть папку».
+fn extensions_row() -> adw::ActionRow {
+    let dir = db::extension::drivers_dir();
+    let count = db::extension::installed().len();
+    // Домашний каталог — как `~`: путь короче и понятнее.
+    let shown = match dir.strip_prefix(glib::home_dir()) {
+        Ok(rest) => format!("~/{}", rest.display()),
+        Err(_) => dir.display().to_string(),
+    };
+    let row = adw::ActionRow::builder()
+        .title("Другие СУБД — расширения")
+        .subtitle(format!(
+            "{}. Положите расширение в {} — оно появится в списке выше",
+            if count == 0 {
+                "Расширений пока нет".to_string()
+            } else {
+                format!("Установлено расширений: {count}")
+            },
+            shown
+        ))
+        .subtitle_lines(3)
+        .build();
+    let open = gtk::Button::builder()
+        .icon_name("folder-open-symbolic")
+        .tooltip_text("Открыть папку расширений")
+        .valign(gtk::Align::Center)
+        .css_classes(["flat"])
+        .build();
+    open.connect_clicked(move |_| {
+        let _ = std::fs::create_dir_all(&dir);
+        let uri = gio::File::for_path(&dir).uri();
+        let _ = gio::AppInfo::launch_default_for_uri(&uri, gio::AppLaunchContext::NONE);
+    });
+    row.add_suffix(&open);
+    row
 }

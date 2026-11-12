@@ -188,7 +188,12 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
 }
 .sshdeck-db-toolbar button { border-radius: 7px; min-height: 26px; }
 .sshdeck-db-toolbar entry, .sshdeck-db-toolbar searchentry { min-height: 26px; border-radius: 7px; }
-.sshdeck-db-nav > row { min-height: 0; padding-top: 3px; padding-bottom: 3px; }
+.sshdeck-db-nav > row { min-height: 0; padding-top: 2px; padding-bottom: 2px; }
+.sshdeck-db-extension { color: #9b6bd6; background-color: color-mix(in srgb, #9b6bd6 18%, transparent); }
+.sshdeck-db-active { font-weight: bold; }
+.sshdeck-tree-size { font-size: 0.85em; font-feature-settings: 'tnum'; }
+.sshdeck-tree-note { font-style: italic; }
+.sshdeck-tree-pk { color: #d0a12e; }
 textview.sshdeck-sql > text { background-color: var(--view-bg-color); }
 textview.sshdeck-sql { font-family: monospace; }
 .sshdeck-db-caption { font-family: monospace; font-size: 0.8em; }
@@ -907,7 +912,7 @@ impl AppWindow {
             })
         };
         let title = profile.name.clone();
-        let tooltip = format!("{} — {}", profile.kind.label(), describe(&profile));
+        let tooltip = format!("{} — {}", profile.kind_label(), describe(&profile));
         let tab = DbTab::new(profile, password, control, self.databases.clone());
         self.db_tabs.borrow_mut().push(Rc::clone(&tab));
         let page = self.tab_view.append(tab.widget());

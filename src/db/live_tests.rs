@@ -39,7 +39,7 @@ impl Live {
         )
         .expect("start");
         let route = match events.recv_blocking().expect("event") {
-            Event::Connected { version, route } => {
+            Event::Connected { version, route, .. } => {
                 eprintln!("подключено: {version} · {route}");
                 route
             }
@@ -74,6 +74,7 @@ impl Live {
         self.next_id += 1;
         self.worker.send(Request::Query {
             id,
+            database: None,
             sql: sql.to_string(),
         });
         self.wait(id).0
@@ -89,19 +90,97 @@ impl Live {
         self.next_id += 1;
         self.worker.send(Request::Structure {
             id,
+            database: None,
             schema: schema.to_string(),
             table: table.to_string(),
         });
         self.wait(id).0.expect("structure")
     }
 
-    fn tables(&self) -> Vec<TableInfo> {
-        self.worker.send(Request::Tables);
+    /// Каталог базы (`None` — основной).
+    fn catalog(&self, database: Option<&str>) -> Catalog {
+        self.worker.send(Request::Catalog {
+            database: database.map(str::to_string),
+        });
         loop {
-            if let Event::Tables(result) = self.events.recv_blocking().expect("event") {
-                return result.expect("tables");
+            if let Event::Catalog {
+                database: from,
+                result,
+            } = self.events.recv_blocking().expect("event")
+                && database.is_none_or(|name| name == from)
+            {
+                return result.expect("catalog");
             }
         }
+    }
+
+    /// Запрос к другой базе сервера.
+    fn query_in(&mut self, database: &str, sql: &str) -> QueryOutput {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.worker.send(Request::Query {
+            id,
+            database: Some(database.to_string()),
+            sql: sql.to_string(),
+        });
+        self.wait(id)
+            .0
+            .unwrap_or_else(|err| panic!("{sql}: {}", err.message))
+    }
+
+    fn transfer(
+        &mut self,
+        request: impl FnOnce(u64) -> Request,
+    ) -> Result<TransferReport, DbError> {
+        let id = self.next_id;
+        self.next_id += 1;
+        self.worker.send(request(id));
+        loop {
+            match self.events.recv_blocking().expect("event") {
+                Event::TransferDone {
+                    id: done, result, ..
+                } if done == id => return result,
+                _ => {}
+            }
+        }
+    }
+
+    fn export(
+        &mut self,
+        sql: &str,
+        path: &std::path::Path,
+        format: ExportFormat,
+        table: &str,
+    ) -> u64 {
+        let (sql, path, table) = (sql.to_string(), path.to_path_buf(), table.to_string());
+        self.transfer(|id| Request::Export {
+            id,
+            database: None,
+            sql,
+            path,
+            format,
+            table,
+        })
+        .unwrap_or_else(|err| panic!("export: {}", err.message))
+        .rows
+    }
+
+    fn import(
+        &mut self,
+        schema: &str,
+        table: &str,
+        path: &std::path::Path,
+        options: ImportOptions,
+    ) -> Result<TransferReport, DbError> {
+        let (schema, table, path) = (schema.to_string(), table.to_string(), path.to_path_buf());
+        self.transfer(|id| Request::Import {
+            id,
+            database: None,
+            schema,
+            table,
+            path,
+            options,
+        })
     }
 
     /// Долгий запрос прерывается кнопкой «Стоп» быстро.
@@ -110,11 +189,12 @@ impl Live {
         self.next_id += 1;
         self.worker.send(Request::Query {
             id,
+            database: None,
             sql: sleep_sql.to_string(),
         });
         std::thread::sleep(Duration::from_millis(700));
         let started = Instant::now();
-        self.worker.send(Request::Cancel);
+        self.worker.send(Request::Cancel { id });
         let _ = self.wait(id);
         assert!(
             started.elapsed() < Duration::from_secs(5),
@@ -201,20 +281,108 @@ fn check_postgres(live: &mut Live) {
     assert_eq!(cell(&structure, 2, 1), Some("numeric(10,2)"));
 
     live.ok("CREATE SCHEMA sshdeck_s; CREATE VIEW sshdeck_s.v AS SELECT 1 AS x");
-    let tables = live.tables();
-    assert!(tables.contains(&TableInfo {
-        schema: "public".to_string(),
-        name: "sshdeck_items".to_string(),
-        view: false,
-    }));
-    assert!(tables.contains(&TableInfo {
-        schema: "sshdeck_s".to_string(),
-        name: "v".to_string(),
-        view: true,
-    }));
+    let catalog = live.catalog(None);
+    assert!(catalog.schemas.contains(&"sshdeck_s".to_string()));
+    let items = catalog
+        .tables
+        .iter()
+        .find(|t| t.schema == "public" && t.name == "sshdeck_items")
+        .expect("sshdeck_items");
+    assert!(!items.view);
+    // Таблица с данными: размер вместе с индексом больше нуля.
+    assert!(items.size.is_some_and(|size| size > 0), "{items:?}");
+    let view = catalog
+        .tables
+        .iter()
+        .find(|t| t.schema == "sshdeck_s" && t.name == "v")
+        .expect("view");
+    assert!(view.view && view.size.is_none());
+
+    check_transfer(live, "public", "\"sshdeck_items\"", DbKind::Postgres);
 
     live.cancel_works("SELECT pg_sleep(30)");
     live.ok("DROP TABLE sshdeck_items; DROP SCHEMA sshdeck_s CASCADE");
+}
+
+/// Экспорт таблицы во все форматы, импорт обратно (CSV и JSON) и откат
+/// импорта при ошибке. В таблице две строки, первая колонка — `id`.
+fn check_transfer(live: &mut Live, schema: &str, table: &str, kind: DbKind) {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let select = format!("SELECT id, name, price FROM {table} ORDER BY id");
+    for format in ExportFormat::ALL {
+        let path = dir.path().join(format!("items.{}", format.extension()));
+        assert_eq!(live.export(&select, &path, format, table), 2, "{format:?}");
+        let text = std::fs::read_to_string(&path).expect("file");
+        assert!(text.contains("Чай; зелёный"), "{format:?}: {text}");
+        match format {
+            ExportFormat::Json => assert!(text.contains("\"price\":12.50"), "{text}"),
+            ExportFormat::Sql => assert!(
+                text.contains("12.50, ") || text.contains("12.50)"),
+                "{text}"
+            ),
+            _ => {}
+        }
+    }
+    // SQL-файл выполняется обратно как скрипт.
+    let script = std::fs::read_to_string(dir.path().join("items.sql")).expect("sql");
+    live.ok(&format!("DELETE FROM {table}"));
+    live.ok(&script);
+    assert_eq!(
+        live.ok(&format!("SELECT count(*) FROM {table}")).rows[0][0].as_deref(),
+        Some("2")
+    );
+
+    // CSV обратно с очисткой таблицы.
+    let csv = dir.path().join("items.csv");
+    let report = live
+        .import(
+            schema,
+            "sshdeck_items",
+            &csv,
+            ImportOptions {
+                truncate: true,
+                ..ImportOptions::default()
+            },
+        )
+        .unwrap_or_else(|err| panic!("import csv: {}", err.message));
+    assert_eq!(report.rows, 2);
+    assert_eq!(live.ok(&select).rows[0][1].as_deref(), Some("Чай; зелёный"));
+
+    // Большой файл порциями: 2500 строк, NULL и кавычки.
+    let big = dir.path().join("big.csv");
+    let mut text = String::from("name;price;extra\n");
+    for n in 0..2500 {
+        text.push_str(&format!("\"имя \"\"{n}\"\"\";{n}.5;x\n"));
+    }
+    text.push_str("последняя;;x\n");
+    std::fs::write(&big, text).unwrap();
+    let report = live
+        .import(schema, "sshdeck_items", &big, ImportOptions::default())
+        .unwrap_or_else(|err| panic!("import big: {}", err.message));
+    assert_eq!(report.rows, 2501);
+    assert_eq!(report.skipped, ["extra"]);
+    let count = live.ok(&format!("SELECT count(*), count(price) FROM {table}"));
+    assert_eq!(count.rows[0][0].as_deref(), Some("2503"));
+    assert_eq!(count.rows[0][1].as_deref(), Some("2501"));
+
+    // Ошибка в середине (NOT NULL) откатывает весь импорт.
+    let broken = dir.path().join("broken.json");
+    std::fs::write(
+        &broken,
+        r#"[{"name": "ок", "price": 1}, {"name": null, "price": 2}]"#,
+    )
+    .unwrap();
+    let error = live
+        .import(schema, "sshdeck_items", &broken, ImportOptions::default())
+        .expect_err("NOT NULL");
+    assert!(error.message.contains("строк"), "{}", error.message);
+    let after = live.ok(&format!("SELECT count(*) FROM {table}"));
+    assert_eq!(
+        after.rows[0][0].as_deref(),
+        Some("2503"),
+        "импорт не откатился"
+    );
+    let _ = kind;
 }
 
 fn check_mysql(live: &mut Live) {
@@ -254,12 +422,16 @@ fn check_mysql(live: &mut Live) {
     assert_eq!(cell(&structure, 0, 1), Some("int(11)"));
     assert_eq!(cell(&structure, 0, 4), Some("PRI"));
 
-    let tables = live.tables();
-    assert!(
-        tables
-            .iter()
-            .any(|t| t.schema == "shop" && t.name == "sshdeck_items")
-    );
+    let catalog = live.catalog(None);
+    assert!(catalog.schemas.contains(&"shop".to_string()));
+    let items = catalog
+        .tables
+        .iter()
+        .find(|t| t.schema == "shop" && t.name == "sshdeck_items")
+        .expect("sshdeck_items");
+    assert!(items.size.is_some(), "{items:?}");
+
+    check_transfer(live, "shop", "`shop`.`sshdeck_items`", DbKind::MySql);
 
     live.cancel_works("SELECT SLEEP(30)");
     live.ok("DROP TABLE sshdeck_items");
@@ -420,20 +592,157 @@ fn live_postgres_tables_without_privileges() {
         let mut databases = None;
         while tables.is_none() || databases.is_none() {
             match events.recv_blocking().expect("event") {
-                Event::Tables(result) => tables = Some(result.expect("tables")),
-                Event::Databases { names, current } => databases = Some((names, current)),
+                Event::Catalog { result, .. } => tables = Some(result.expect("tables").tables),
+                Event::Databases(list) => databases = Some(list),
                 Event::ConnectFailed(message) => panic!("{message}"),
                 _ => {}
             }
         }
         let tables = tables.unwrap_or_default();
-        assert!(tables.iter().any(|t| t.name == "sshdeck_secret" && !t.view));
+        // Размер виден и без прав на саму таблицу.
+        assert!(
+            tables
+                .iter()
+                .any(|t| t.name == "sshdeck_secret" && !t.view && t.size.is_some())
+        );
         assert!(tables.iter().any(|t| t.name == "sshdeck_mv" && t.view));
-        let (names, current) = databases.unwrap_or_default();
-        assert_eq!(current, "postgres");
-        assert!(names.contains(&"postgres".to_string()), "{names:?}");
+        let databases = databases.unwrap_or_default();
+        let current = databases.iter().find(|d| d.current).expect("current");
+        assert_eq!(current.name, "postgres");
+        assert!(current.size.is_some(), "{databases:?}");
     }
     admin.ok(
         "DROP TABLE sshdeck_secret; DROP MATERIALIZED VIEW sshdeck_mv; DROP ROLE sshdeck_reader",
     );
+}
+
+/// Дерево из нескольких баз: каталог и запросы к другой базе сервера идут
+/// через отдельные соединения, основное соединение остаётся в своей базе.
+#[test]
+#[ignore = "нужен PostgreSQL на 127.0.0.1:55432"]
+fn live_postgres_other_database() {
+    let (mut admin, _) = Live::start(pg_profile(), None);
+    admin.ok("DROP DATABASE IF EXISTS sshdeck_other");
+    admin.ok("CREATE DATABASE sshdeck_other");
+    {
+        let (mut live, _) = Live::start(pg_profile(), None);
+        live.query_in(
+            "sshdeck_other",
+            "CREATE SCHEMA crm; CREATE TABLE crm.clients (id int PRIMARY KEY, name text); \
+             INSERT INTO crm.clients SELECT g, 'клиент ' || g FROM generate_series(1, 300) g; \
+             ANALYZE crm.clients",
+        );
+        let catalog = live.catalog(Some("sshdeck_other"));
+        assert!(catalog.schemas.contains(&"crm".to_string()), "{catalog:?}");
+        let clients = catalog
+            .tables
+            .iter()
+            .find(|t| t.name == "clients")
+            .expect("clients");
+        assert_eq!(clients.rows, Some(300));
+        assert!(clients.size.is_some_and(|s| s > 8192));
+        let current = live.query_in("sshdeck_other", "SELECT current_database()");
+        assert_eq!(current.rows[0][0].as_deref(), Some("sshdeck_other"));
+        // Основное соединение там же, где было.
+        let main = live.ok("SELECT current_database()");
+        assert_eq!(main.rows[0][0].as_deref(), Some("postgres"));
+    }
+    // Соединения вкладки закрылись — базу можно удалить.
+    std::thread::sleep(Duration::from_millis(300));
+    admin.ok("DROP DATABASE sshdeck_other");
+}
+
+/// Расширение из `extensions/clickhouse` на настоящем ClickHouse:
+/// `docker run -d --rm -e CLICKHOUSE_PASSWORD=testpw -p 127.0.0.1:58123:8123
+/// clickhouse/clickhouse-server:25.8-alpine`.
+#[test]
+#[ignore = "нужен ClickHouse на 127.0.0.1:58123"]
+fn live_clickhouse_extension() {
+    let script = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("extensions/clickhouse/sshdeck-driver-clickhouse");
+    let output = std::process::Command::new(&script)
+        .arg("--sshdeck-info")
+        .output()
+        .expect("info");
+    let mut info = extension::scan_info_for_test(&String::from_utf8_lossy(&output.stdout), &script);
+    info.path = script;
+    extension::register(info);
+    let profile = DbProfile {
+        host: "127.0.0.1".to_string(),
+        port: 58123,
+        ..DbProfile::template_for(DbKind::Extension, "clickhouse".to_string())
+    }
+    .normalized();
+    assert_eq!(profile.user, "default");
+    let (mut live, _) = Live::start(profile, None);
+    live.ok("DROP TABLE IF EXISTS default.sshdeck_items");
+    live.ok(
+        "CREATE TABLE default.sshdeck_items (id UInt32, name String, price Nullable(Decimal(10,2))) \
+         ENGINE = MergeTree ORDER BY id",
+    );
+    live.ok(
+        "INSERT INTO default.sshdeck_items VALUES (1, 'Чай; зелёный', 12.5), (2, 'кофе', NULL)",
+    );
+    let rows = live.ok("SELECT * FROM default.sshdeck_items ORDER BY id; SELECT 1 AS one");
+    assert_eq!(rows.columns, ["one"]);
+    assert_eq!(rows.statements, 2);
+    let rows = live.ok("SELECT * FROM default.sshdeck_items ORDER BY id");
+    assert_eq!(rows.rows[0][1].as_deref(), Some("Чай; зелёный"));
+    assert_eq!(rows.rows[1][2], None);
+    let many = live.ok("SELECT number FROM numbers(5000)");
+    assert_eq!(many.rows.len(), MAX_ROWS);
+    assert!(many.truncated);
+    let error = live.query("SELEC 1").expect_err("syntax");
+    assert!(error.message.contains("Syntax error"), "{}", error.message);
+
+    let catalog = live.catalog(None);
+    let items = catalog
+        .tables
+        .iter()
+        .find(|t| t.schema == "default" && t.name == "sshdeck_items")
+        .expect("table");
+    assert_eq!(items.rows, Some(2));
+    assert!(items.size.is_some_and(|s| s > 0));
+    let structure = live.structure("default", "sshdeck_items");
+    assert_eq!(cell(&structure, 0, 0), Some("id"));
+    assert_eq!(cell(&structure, 0, 4), Some("PK"));
+    assert_eq!(cell(&structure, 2, 2), Some("YES"));
+
+    let dir = tempfile::tempdir().expect("tempdir");
+    let json = dir.path().join("items.json");
+    let exported = live.export(
+        "SELECT * FROM default.sshdeck_items ORDER BY id",
+        &json,
+        ExportFormat::Json,
+        "`default`.`sshdeck_items`",
+    );
+    assert_eq!(exported, 2);
+    let text = std::fs::read_to_string(&json).unwrap();
+    assert!(text.contains("\"id\":1,"), "{text}");
+    assert!(text.contains("\"price\":12.50"), "{text}");
+
+    let csv = dir.path().join("more.csv");
+    std::fs::write(&csv, "id,name,price\n10,\"таб\tи\nперевод\",\n11,x,3.25\n").unwrap();
+    let report = live
+        .import(
+            "default",
+            "sshdeck_items",
+            &csv,
+            ImportOptions {
+                truncate: true,
+                ..ImportOptions::default()
+            },
+        )
+        .unwrap_or_else(|err| panic!("import: {}", err.message));
+    assert_eq!(report.rows, 2);
+    let rows = live.ok("SELECT id, name, price FROM default.sshdeck_items ORDER BY id");
+    assert_eq!(
+        rows.rows,
+        [
+            vec![Some("10".into()), Some("таб\tи\nперевод".into()), None],
+            vec![Some("11".into()), Some("x".into()), Some("3.25".into())],
+        ]
+    );
+    live.cancel_works("SELECT sum(number) FROM numbers(100000000000)");
+    live.ok("DROP TABLE default.sshdeck_items");
 }

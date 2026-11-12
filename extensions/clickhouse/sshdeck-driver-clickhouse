@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""Расширение sshdeck: ClickHouse через HTTP-интерфейс (порт 8123/8443).
+
+Нужен только Python 3 — без сторонних модулей. Установка:
+
+    install -Dm755 sshdeck-driver-clickhouse ~/.local/share/sshdeck/drivers/clickhouse
+
+Протокол — строки JSON через stdin/stdout, см. extensions/README.md.
+"""
+
+import base64
+import json
+import queue
+import ssl
+import sys
+import threading
+import urllib.error
+import urllib.parse
+import urllib.request
+import uuid
+
+INFO = {
+    "sshdeck_driver": 1,
+    "id": "clickhouse",
+    "name": "ClickHouse",
+    "badge": "CH",
+    "default_port": 8123,
+    "default_user": "default",
+}
+
+SYSTEM_DATABASES = ("system", "INFORMATION_SCHEMA", "information_schema")
+
+
+class DriverError(Exception):
+    pass
+
+
+def quote_ident(name):
+    return "`" + name.replace("\\", "\\\\").replace("`", "\\`") + "`"
+
+
+def quote_string(value):
+    return "'" + value.replace("\\", "\\\\").replace("'", "\\'") + "'"
+
+
+def split_statements(sql):
+    """Делит текст на запросы по `;` вне строк и комментариев."""
+    statements, current, i, n = [], [], 0, len(sql)
+    while i < n:
+        c = sql[i]
+        if c in "'\"`":
+            j = i + 1
+            while j < n:
+                if sql[j] == "\\":
+                    j += 2
+                    continue
+                if sql[j] == c:
+                    if j + 1 < n and sql[j + 1] == c:
+                        j += 2
+                        continue
+                    break
+                j += 1
+            current.append(sql[i : j + 1])
+            i = j + 1
+        elif sql.startswith("--", i):
+            j = sql.find("\n", i)
+            j = n if j < 0 else j
+            current.append(sql[i:j])
+            i = j
+        elif sql.startswith("/*", i):
+            j = sql.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            current.append(sql[i:j])
+            i = j
+        elif c == ";":
+            statements.append("".join(current))
+            current = []
+            i += 1
+        else:
+            current.append(c)
+            i += 1
+    statements.append("".join(current))
+    return [s.strip() for s in statements if s.strip()]
+
+
+def tsv_field(value):
+    if value is None:
+        return "\\N"
+    return (
+        value.replace("\\", "\\\\")
+        .replace("\t", "\\t")
+        .replace("\n", "\\n")
+        .replace("\r", "\\r")
+    )
+
+
+def column_type(name):
+    base = name
+    for wrapper in ("Nullable(", "LowCardinality("):
+        while base.startswith(wrapper):
+            base = base[len(wrapper) : -1]
+    if base.startswith(("Int", "UInt", "Float", "Decimal")):
+        return "number"
+    if base == "Bool":
+        return "bool"
+    return "text"
+
+
+class ClickHouse:
+    def __init__(self):
+        self.base = None
+        self.headers = {}
+        self.database = ""
+        self.context = None
+        self.current_query = None
+        self.lock = threading.Lock()
+
+    def connect(self, params):
+        host = params.get("host") or "localhost"
+        if ":" in host and not host.startswith("["):
+            host = "[" + host + "]"
+        port = params.get("port") or (8443 if params.get("tls") else 8123)
+        scheme = "https" if params.get("tls") else "http"
+        self.base = f"{scheme}://{host}:{port}/"
+        if params.get("tls"):
+            # Как у встроенных драйверов: шифрование без проверки сертификата.
+            self.context = ssl.create_default_context()
+            self.context.check_hostname = False
+            self.context.verify_mode = ssl.CERT_NONE
+        user = params.get("user") or "default"
+        password = params.get("password") or ""
+        token = base64.b64encode(f"{user}:{password}".encode()).decode()
+        self.headers = {"Authorization": "Basic " + token}
+        self.database = params.get("database") or ""
+        _, rows, _, _ = self.rows("SELECT version()", timeout=20)
+        return {"version": f"ClickHouse {rows[0][0]}"}
+
+    def request(self, sql, settings=None, body_suffix=b"", timeout=None):
+        query_id = str(uuid.uuid4())
+        args = {"query_id": query_id}
+        if self.database:
+            args["database"] = self.database
+        args.update(settings or {})
+        url = self.base + "?" + urllib.parse.urlencode(args)
+        data = sql.encode() + body_suffix
+        req = urllib.request.Request(url, data=data, headers=self.headers, method="POST")
+        with self.lock:
+            self.current_query = query_id
+        try:
+            with urllib.request.urlopen(req, timeout=timeout, context=self.context) as resp:
+                summary = resp.headers.get("X-ClickHouse-Summary")
+                return resp.read(), summary
+        except urllib.error.HTTPError as err:
+            text = err.read().decode(errors="replace").strip()
+            raise DriverError(text or str(err)) from None
+        except urllib.error.URLError as err:
+            raise DriverError(f"Нет соединения с ClickHouse: {err.reason}") from None
+        finally:
+            with self.lock:
+                self.current_query = None
+
+    def rows(self, sql, limit=None, timeout=None):
+        """Колонки, строки, признак обрезки и типы (или число записанных
+        строк, если запрос ничего не вернул)."""
+        settings = {
+            "default_format": "JSONCompact",
+            # Decimal(10,2) показывается как 12.50, а не 12.5.
+            "output_format_decimal_trailing_zeros": "1",
+        }
+        if limit is not None:
+            settings["max_result_rows"] = str(limit + 1)
+            settings["result_overflow_mode"] = "break"
+        body, summary = self.request(sql, settings, timeout=timeout)
+        if not body.strip():
+            written = None
+            if summary:
+                try:
+                    written = int(json.loads(summary).get("written_rows", 0))
+                except (ValueError, TypeError):
+                    pass
+            return None, None, False, written
+        # Числа — исходным текстом: Decimal и UInt64 не теряют точность.
+        result = json.loads(body, parse_float=str, parse_int=str)
+        meta = result.get("meta", [])
+        data = result.get("data", [])
+        truncated = limit is not None and len(data) > limit
+        if truncated:
+            data = data[:limit]
+        types = [column_type(m.get("type", "")) for m in meta]
+        return [m["name"] for m in meta], data, truncated, types
+
+    def query(self, params):
+        sql = params.get("sql", "")
+        limit = params.get("limit")
+        last_table, affected, count = None, None, 0
+        for statement in split_statements(sql):
+            columns, data, truncated, extra = self.rows(statement, limit)
+            count += 1
+            if columns is None:
+                affected = extra
+            else:
+                last_table = {
+                    "columns": columns,
+                    "rows": data,
+                    "truncated": truncated,
+                    "types": extra,
+                }
+        if last_table is None:
+            return {"columns": [], "rows": [], "affected": affected, "statements": count}
+        last_table["statements"] = count
+        return last_table
+
+    def tables(self, _params):
+        excluded = ", ".join(quote_string(d) for d in SYSTEM_DATABASES)
+        _, schemas, _, _ = self.rows(
+            f"SELECT name FROM system.databases WHERE name NOT IN ({excluded}) ORDER BY name"
+        )
+        _, data, _, _ = self.rows(
+            "SELECT database, name, engine LIKE '%View%', total_bytes, total_rows "
+            f"FROM system.tables WHERE database NOT IN ({excluded}) "
+            "AND NOT is_temporary ORDER BY database, name"
+        )
+        tables = []
+        for database, name, view, size, rows in data:
+            tables.append(
+                {
+                    "schema": database,
+                    "name": name,
+                    "view": view == "1",
+                    "size": int(size) if size not in (None, "") else None,
+                    "rows": int(rows) if rows not in (None, "") else None,
+                }
+            )
+        return {"schemas": [row[0] for row in schemas], "tables": tables}
+
+    def structure(self, params):
+        _, data, _, _ = self.rows(
+            "SELECT name, type, default_expression, is_in_primary_key "
+            "FROM system.columns WHERE database = {db} AND table = {table} "
+            "ORDER BY position".format(
+                db=quote_string(params["schema"]), table=quote_string(params["table"])
+            )
+        )
+        return {
+            "columns": [
+                {
+                    "name": name,
+                    "type": type_,
+                    "nullable": type_.startswith("Nullable("),
+                    "default": default or None,
+                    "key": key == "1",
+                }
+                for name, type_, default, key in data
+            ]
+        }
+
+    def insert(self, params):
+        table = quote_ident(params["schema"]) + "." + quote_ident(params["table"])
+        if params.get("truncate"):
+            self.request(f"TRUNCATE TABLE {table}")
+        columns = ", ".join(quote_ident(c) for c in params["columns"])
+        lines = "".join(
+            "\t".join(tsv_field(v) for v in row) + "\n" for row in params["rows"]
+        )
+        self.request(
+            f"INSERT INTO {table} ({columns}) FORMAT TabSeparated\n",
+            body_suffix=lines.encode(),
+        )
+        return {"affected": len(params["rows"])}
+
+    def cancel(self):
+        with self.lock:
+            query_id = self.current_query
+        if not query_id or not self.base:
+            return
+        try:
+            req = urllib.request.Request(
+                self.base,
+                data=f"KILL QUERY WHERE query_id = {quote_string(query_id)}".encode(),
+                headers=self.headers,
+                method="POST",
+            )
+            urllib.request.urlopen(req, timeout=10, context=self.context).read()
+        except Exception:  # отмена — по возможности
+            pass
+
+
+def main():
+    if "--sshdeck-info" in sys.argv[1:]:
+        print(json.dumps(INFO))
+        return
+    db = ClickHouse()
+    out_lock = threading.Lock()
+    requests = queue.Queue()
+
+    def reply(message):
+        with out_lock:
+            sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\n")
+            sys.stdout.flush()
+
+    handlers = {
+        "connect": db.connect,
+        "query": db.query,
+        "tables": db.tables,
+        "structure": db.structure,
+        "insert": db.insert,
+    }
+
+    def worker():
+        while True:
+            message = requests.get()
+            if message is None:
+                return
+            request_id = message.get("id")
+            method = message.get("method")
+            try:
+                handler = handlers.get(method)
+                if handler is None:
+                    raise DriverError(f"Неизвестный метод {method}")
+                reply({"id": request_id, "result": handler(message.get("params") or {})})
+            except DriverError as err:
+                reply({"id": request_id, "error": str(err)})
+            except Exception as err:  # чтобы ошибка не роняла расширение
+                reply({"id": request_id, "error": f"{type(err).__name__}: {err}"})
+
+    thread = threading.Thread(target=worker, daemon=True)
+    thread.start()
+    # Запросы выполняются по очереди в рабочем потоке; «cancel» читается
+    # здесь сразу, даже пока запрос выполняется.
+    for line in sys.stdin:
+        try:
+            message = json.loads(line)
+        except ValueError:
+            continue
+        if message.get("method") == "cancel":
+            db.cancel()
+        elif "id" in message:
+            requests.put(message)
+    requests.put(None)
+    thread.join()
+
+
+if __name__ == "__main__":
+    main()
