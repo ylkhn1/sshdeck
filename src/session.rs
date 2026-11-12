@@ -82,10 +82,14 @@ pub fn cleanup_stale(runtime_dir: &Path) {
     }
 }
 
-/// Идентификатор процесса-владельца из имени `<pid>-<n>.sock` или
-/// `files-<pid>-<n>`; для посторонних имён — `None`.
+/// Идентификатор процесса-владельца из имени `<pid>-<n>.sock`,
+/// `files-<pid>-<n>` или `db-<pid>-<n>` (каталог туннеля к базе данных);
+/// для посторонних имён — `None`.
 fn owner_pid(name: &str) -> Option<u32> {
-    let rest = match name.strip_prefix("files-") {
+    let rest = match name
+        .strip_prefix("files-")
+        .or_else(|| name.strip_prefix("db-"))
+    {
         Some(rest) => rest,
         None => name.strip_suffix(".sock")?,
     };
@@ -396,6 +400,7 @@ mod tests {
     fn owner_pid_parsing() {
         assert_eq!(owner_pid("1234-1.sock"), Some(1234));
         assert_eq!(owner_pid("files-1234-7"), Some(1234));
+        assert_eq!(owner_pid("db-1234-3"), Some(1234));
         assert_eq!(owner_pid("files-1234"), None);
         assert_eq!(owner_pid("1234.sock"), None);
         assert_eq!(owner_pid("abc-1.sock"), None);

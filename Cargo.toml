@@ -14,6 +14,12 @@ tokio-util = "0.7"
 openssh-sftp-client = "0.15"
 async-channel = "2"
 futures-util = "0.3"
+tokio-postgres = "0.7"
+postgres-native-tls = "0.5"
+native-tls = "0.2"
+rusqlite = "0.42"
+mysql_async = { version = "0.37", default-features = false, features = ["minimal-rust", "native-tls-tls"] }
+oo7 = "0.7"
 
 [dev-dependencies]
 tempfile = "3"

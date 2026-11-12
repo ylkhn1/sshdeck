@@ -4,6 +4,7 @@
 //! вкладках.
 
 mod connections;
+mod db;
 mod keysetup;
 mod probe;
 mod remote;

@@ -7,11 +7,14 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gdk, gio, glib, pango};
 
+use super::databases::{Databases, describe};
+use super::dbtab::{ControlLookup, DbTab};
 use super::hosts::HostsSidebar;
 use super::snippets::SnippetsButton;
 use super::terminal;
 use super::tab::SessionTab;
 use super::{ANIMATION_MS, Notifier, collapsing_revealer, dialogs, reveal};
+use crate::db::DbProfile;
 use crate::session;
 use crate::settings::Settings;
 
@@ -171,6 +174,80 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
   background-color: color-mix(in srgb, currentColor 6%, transparent);
 }
 
+/* ---------- базы данных */
+.sshdeck-db-badge {
+  min-width: 22px; min-height: 22px; border-radius: 6px;
+  font-weight: 800; font-size: 0.7em; font-family: monospace;
+}
+.sshdeck-db-postgres { color: #4f7fd6; background-color: color-mix(in srgb, #4f7fd6 18%, transparent); }
+.sshdeck-db-mysql { color: #e8803a; background-color: color-mix(in srgb, #e8803a 18%, transparent); }
+.sshdeck-db-sqlite { color: #14a3b8; background-color: color-mix(in srgb, #14a3b8 18%, transparent); }
+.sshdeck-db-toolbar {
+  padding: 3px 6px; min-height: 30px;
+  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 8%, transparent);
+}
+.sshdeck-db-toolbar button { border-radius: 7px; min-height: 26px; }
+.sshdeck-db-toolbar entry, .sshdeck-db-toolbar searchentry { min-height: 26px; border-radius: 7px; }
+.sshdeck-db-nav > row { min-height: 0; padding-top: 3px; padding-bottom: 3px; }
+textview.sshdeck-sql > text { background-color: var(--view-bg-color); }
+textview.sshdeck-sql { font-family: monospace; }
+.sshdeck-db-caption { font-family: monospace; font-size: 0.8em; }
+/* таблица результатов */
+columnview.sshdeck-grid { background-color: var(--view-bg-color); }
+columnview.sshdeck-grid > header > button {
+  padding: 6px 10px;
+  background-color: color-mix(in srgb, currentColor 5%, var(--view-bg-color));
+  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 12%, transparent);
+}
+columnview.sshdeck-grid > header > button > box {
+  font-size: 0.82em; font-weight: 700;
+  color: color-mix(in srgb, currentColor 75%, transparent);
+}
+columnview.sshdeck-grid > listview > row > cell { padding: 0; }
+columnview.sshdeck-grid > listview > row:hover {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 8%, transparent);
+}
+columnview.sshdeck-grid > listview > row:selected {
+  background-color: color-mix(in srgb, var(--accent-bg-color) 26%, transparent);
+}
+columnview.sshdeck-grid.column-separators > listview > row > cell,
+columnview.sshdeck-grid.column-separators > header > button {
+  border-right: 1px solid color-mix(in srgb, currentColor 7%, transparent);
+}
+.sshdeck-cell { padding: 5px 10px; min-height: 18px; }
+.sshdeck-cell.odd { background-color: color-mix(in srgb, currentColor 3.5%, transparent); }
+.sshdeck-cell.numeric { font-feature-settings: 'tnum'; }
+.sshdeck-rownum {
+  font-size: 0.8em; padding: 5px 8px 5px 12px;
+  color: color-mix(in srgb, currentColor 38%, transparent);
+}
+.sshdeck-null {
+  font-size: 0.72em; font-weight: 700; letter-spacing: 0.06em;
+  color: color-mix(in srgb, currentColor 35%, transparent);
+}
+.sshdeck-results-header { min-height: 34px; }
+.sshdeck-pill {
+  padding: 1px 9px; border-radius: 99px; font-size: 0.8em; font-weight: 600;
+  background-color: color-mix(in srgb, currentColor 8%, transparent);
+  color: color-mix(in srgb, currentColor 80%, transparent);
+}
+.sshdeck-message { padding: 14px 16px; border-radius: 12px; }
+.sshdeck-message.error {
+  background-color: color-mix(in srgb, #e5484d 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #e5484d 30%, transparent);
+}
+.sshdeck-message.error > image, .sshdeck-message.error .heading { color: #e5484d; }
+.sshdeck-message.success {
+  background-color: color-mix(in srgb, #2ec27e 12%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #2ec27e 30%, transparent);
+}
+.sshdeck-message.success > image { color: #2ec27e; }
+.sshdeck-message-text { font-family: monospace; font-size: 0.92em; }
+.sshdeck-editor-hint {
+  font-family: monospace; color: color-mix(in srgb, currentColor 32%, transparent);
+}
+.sshdeck-section-button { min-width: 22px; min-height: 22px; padding: 0; margin: 6px 6px 0 0; border-radius: 6px; }
+
 .sshdeck-folder-red { color: #ed333b; }
 .sshdeck-folder-orange { color: #ff7800; }
 .sshdeck-folder-yellow { color: #e5a50a; }
@@ -319,6 +396,10 @@ struct AppWindow {
     theme_css: gtk::CssProvider,
     /// Кнопка сохранённых команд; хранится, чтобы жили её обработчики.
     snippets: SnippetsButton,
+    /// Сохранённые базы данных (список показывает боковая панель).
+    databases: Databases,
+    /// Открытые вкладки баз данных.
+    db_tabs: RefCell<Vec<Rc<DbTab>>>,
     next_tab_id: Cell<u32>,
 }
 
@@ -328,7 +409,8 @@ impl AppWindow {
         let notifier = Notifier::new();
 
         // --- боковая панель с подключениями
-        let sidebar = HostsSidebar::new(notifier.clone());
+        let databases = Databases::new(notifier.clone());
+        let sidebar = HostsSidebar::new(notifier.clone(), databases.clone());
 
         // --- область вкладок
         let tab_view = adw::TabView::new();
@@ -354,7 +436,8 @@ impl AppWindow {
             .css_classes(["sshdeck-empty"])
             .title("Нет открытых сессий")
             .description(
-                "Дважды щёлкните подключение слева или введите user@host и нажмите Enter",
+                "Дважды щёлкните подключение или базу данных слева, \
+                 или введите user@host и нажмите Enter",
             )
             .build();
         let stack = gtk::Stack::builder()
@@ -509,6 +592,8 @@ impl AppWindow {
             settings,
             theme_css,
             snippets,
+            databases,
+            db_tabs: RefCell::new(Vec::new()),
             next_tab_id: Cell::new(1),
         });
 
@@ -519,6 +604,15 @@ impl AppWindow {
             this.sidebar.set_open_handler(move |target, title, startup| {
                 weak.upgrade()
                     .is_some_and(|this| this.open_tab(target, title, startup))
+            });
+        }
+        {
+            let weak = Rc::downgrade(&this);
+            this.databases.set_parent(&this.window);
+            this.databases.set_open_handler(move |profile, password| {
+                if let Some(this) = weak.upgrade() {
+                    this.open_db_tab(profile.clone(), password);
+                }
             });
         }
         {
@@ -619,6 +713,15 @@ impl AppWindow {
                         let tab = this.tabs.borrow_mut().remove(position);
                         tab.shutdown();
                     }
+                    let db_position = this
+                        .db_tabs
+                        .borrow()
+                        .iter()
+                        .position(|tab| tab.widget().upcast_ref::<gtk::Widget>() == &child);
+                    if let Some(position) = db_position {
+                        let tab = this.db_tabs.borrow_mut().remove(position);
+                        tab.shutdown();
+                    }
                 }
                 view.close_page_finish(page, true);
                 glib::Propagation::Stop
@@ -681,6 +784,9 @@ impl AppWindow {
                 for tab in this_owned.tabs.borrow_mut().drain(..) {
                     tab.shutdown();
                 }
+                for tab in this_owned.db_tabs.borrow_mut().drain(..) {
+                    tab.shutdown();
+                }
                 glib::Propagation::Proceed
             });
         }
@@ -693,7 +799,9 @@ impl AppWindow {
     fn sync_tabs_state(&self) {
         let has_tabs = self.tab_view.n_pages() > 0;
         self.tab_bar.set_visible(has_tabs);
-        reveal(&self.files_reveal, &self.files_reveal, has_tabs, true);
+        // Панель файлов есть только у вкладок с терминалом.
+        let has_sessions = !self.tabs.borrow().is_empty();
+        reveal(&self.files_reveal, &self.files_reveal, has_sessions, true);
         if !has_tabs {
             // Сессий не осталось — снова нужен список подключений.
             self.split.set_show_sidebar(true);
@@ -782,6 +890,34 @@ impl AppWindow {
         self.split.set_show_sidebar(false);
         tab.focus_terminal();
         true
+    }
+
+    fn open_db_tab(self: &Rc<Self>, profile: DbProfile, password: String) {
+        // Туннель к базе может пойти через соединение уже открытой вкладки
+        // с тем же сервером.
+        let control: ControlLookup = {
+            let weak = Rc::downgrade(self);
+            Rc::new(move |target: &str| {
+                let this = weak.upgrade()?;
+                let tabs = this.tabs.borrow();
+                tabs.iter()
+                    .filter(|tab| tab.target() == target)
+                    .map(|tab| tab.control_path().to_path_buf())
+                    .find(|path| path.exists())
+            })
+        };
+        let title = profile.name.clone();
+        let tooltip = format!("{} — {}", profile.kind.label(), describe(&profile));
+        let tab = DbTab::new(profile, password, control, self.databases.clone());
+        self.db_tabs.borrow_mut().push(Rc::clone(&tab));
+        let page = self.tab_view.append(tab.widget());
+        page.set_title(&title);
+        page.set_tooltip(&glib::markup_escape_text(&tooltip));
+        page.set_icon(Some(&gio::ThemedIcon::new("drive-multidisk-symbolic")));
+        self.tab_view.set_selected_page(&page);
+        self.sync_tabs_state();
+        self.split.set_show_sidebar(false);
+        tab.focus_editor();
     }
 
     fn save_settings(&self) {

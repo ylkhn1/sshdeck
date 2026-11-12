@@ -2,6 +2,8 @@
 //! потоке и не делает сетевых вызовов: с SFTP он общается через каналы
 //! (`crate::sftp`).
 
+mod databases;
+mod dbtab;
 mod dialogs;
 mod dnd;
 mod files;

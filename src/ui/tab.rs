@@ -185,6 +185,12 @@ impl SessionTab {
         self.session.target()
     }
 
+    /// Сокет мастер-соединения вкладки (через него идут SSH-туннели к
+    /// базам данных).
+    pub fn control_path(&self) -> &Path {
+        self.session.control_path()
+    }
+
     /// Плавно показывает или прячет панель файлов: она выезжает слева,
     /// терминал занимает освободившееся место.
     pub fn set_files_visible(&self, visible: bool) {

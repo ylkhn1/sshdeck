@@ -1,5 +1,5 @@
 //! Боковая панель: быстрое подключение по адресу, сохранённые подключения
-//! (с названиями и папками) и хосты из ssh-конфига.
+//! (с названиями и папками), базы данных и хосты из ssh-конфига.
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -9,7 +9,9 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gdk, gio, glib, pango};
 
+use super::databases::{Databases, describe as describe_db, kind_badge};
 use super::{Notifier, collapsing_revealer, dialogs, reveal};
+use crate::db::DbProfile;
 use crate::connections::{self, Connection, Connections, FOLDER_COLORS};
 use crate::probe::{self, Status};
 use crate::session;
@@ -45,6 +47,8 @@ enum RowKind {
     Connection(usize),
     /// Индекс в списке хостов из ssh-конфига.
     Host(usize),
+    /// Индекс в списке баз данных.
+    Database(usize),
 }
 
 struct Row {
@@ -118,10 +122,13 @@ struct Inner {
     /// Адреса, проверка которых ещё идёт.
     checking: RefCell<HashSet<String>>,
     open: RefCell<Option<OpenHandler>>,
+    databases: Databases,
+    /// Базы данных в том порядке, в каком они показаны.
+    db_profiles: RefCell<Vec<DbProfile>>,
 }
 
 impl HostsSidebar {
-    pub fn new(notifier: Notifier) -> Self {
+    pub fn new(notifier: Notifier, databases: Databases) -> Self {
         let entry = gtk::Entry::builder()
             .placeholder_text("Поиск или user@host")
             .tooltip_text(
@@ -222,7 +229,17 @@ impl HostsSidebar {
             statuses: RefCell::new(HashMap::new()),
             checking: RefCell::new(HashSet::new()),
             open: RefCell::new(None),
+            databases,
+            db_profiles: RefCell::new(Vec::new()),
         });
+        {
+            let weak = Rc::downgrade(&inner);
+            inner.databases.connect_changed(move || {
+                if let Some(this) = weak.upgrade() {
+                    this.rebuild();
+                }
+            });
+        }
         inner.connect_signals();
         inner.reload();
         {
@@ -353,6 +370,22 @@ impl Inner {
         add("new-in-folder", |this| {
             if let Some(folder) = this.menu_folder() {
                 this.edit_dialog("", "", &folder, "", None);
+            }
+        });
+        add("db-new", |this| this.databases.create());
+        add("db-edit", |this| {
+            if let Some(profile) = this.menu_database() {
+                this.databases.edit(&profile);
+            }
+        });
+        add("db-duplicate", |this| {
+            if let Some(profile) = this.menu_database() {
+                this.databases.duplicate(&profile);
+            }
+        });
+        add("db-delete", |this| {
+            if let Some(profile) = this.menu_database() {
+                this.databases.delete(&profile);
             }
         });
         add("rename-folder", |this| this.rename_folder());
@@ -530,6 +563,26 @@ impl Inner {
                 });
             }
 
+            let profiles = self.databases.profiles();
+            rows.push(self.databases_heading());
+            if profiles.is_empty() {
+                rows.push(static_row(hint_label(
+                    "PostgreSQL, MySQL, MariaDB или SQLite — нажмите «+» справа от \
+                     заголовка. Сервер можно открыть через SSH.",
+                )));
+            }
+            for (index, profile) in profiles.iter().enumerate() {
+                let (widget, revealer) = database_row(profile);
+                rows.push(Row {
+                    kind: RowKind::Database(index),
+                    widget,
+                    arrow: None,
+                    revealer: Some(revealer),
+                    status: None,
+                });
+            }
+            *self.db_profiles.borrow_mut() = profiles;
+
             let hosts = self.hosts.borrow();
             if !hosts.is_empty() {
                 rows.push(static_row(heading_label("Из ~/.ssh/config")));
@@ -552,6 +605,34 @@ impl Inner {
         *self.rows.borrow_mut() = rows;
         self.apply_collapsed(false);
         self.show_statuses();
+    }
+
+    /// Заголовок раздела баз данных с кнопкой «добавить».
+    fn databases_heading(&self) -> Row {
+        let add = gtk::Button::builder()
+            .icon_name("list-add-symbolic")
+            .tooltip_text("Новое подключение к базе данных")
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "sshdeck-section-button"])
+            .build();
+        let databases = self.databases.clone();
+        add.connect_clicked(move |_| databases.create());
+        let label = heading_label("Базы данных");
+        label.set_hexpand(true);
+        let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
+        content.append(&label);
+        content.append(&add);
+        Row {
+            kind: RowKind::Static,
+            widget: gtk::ListBoxRow::builder()
+                .child(&content)
+                .selectable(false)
+                .activatable(false)
+                .build(),
+            arrow: None,
+            revealer: None,
+            status: None,
+        }
     }
 
     fn folder_row(&self, folder: &str, count: usize, color: Option<&str>) -> Row {
@@ -634,6 +715,7 @@ impl Inner {
         let collapsed = self.collapsed.borrow();
         let connections = self.connections.borrow();
         let hosts = self.hosts.borrow();
+        let profiles = self.db_profiles.borrow();
         for row in self.rows.borrow().iter() {
             match &row.kind {
                 RowKind::Folder(folder) => {
@@ -667,6 +749,12 @@ impl Inner {
                         .is_some_and(|h| matches(&h.alias, &h.detail()));
                     row.set_shown(visible, animate);
                 }
+                RowKind::Database(index) => {
+                    let visible = profiles
+                        .get(*index)
+                        .is_some_and(|p| matches(&p.name, &describe_db(p)));
+                    row.set_shown(visible, animate);
+                }
                 RowKind::Static => {}
             }
         }
@@ -694,6 +782,12 @@ impl Inner {
                 let alias = self.hosts.borrow().get(*index).map(|h| h.alias.clone());
                 if let Some(alias) = alias {
                     self.open(&alias, None, "");
+                }
+            }
+            RowKind::Database(index) => {
+                let profile = self.db_profiles.borrow().get(*index).cloned();
+                if let Some(profile) = profile {
+                    self.databases.connect(&profile);
                 }
             }
             RowKind::Folder(folder) => self.toggle_folder(folder),
@@ -754,7 +848,18 @@ impl Inner {
                 ("Подключиться", "hosts.connect"),
                 ("Сохранить в подключения…", "hosts.save-host"),
             ]),
-            RowKind::Static => section(&[("Новое подключение…", "hosts.new")]),
+            RowKind::Database(_) => {
+                section(&[
+                    ("Подключиться", "hosts.connect"),
+                    ("Изменить…", "hosts.db-edit"),
+                    ("Дублировать…", "hosts.db-duplicate"),
+                ]);
+                section(&[("Удалить…", "hosts.db-delete")]);
+            }
+            RowKind::Static => section(&[
+                ("Новое подключение…", "hosts.new"),
+                ("Новое подключение к базе…", "hosts.db-new"),
+            ]),
         }
         self.menu.set_menu_model(Some(&menu));
         // Меню принадлежит области прокрутки, а щелчок пришёл в координатах
@@ -778,6 +883,13 @@ impl Inner {
     fn menu_connection(&self) -> Option<Connection> {
         match self.menu_kind()? {
             RowKind::Connection(index) => self.connections.borrow().get(index).cloned(),
+            _ => None,
+        }
+    }
+
+    fn menu_database(&self) -> Option<DbProfile> {
+        match self.menu_kind()? {
+            RowKind::Database(index) => self.db_profiles.borrow().get(index).cloned(),
             _ => None,
         }
     }
@@ -1146,6 +1258,47 @@ fn entry_row(
         content,
     };
     (row, revealer, status)
+}
+
+/// Строка базы данных: значок СУБД, название и куда подключаемся.
+fn database_row(profile: &DbProfile) -> (gtk::ListBoxRow, gtk::Revealer) {
+    let labels = gtk::Box::new(gtk::Orientation::Vertical, 0);
+    labels.set_valign(gtk::Align::Center);
+    labels.append(
+        &gtk::Label::builder()
+            .label(&profile.name)
+            .xalign(0.0)
+            .ellipsize(pango::EllipsizeMode::End)
+            .build(),
+    );
+    let detail = describe_db(profile);
+    if detail != profile.name {
+        labels.append(
+            &gtk::Label::builder()
+                .label(&detail)
+                .xalign(0.0)
+                .ellipsize(pango::EllipsizeMode::End)
+                .css_classes(["caption", "dim-label"])
+                .build(),
+        );
+    }
+    let content = gtk::Box::new(gtk::Orientation::Horizontal, 10);
+    content.set_margin_top(ROW_MARGIN);
+    content.set_margin_bottom(ROW_MARGIN);
+    content.append(&kind_badge(profile.kind));
+    content.append(&labels);
+    content.add_css_class("sshdeck-host-content");
+    content.set_tooltip_text(Some(&format!(
+        "{} — {detail}\nДвойной щелчок — подключиться",
+        profile.kind.label()
+    )));
+    let revealer = collapsing_revealer(gtk::RevealerTransitionType::SlideDown, &content);
+    revealer.set_reveal_child(true);
+    let row = gtk::ListBoxRow::builder()
+        .child(&revealer)
+        .css_classes(["sshdeck-host-row"])
+        .build();
+    (row, revealer)
 }
 
 /// Сколько цветов у значков-аватаров (`.sshdeck-avatar-0` … в CSS окна).
