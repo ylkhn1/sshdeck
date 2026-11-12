@@ -19,7 +19,7 @@ pub fn confirm(
     on_confirm: impl FnOnce() + 'static,
 ) {
     let dialog = adw::AlertDialog::new(Some(heading), Some(body));
-    dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, confirm_label)]);
+    dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, confirm_label)]);
     dialog.set_close_response(CANCEL);
     if destructive {
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Destructive);
@@ -38,7 +38,7 @@ pub fn confirm(
 /// Показывает сообщение с одной кнопкой «Закрыть».
 pub fn message(parent: &impl IsA<gtk::Widget>, heading: &str, body: &str) {
     let dialog = adw::AlertDialog::new(Some(heading), Some(body));
-    dialog.add_response(CANCEL, "Закрыть");
+    dialog.add_response(CANCEL, tr!("Close"));
     dialog.set_close_response(CANCEL);
     dialog.present(Some(parent));
 }
@@ -59,7 +59,7 @@ pub fn prompt_text(
         .build();
 
     let dialog = adw::AlertDialog::new(Some(heading), Some(body));
-    dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, accept_label)]);
+    dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, accept_label)]);
     dialog.set_close_response(CANCEL);
     dialog.set_default_response(Some(ACCEPT));
     dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);

@@ -34,7 +34,7 @@ pub struct Theme {
 /// «Тёмная» берут её, а не серые цвета Adwaita.
 const DECK_NIGHT: Theme = Theme {
     id: "system",
-    name: "Как оформление окна",
+    name: n_!("Match window style"),
     foreground: "#d6dae3",
     background: "#15171d",
     palette: [
@@ -45,7 +45,7 @@ const DECK_NIGHT: Theme = Theme {
 /// Светлая пара к [`DECK_NIGHT`].
 const DECK_DAY: Theme = Theme {
     id: "system",
-    name: "Как оформление окна",
+    name: n_!("Match window style"),
     foreground: "#1f2430",
     background: "#fbfbfd",
     palette: [
@@ -166,7 +166,7 @@ pub fn app_look(id: &str) -> Option<AppLook> {
 /// стандартных тем «Как в системе», «Светлая» и «Тёмная».
 pub fn default_look(dark: bool) -> AppLook {
     look_for(if dark { &DECK_NIGHT } else { &DECK_DAY })
-        .expect("встроенные палитры записаны в #rrggbb")
+        .expect("built-in palettes are written as #rrggbb")
 }
 
 fn look_for(theme: &Theme) -> Option<AppLook> {
@@ -465,7 +465,7 @@ fn install_matches(term: &vte::Terminal, on_notice: impl Fn(&str) + 'static) {
             gtk::UriLauncher::new(&text).launch(window.as_ref(), gio::Cancellable::NONE, |_| {});
         } else {
             term.clipboard().set_text(&text);
-            on_notice(&format!("Скопировано: {text}"));
+            on_notice(&tr!("Copied: {}", text));
         }
     });
     term.add_controller(gesture);

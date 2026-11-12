@@ -20,13 +20,13 @@ const KEY_COLOR: &str = "color";
 /// Цвета, которыми можно пометить папку: идентификатор в файле и название
 /// в меню.
 pub const FOLDER_COLORS: [(&str, &str); 7] = [
-    ("red", "Красный"),
-    ("orange", "Оранжевый"),
-    ("yellow", "Жёлтый"),
-    ("green", "Зелёный"),
-    ("blue", "Синий"),
-    ("purple", "Фиолетовый"),
-    ("brown", "Коричневый"),
+    ("red", n_!("Red")),
+    ("orange", n_!("Orange")),
+    ("yellow", n_!("Yellow")),
+    ("green", n_!("Green")),
+    ("blue", n_!("Blue")),
+    ("purple", n_!("Purple")),
+    ("brown", n_!("Brown")),
 ];
 
 #[derive(Debug, Clone, PartialEq, Eq)]

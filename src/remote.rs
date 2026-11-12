@@ -14,7 +14,7 @@ use crate::session::Session;
 /// например fish): сценарий выполняет `sh`. В тексте не должно быть
 /// одинарных кавычек.
 pub fn sh(script: &str) -> String {
-    debug_assert!(!script.contains('\''), "сценарий содержит одинарную кавычку");
+    debug_assert!(!script.contains('\''), "script contains a single quote");
     format!("sh -c '{script}'")
 }
 
@@ -39,10 +39,10 @@ pub fn master_alive(session: &Session) -> bool {
 /// завершения.
 pub fn run(session: &Session, command: &str, input: &str) -> Result<Output, String> {
     if !master_alive(session) {
-        return Err(
-            "Нет активного соединения. Сначала войдите на сервер в терминале этой вкладки."
-                .to_string(),
-        );
+        return Err(tr!(
+            "No active connection. Log in to the server in this tab’s terminal first."
+        )
+        .to_string());
     }
     let argv = session.command_argv(command);
     let mut child = Command::new(&argv[0])
@@ -51,7 +51,7 @@ pub fn run(session: &Session, command: &str, input: &str) -> Result<Output, Stri
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
-        .map_err(|err| format!("Не удалось запустить ssh: {err}"))?;
+        .map_err(|err| tr!("Could not start ssh: {}", err))?;
     if let Some(mut stdin) = child.stdin.take() {
         // Ошибка записи проявится как отсутствие ожидаемого ответа.
         let _ = stdin.write_all(input.as_bytes());
@@ -103,7 +103,7 @@ pub fn stream(
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|err| format!("Не удалось запустить ssh: {err}"))?;
+        .map_err(|err| tr!("Could not start ssh: {}", err))?;
     let stdout = child.stdout.take();
     std::thread::spawn(move || {
         let Some(stdout) = stdout else { return };
@@ -161,9 +161,9 @@ pub fn install_cwd_tracking(session: &Session) -> Result<CwdTracking, String> {
     parse_cwd_reply(&output.stdout).ok_or_else(|| {
         let detail = output.stderr.trim();
         if detail.is_empty() {
-            "Сервер не подтвердил изменение настроек оболочки".to_string()
+            tr!("The server did not confirm the shell settings change").to_string()
         } else {
-            format!("Не удалось изменить настройки оболочки: {detail}")
+            tr!("Could not change the shell settings: {}", detail)
         }
     })
 }

@@ -3,6 +3,10 @@
 //! Запуск: `sshdeck [хост…]` — перечисленные хосты сразу открываются во
 //! вкладках.
 
+// Первым: макросы tr!/trn!/trc!/n_! видны во всех модулях ниже.
+#[macro_use]
+mod i18n;
+
 mod connections;
 mod db;
 mod keysetup;
@@ -21,6 +25,8 @@ use gtk::{gio, glib};
 const APP_ID: &str = "dev.sshdeck.App";
 
 fn main() -> glib::ExitCode {
+    // Язык выбирается до запуска GTK и любых потоков (см. `i18n::init`).
+    i18n::init(&settings::Settings::load().language);
     let targets: Vec<String> = std::env::args().skip(1).collect();
 
     // NON_UNIQUE: каждый запуск — самостоятельный процесс со своими сокетами.

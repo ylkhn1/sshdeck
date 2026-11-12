@@ -267,9 +267,9 @@ const APP_TITLE: &str = "sshdeck";
 /// Стандартные темы libadwaita: идентификатор в настройках и название в
 /// меню.
 const SCHEMES: [(&str, &str); 3] = [
-    ("system", "Как в системе"),
-    ("light", "Светлая"),
-    ("dark", "Тёмная"),
+    ("system", n_!("System default")),
+    ("light", n_!("Light")),
+    ("dark", n_!("Dark")),
 ];
 
 /// Шрифт интерфейса, если системный оказался моноширинным.
@@ -439,11 +439,11 @@ impl AppWindow {
 
         let empty_page = adw::StatusPage::builder()
             .css_classes(["sshdeck-empty"])
-            .title("Нет открытых сессий")
-            .description(
-                "Дважды щёлкните подключение или базу данных слева, \
-                 или введите user@host и нажмите Enter",
-            )
+            .title(tr!("No Open Sessions"))
+            .description(tr!(
+                "Double-click a connection or database on the left, \
+                 or type user@host and press Enter"
+            ))
             .build();
         let stack = gtk::Stack::builder()
             .transition_type(gtk::StackTransitionType::Crossfade)
@@ -474,11 +474,11 @@ impl AppWindow {
         let menu = gio::Menu::new();
         let server_section = gio::Menu::new();
         server_section.append(
-            Some("Вход без пароля (ключ) для этой вкладки…"),
+            Some(tr!("Passwordless Login (Key) for This Tab…")),
             Some("win.key-login"),
         );
         server_section.append(
-            Some("Слежение панели за cd на этом сервере…"),
+            Some(tr!("File Panel Follows cd on This Server…")),
             Some("win.cwd-tracking"),
         );
         menu.append_section(None, &server_section);
@@ -486,7 +486,10 @@ impl AppWindow {
         let theme_menu = gio::Menu::new();
         let standard_themes = gio::Menu::new();
         for (id, label) in SCHEMES {
-            standard_themes.append(Some(label), Some(&format!("win.theme::{id}")));
+            standard_themes.append(
+                Some(crate::i18n::tr(label)),
+                Some(&format!("win.theme::{id}")),
+            );
         }
         theme_menu.append_section(None, &standard_themes);
         let color_themes = gio::Menu::new();
@@ -494,15 +497,22 @@ impl AppWindow {
             color_themes.append(Some(theme.name), Some(&format!("win.theme::{}", theme.id)));
         }
         theme_menu.append_section(None, &color_themes);
-        look_section.append_submenu(Some("Тема"), &theme_menu);
-        look_section.append(Some("Шрифт терминала…"), Some("win.font"));
+        look_section.append_submenu(Some(tr!("Theme")), &theme_menu);
+        let language_menu = gio::Menu::new();
+        for (code, name) in crate::i18n::LANGUAGES {
+            // Названия языков — каждое на своём языке; «как в системе» — на текущем.
+            let label = if code == "system" { tr!("System default") } else { name };
+            language_menu.append(Some(label), Some(&format!("win.language::{code}")));
+        }
+        look_section.append_submenu(Some(tr!("Language")), &language_menu);
+        look_section.append(Some(tr!("Terminal Font…")), Some("win.font"));
         menu.append_section(None, &look_section);
         let list_section = gio::Menu::new();
-        list_section.append(Some("Перечитать список подключений"), Some("win.reload-hosts"));
+        list_section.append(Some(tr!("Reload Connection List")), Some("win.reload-hosts"));
         menu.append_section(None, &list_section);
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
-            .tooltip_text("Меню")
+            .tooltip_text(tr!("Menu"))
             .menu_model(&menu)
             .primary(true)
             .css_classes(["flat"])
@@ -512,13 +522,13 @@ impl AppWindow {
         // подсвечивается высоким прямоугольником от края до края.
         let sidebar_toggle = gtk::ToggleButton::builder()
             .icon_name("sidebar-show-symbolic")
-            .tooltip_text("Показать или скрыть список подключений")
+            .tooltip_text(tr!("Show or hide the connection list"))
             .css_classes(["flat"])
             .valign(gtk::Align::Center)
             .build();
         let files_toggle = gtk::ToggleButton::builder()
             .icon_name("folder-symbolic")
-            .tooltip_text("Показать или скрыть панель файлов")
+            .tooltip_text(tr!("Show or hide the file panel"))
             .css_classes(["flat"])
             .valign(gtk::Align::Center)
             .active(settings.borrow().show_files)
@@ -665,7 +675,7 @@ impl AppWindow {
                     Some(tab) => tab.setup_cwd_tracking(),
                     None => this
                         .notifier
-                        .info("Сначала откройте вкладку и войдите на сервер"),
+                        .info(tr!("Open a tab and log in to a server first")),
                 }
             });
             this.window.add_action(&action);
@@ -700,6 +710,32 @@ impl AppWindow {
                     tab.refresh_theme();
                 }
                 this.save_settings();
+            });
+            this.window.add_action(&action);
+        }
+        {
+            // Язык интерфейса: сохраняется сразу, применяется при следующем
+            // запуске (строки читаются из каталога один раз).
+            let weak = Rc::downgrade(&this);
+            let current = this.settings.borrow().language.clone();
+            let action = gio::SimpleAction::new_stateful(
+                "language",
+                Some(glib::VariantTy::STRING),
+                &current.to_variant(),
+            );
+            action.connect_activate(move |action, parameter| {
+                let language = parameter.and_then(|value| value.get::<String>());
+                let (Some(this), Some(language)) = (weak.upgrade(), language) else {
+                    return;
+                };
+                if this.settings.borrow().language == language {
+                    return;
+                }
+                action.set_state(&language.to_variant());
+                this.settings.borrow_mut().language = language;
+                this.save_settings();
+                this.notifier
+                    .info(tr!("The new language will be used after sshdeck is restarted."));
             });
             this.window.add_action(&action);
         }
@@ -765,9 +801,9 @@ impl AppWindow {
                 let Some(this) = weak.upgrade() else { return };
                 match this.current_tab() {
                     Some(tab) => tab.setup_key_login(),
-                    None => this.notifier.info(
-                        "Сначала откройте вкладку и войдите на сервер — ключ ставится через неё",
-                    ),
+                    None => this.notifier.info(tr!(
+                        "Open a tab and log in to a server first — the key is installed through it"
+                    )),
                 }
             });
             this.window.add_action(&action);
@@ -835,7 +871,7 @@ impl AppWindow {
             Err(err) => {
                 dialogs::message(
                     &self.window,
-                    "Не удалось подготовить каталог для сокетов",
+                    tr!("Could Not Prepare the Socket Directory"),
                     &err.to_string(),
                 );
                 return false;
@@ -928,7 +964,7 @@ impl AppWindow {
     fn save_settings(&self) {
         if let Err(err) = self.settings.borrow().save() {
             self.notifier
-                .error(&format!("Не удалось сохранить настройки: {err}"));
+                .error(&tr!("Could not save settings: {}", err));
         }
     }
 
@@ -954,7 +990,7 @@ impl AppWindow {
     fn choose_font(self: &Rc<Self>) {
         let current = pango::FontDescription::from_string(&self.settings.borrow().terminal_font);
         let dialog = gtk::FontDialog::builder()
-            .title("Шрифт терминала")
+            .title(tr!("Terminal Font"))
             .modal(true)
             .build();
         let weak = Rc::downgrade(self);
@@ -974,7 +1010,7 @@ impl AppWindow {
                 this.settings.borrow_mut().terminal_font = font;
                 if let Err(err) = this.settings.borrow().save() {
                     this.notifier
-                        .error(&format!("Не удалось сохранить настройки: {err}"));
+                        .error(&tr!("Could not save settings: {}", err));
                 }
             },
         );

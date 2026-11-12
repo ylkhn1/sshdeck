@@ -81,17 +81,15 @@ struct Parser {
 impl Parser {
     fn parse_file(&mut self, path: &Path, depth: usize) {
         if depth > MAX_INCLUDE_DEPTH {
-            self.warnings.push(format!(
-                "{}: слишком глубокая вложенность Include",
-                path.display()
-            ));
+            self.warnings
+                .push(tr!("{}: Include is nested too deeply", path.display()));
             return;
         }
         let text = match fs::read(path) {
             Ok(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
             Err(err) => {
                 self.warnings
-                    .push(format!("{}: не удалось прочитать: {err}", path.display()));
+                    .push(tr!("{}: could not read: {}", path.display(), err));
                 return;
             }
         };

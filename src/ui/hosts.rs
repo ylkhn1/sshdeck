@@ -75,7 +75,7 @@ struct StatusView {
 impl StatusView {
     fn paint(&self, status: Option<&Status>) {
         let (class, text) = match status {
-            None => ("checking", "Проверяю доступность…".to_string()),
+            None => ("checking", tr!("Checking availability…").to_string()),
             Some(status @ Status::Online { .. }) => ("online", status.describe()),
             Some(status @ Status::Offline(_)) => ("offline", status.describe()),
             Some(status @ Status::Unknown(_)) => ("unknown", status.describe()),
@@ -130,14 +130,14 @@ struct Inner {
 impl HostsSidebar {
     pub fn new(notifier: Notifier, databases: Databases) -> Self {
         let entry = gtk::Entry::builder()
-            .placeholder_text("Поиск или user@host")
-            .tooltip_text(
-                "Быстрое подключение: user@host, user@host -p 2222 \
-                 или псевдоним из ~/.ssh/config",
-            )
+            .placeholder_text(tr!("Search or user@host"))
+            .tooltip_text(tr!(
+                "Quick connect: user@host, user@host -p 2222 \
+                 or an alias from ~/.ssh/config"
+            ))
             .primary_icon_name("system-search-symbolic")
             .secondary_icon_name("go-next-symbolic")
-            .secondary_icon_tooltip_text("Подключиться")
+            .secondary_icon_tooltip_text(tr!("Connect"))
             .css_classes(["sshdeck-address"])
             .build();
 
@@ -165,13 +165,13 @@ impl HostsSidebar {
 
         let add_button = gtk::Button::builder()
             .icon_name("list-add-symbolic")
-            .tooltip_text("Сохранить новое подключение")
+            .tooltip_text(tr!("Save a new connection"))
             .action_name("hosts.new")
             .css_classes(["flat"])
             .build();
         let reload_button = gtk::Button::builder()
             .icon_name("view-refresh-symbolic")
-            .tooltip_text("Перечитать сохранённые подключения и ~/.ssh/config")
+            .tooltip_text(tr!("Reload saved connections and ~/.ssh/config"))
             .action_name("hosts.reload")
             .css_classes(["flat"])
             .build();
@@ -351,7 +351,7 @@ impl Inner {
         });
         add("duplicate", |this| {
             if let Some(c) = this.menu_connection() {
-                let name = format!("{} (копия)", c.name);
+                let name = tr!("{} (copy)", c.name);
                 this.edit_dialog(&name, &c.address, &c.folder, &c.startup, None);
             }
         });
@@ -435,12 +435,14 @@ impl Inner {
                 let moved = std::fs::rename(&self.path, &aside).is_ok();
                 *self.connections.borrow_mut() = Connections::default();
                 let tail = if moved {
-                    format!("Файл переименован в {}.", aside.display())
+                    tr!("The file was renamed to {}.", aside.display())
                 } else {
-                    "Исправьте файл вручную: новое сохранение его перезапишет.".to_string()
+                    tr!("Fix the file by hand: the next save will overwrite it.").to_string()
                 };
-                self.notifier.error(&format!(
-                    "Не удалось прочитать сохранённые подключения: {err}\n{tail}"
+                self.notifier.error(&tr!(
+                    "Could not read saved connections: {}\n{}",
+                    err,
+                    tail
                 ));
             }
         }
@@ -452,7 +454,7 @@ impl Inner {
     fn commit(&self) {
         if let Err(err) = self.connections.borrow().save(&self.path) {
             self.notifier
-                .error(&format!("Не удалось сохранить подключения: {err}"));
+                .error(&tr!("Could not save connections: {}", err));
         }
         self.rebuild();
         self.probe(true);
@@ -485,7 +487,7 @@ impl Inner {
                 let status =
                     gio::spawn_blocking(move || probe::check(&target, config.as_deref()))
                         .await
-                        .unwrap_or_else(|_| Status::Unknown("проверка прервалась".to_string()));
+                        .unwrap_or_else(|_| Status::Unknown(tr!("the check was interrupted").to_string()));
                 let Some(this) = weak.upgrade() else { return };
                 this.checking.borrow_mut().remove(&address);
                 this.statuses.borrow_mut().insert(address, status);
@@ -531,12 +533,12 @@ impl Inner {
         let mut rows = Vec::new();
         {
             let connections = self.connections.borrow();
-            rows.push(static_row(heading_label("Сохранённые")));
+            rows.push(static_row(heading_label(tr!("Saved"))));
             if connections.items().is_empty() {
-                rows.push(static_row(hint_label(
-                    "Пока пусто. Нажмите «+» вверху, чтобы сохранить подключение \
-                     с названием и папкой.",
-                )));
+                rows.push(static_row(hint_label(tr!(
+                    "Nothing here yet. Press “+” at the top to save a connection \
+                     with a name and folder."
+                ))));
             }
             let mut current_folder = "";
             for (index, item) in connections.items().iter().enumerate() {
@@ -567,10 +569,10 @@ impl Inner {
             let profiles = self.databases.profiles();
             rows.push(self.databases_heading());
             if profiles.is_empty() {
-                rows.push(static_row(hint_label(
-                    "PostgreSQL, MySQL, MariaDB или SQLite — нажмите «+» справа от \
-                     заголовка. Сервер можно открыть через SSH.",
-                )));
+                rows.push(static_row(hint_label(tr!(
+                    "PostgreSQL, MySQL, MariaDB or SQLite — press “+” next to the \
+                     heading. Servers can be reached over SSH."
+                ))));
             }
             for (index, profile) in profiles.iter().enumerate() {
                 let (widget, revealer) = database_row(profile);
@@ -586,7 +588,7 @@ impl Inner {
 
             let hosts = self.hosts.borrow();
             if !hosts.is_empty() {
-                rows.push(static_row(heading_label("Из ~/.ssh/config")));
+                rows.push(static_row(heading_label(tr!("From ~/.ssh/config"))));
             }
             for (index, host) in hosts.iter().enumerate() {
                 let (widget, revealer, status) =
@@ -612,13 +614,13 @@ impl Inner {
     fn databases_heading(&self) -> Row {
         let add = gtk::Button::builder()
             .icon_name("list-add-symbolic")
-            .tooltip_text("Новое подключение к базе данных")
+            .tooltip_text(tr!("New database connection"))
             .valign(gtk::Align::Center)
             .css_classes(["flat", "sshdeck-section-button"])
             .build();
         let databases = self.databases.clone();
         add.connect_clicked(move |_| databases.create());
-        let label = heading_label("Базы данных");
+        let label = heading_label(tr!("Databases"));
         label.set_hexpand(true);
         let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         content.append(&label);
@@ -666,7 +668,7 @@ impl Inner {
         );
         let widget = gtk::ListBoxRow::builder()
             .child(&content)
-            .tooltip_text("Щелчок сворачивает и разворачивает папку")
+            .tooltip_text(tr!("Click to collapse or expand the folder"))
             .build();
 
         let gesture = gtk::GestureClick::builder()
@@ -823,44 +825,47 @@ impl Inner {
         match kind {
             RowKind::Connection(_) => {
                 section(&[
-                    ("Подключиться", "hosts.connect"),
-                    ("Изменить…", "hosts.edit"),
-                    ("Дублировать…", "hosts.duplicate"),
+                    (tr!("Connect"), "hosts.connect"),
+                    (tr!("Edit…"), "hosts.edit"),
+                    (tr!("Duplicate…"), "hosts.duplicate"),
                 ]);
-                section(&[("Удалить…", "hosts.delete")]);
+                section(&[(tr!("Delete…"), "hosts.delete")]);
             }
             RowKind::Folder(_) => {
                 section(&[
-                    ("Новое подключение в папке…", "hosts.new-in-folder"),
-                    ("Переименовать папку…", "hosts.rename-folder"),
+                    (tr!("New Connection in Folder…"), "hosts.new-in-folder"),
+                    (tr!("Rename Folder…"), "hosts.rename-folder"),
                 ]);
                 let colors = gio::Menu::new();
                 for (id, label) in FOLDER_COLORS {
-                    colors.append(Some(label), Some(&format!("hosts.folder-color::{id}")));
+                    colors.append(
+                        Some(crate::i18n::tr(label)),
+                        Some(&format!("hosts.folder-color::{id}")),
+                    );
                 }
-                colors.append(Some("Без цвета"), Some("hosts.folder-color::"));
-                menu.append_section(Some("Цвет папки"), &colors);
+                colors.append(Some(tr!("No Color")), Some("hosts.folder-color::"));
+                menu.append_section(Some(tr!("Folder Color")), &colors);
                 section(&[
-                    ("Убрать папку, оставив подключения", "hosts.dissolve-folder"),
-                    ("Удалить папку с подключениями…", "hosts.delete-folder"),
+                    (tr!("Remove Folder, Keep Connections"), "hosts.dissolve-folder"),
+                    (tr!("Delete Folder and Connections…"), "hosts.delete-folder"),
                 ]);
             }
             RowKind::Host(_) => section(&[
-                ("Подключиться", "hosts.connect"),
-                ("Сохранить в подключения…", "hosts.save-host"),
+                (tr!("Connect"), "hosts.connect"),
+                (tr!("Save to Connections…"), "hosts.save-host"),
             ]),
             RowKind::Database(_) => {
                 section(&[
-                    ("Подключиться", "hosts.connect"),
-                    ("Изменить…", "hosts.db-edit"),
-                    ("Дублировать…", "hosts.db-duplicate"),
+                    (tr!("Connect"), "hosts.connect"),
+                    (tr!("Edit…"), "hosts.db-edit"),
+                    (tr!("Duplicate…"), "hosts.db-duplicate"),
                 ]);
-                section(&[("Удалить…", "hosts.db-delete")]);
+                section(&[(tr!("Delete…"), "hosts.db-delete")]);
             }
             RowKind::Static => section(&[
-                ("Новое подключение…", "hosts.new"),
-                ("Новое подключение к базе…", "hosts.db-new"),
-                ("Расширения СУБД…", "hosts.db-extensions"),
+                (tr!("New Connection…"), "hosts.new"),
+                (tr!("New Database Connection…"), "hosts.db-new"),
+                (tr!("Database Extensions…"), "hosts.db-extensions"),
             ]),
         }
         self.menu.set_menu_model(Some(&menu));
@@ -912,12 +917,13 @@ impl Inner {
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             &self.root,
-            "Удалить подключение?",
-            &format!(
-                "«{}» ({}) исчезнет из списка. На сервере ничего не меняется.",
-                connection.name, connection.address
+            tr!("Delete Connection?"),
+            &tr!(
+                "“{}” ({}) will be removed from the list. Nothing changes on the server.",
+                connection.name,
+                connection.address
             ),
-            "Удалить",
+            tr!("Delete"),
             true,
             move || {
                 let Some(this) = weak.upgrade() else { return };
@@ -939,10 +945,10 @@ impl Inner {
         let weak = Rc::downgrade(self);
         dialogs::prompt_text(
             &self.root,
-            "Переименовать папку",
-            "Если папка с таким названием уже есть, подключения объединятся в ней.",
+            tr!("Rename Folder"),
+            tr!("If a folder with this name already exists, the connections will be merged into it."),
             &folder.clone(),
-            "Переименовать",
+            tr!("Rename"),
             move |name| {
                 let Some(this) = weak.upgrade() else { return };
                 let name = connections::clean(&name);
@@ -979,7 +985,7 @@ impl Inner {
         self.collapsed.borrow_mut().remove(&folder);
         self.commit();
         self.notifier
-            .info(&format!("Папка «{folder}» убрана, подключения сохранены"));
+            .info(&tr!("Folder “{}” removed, connections kept", folder));
     }
 
     fn delete_folder(self: &Rc<Self>) {
@@ -996,12 +1002,14 @@ impl Inner {
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             &self.root,
-            "Удалить папку с подключениями?",
-            &format!(
-                "Папка «{folder}» и сохранённые в ней подключения ({count}) исчезнут из \
-                 списка. На серверах ничего не меняется."
+            tr!("Delete Folder and Connections?"),
+            &tr!(
+                "Folder “{}” and the saved connections in it ({}) will be removed from \
+                 the list. Nothing changes on the servers.",
+                folder,
+                count
             ),
-            "Удалить",
+            tr!("Delete"),
             true,
             move || {
                 let Some(this) = weak.upgrade() else { return };
@@ -1027,17 +1035,17 @@ impl Inner {
         original: Option<Connection>,
     ) {
         let name_row = adw::EntryRow::builder()
-            .title("Название")
+            .title(tr!("Name"))
             .text(name)
             .activates_default(true)
             .build();
         let address_row = adw::EntryRow::builder()
-            .title("Адрес: user@host или user@host -p 2222")
+            .title(tr!("Address: user@host or user@host -p 2222"))
             .text(address)
             .activates_default(true)
             .build();
         let folder_row = adw::EntryRow::builder()
-            .title("Папка (необязательно)")
+            .title(tr!("Folder (optional)"))
             .text(folder)
             .activates_default(true)
             .build();
@@ -1072,7 +1080,7 @@ impl Inner {
             folder_row.add_suffix(
                 &gtk::MenuButton::builder()
                     .icon_name("folder-symbolic")
-                    .tooltip_text("Выбрать существующую папку")
+                    .tooltip_text(tr!("Choose an existing folder"))
                     .valign(gtk::Align::Center)
                     .css_classes(["flat"])
                     .popover(&popover)
@@ -1089,22 +1097,22 @@ impl Inner {
         fields.append(&address_row);
         fields.append(&folder_row);
         let startup_row = adw::EntryRow::builder()
-            .title("Команда после входа (необязательно)")
+            .title(tr!("Command after login (optional)"))
             .text(startup)
             .activates_default(true)
             .build();
         fields.append(&startup_row);
 
         let heading = if original.is_some() {
-            "Изменить подключение"
+            tr!("Edit Connection")
         } else {
-            "Новое подключение"
+            tr!("New Connection")
         };
         let dialog = adw::AlertDialog::new(
             Some(heading),
-            Some("Пароли не сохраняются: их по-прежнему спрашивает ssh в терминале."),
+            Some(tr!("Passwords are not saved: ssh still asks for them in the terminal.")),
         );
-        dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, "Сохранить")]);
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Save"))]);
         dialog.set_close_response(CANCEL);
         dialog.set_default_response(Some(ACCEPT));
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);
@@ -1290,9 +1298,10 @@ fn database_row(profile: &DbProfile) -> (gtk::ListBoxRow, gtk::Revealer) {
     content.append(&profile_badge(profile));
     content.append(&labels);
     content.add_css_class("sshdeck-host-content");
-    content.set_tooltip_text(Some(&format!(
-        "{} — {detail}\nДвойной щелчок — подключиться",
-        profile.kind_label()
+    content.set_tooltip_text(Some(&tr!(
+        "{} — {}\nDouble-click to connect",
+        profile.kind_label(),
+        detail
     )));
     let revealer = collapsing_revealer(gtk::RevealerTransitionType::SlideDown, &content);
     revealer.set_reveal_child(true);

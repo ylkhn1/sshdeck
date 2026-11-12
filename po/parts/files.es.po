@@ -1,0 +1,444 @@
+msgid "XDG_RUNTIME_DIR is not set"
+msgstr "la variable XDG_RUNTIME_DIR no está definida"
+
+msgid "Enter an address like user@host"
+msgstr "Introduce una dirección como usuario@host"
+
+msgid "The address contains invalid characters"
+msgstr "La dirección contiene caracteres no válidos"
+
+msgid "A port number must follow -p"
+msgstr "Después de -p hay que indicar el puerto"
+
+msgid "The port is specified twice"
+msgstr "El puerto está indicado dos veces"
+
+msgid "Option “{}” is not supported: only -p <port> is allowed"
+msgstr "La opción «{}» no se admite: solo se puede indicar -p <puerto>"
+
+msgid "The address must not contain spaces"
+msgstr "La dirección no debe contener espacios"
+
+msgid "Invalid port “{}” (must be a number from 1 to 65535)"
+msgstr "Puerto no válido: «{}» (debe ser un número del 1 al 65535)"
+
+msgid "No active connection. Log in to the server in this tab’s terminal first."
+msgstr "No hay ninguna conexión activa. Primero inicia sesión en el servidor desde el terminal de esta pestaña."
+
+msgid "Could not start ssh: {}"
+msgstr "No se pudo iniciar ssh: {}"
+
+msgid "The server did not confirm the shell settings change"
+msgstr "El servidor no confirmó el cambio en la configuración del shell"
+
+msgid "Could not change the shell settings: {}"
+msgstr "No se pudo cambiar la configuración del shell: {}"
+
+msgid "{0} already exists, but there is no .pub file next to it. Restore it with: ssh-keygen -y -f {0} > {0}.pub"
+msgstr "{0} ya existe, pero no hay ningún archivo .pub junto a él. Restáuralo con: ssh-keygen -y -f {0} > {0}.pub"
+
+msgid "Could not start {}: {}"
+msgstr "No se pudo iniciar {}: {}"
+
+msgid "ssh-keygen failed: {}"
+msgstr "ssh-keygen terminó con un error: {}"
+
+msgid "{}: not an SSH public key"
+msgstr "{}: no es una clave pública SSH"
+
+msgid "The server did not confirm that the key was installed"
+msgstr "El servidor no confirmó la instalación de la clave"
+
+msgid "Could not install the key on the server: {}"
+msgstr "No se pudo instalar la clave en el servidor: {}"
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "Unsupported format"
+msgstr "formato no admitido"
+
+msgid "The data source is unavailable"
+msgstr "la fuente de datos no está disponible"
+
+msgid "no such file or folder"
+msgstr "no existe el archivo o la carpeta"
+
+msgid "permission denied"
+msgstr "permiso denegado"
+
+msgid "the server does not support this operation"
+msgstr "el servidor no admite esta operación"
+
+msgid "the server rejected the operation"
+msgstr "el servidor rechazó la operación"
+
+msgid "server error: {}"
+msgstr "error del servidor: {}"
+
+msgid "No SFTP connection"
+msgstr "No hay conexión SFTP"
+
+msgid "Could not get the ssh input/output pipes"
+msgstr "No se pudieron obtener los canales de entrada/salida de ssh"
+
+msgid "Could not open an SFTP session: {}"
+msgstr "No se pudo abrir una sesión SFTP: {}"
+
+msgid "The server did not respond to the SFTP request"
+msgstr "El servidor no respondió a la solicitud SFTP"
+
+msgid "ssh exited ({})"
+msgstr "ssh terminó ({})"
+
+msgid "ssh exited: {}"
+msgstr "ssh terminó: {}"
+
+msgid "Could not create folder “{}”: {}"
+msgstr "No se pudo crear la carpeta «{}»: {}"
+
+msgid "Could not rename “{}”: {}"
+msgstr "No se pudo cambiar el nombre de «{}»: {}"
+
+msgid "Could not delete “{}”: {}"
+msgstr "No se pudo eliminar «{}»: {}"
+
+msgid "Connection lost"
+msgstr "Se perdió la conexión"
+
+msgid "the name “{}” is already taken"
+msgstr "el nombre «{}» ya está en uso"
+
+msgid "Reconnect"
+msgstr "Reconectar"
+
+msgid "Could not connect, or the connection was lost — see the terminal for details"
+msgstr "No se pudo conectar o se perdió la conexión: consulta los detalles en el terminal"
+
+msgid "ssh was terminated by a signal"
+msgstr "ssh fue interrumpido por una señal"
+
+msgid "Your key {} will be used."
+msgstr "Se usará tu clave {}."
+
+msgid "There is no local key yet: {} will be created (ed25519, no passphrase)."
+msgstr "Todavía no hay ninguna clave local: se creará {} (ed25519, sin frase de contraseña)."
+
+msgid "{}\n\nIts public part will be added to ~/.ssh/authorized_keys on {}. After that, ssh will log in to this server with the key instead of asking for a password. The app never sees or stores the password itself."
+msgstr "{}\n\nSu parte pública se añadirá a ~/.ssh/authorized_keys en {}. Después, ssh iniciará sesión en este servidor con la clave sin pedir la contraseña. La aplicación nunca ve ni guarda la contraseña."
+
+msgid "Set Up Passwordless Login?"
+msgstr "¿Configurar el inicio de sesión sin contraseña?"
+
+msgid "Set Up"
+msgstr "Configurar"
+
+msgid "A new key {} was created."
+msgstr "Se creó una clave nueva: {}."
+
+msgid "Passwordless Login Enabled"
+msgstr "Inicio de sesión sin contraseña configurado"
+
+msgid "Key {} is installed on {}. Next time you will log in without a password."
+msgstr "La clave {} está instalada en {}. La próxima vez iniciarás sesión sin contraseña."
+
+msgid "Key Already Installed"
+msgstr "La clave ya está instalada"
+
+msgid "Key {} is already on {}; nothing had to be changed."
+msgstr "La clave {} ya está en {}; no hubo que cambiar nada."
+
+msgid "Key login setup was interrupted by an internal error"
+msgstr "La configuración del inicio de sesión con clave se interrumpió por un error interno"
+
+msgid "Follow cd in the File Panel?"
+msgstr "¿Seguir cd en el panel de archivos?"
+
+msgid "For the file panel to follow cd in the terminal, the shell on {} must report the current folder. fish does this by itself. For bash and zsh, three lines marked sshdeck-cwd will be appended to ~/.bashrc or ~/.zshrc on the server; they take effect in new sessions."
+msgstr "Para que el panel de archivos siga los cd del terminal, el shell de {} debe informar de la carpeta actual. fish lo hace por sí mismo. Para bash y zsh se añadirán al final de ~/.bashrc o ~/.zshrc en el servidor tres líneas marcadas con sshdeck-cwd; funcionan en las sesiones nuevas."
+
+msgid "Enable"
+msgstr "Activar"
+
+msgid "Following cd Enabled"
+msgstr "Seguimiento de cd activado"
+
+msgid "The snippet was added to the shell settings file. It takes effect after you log in again: close the tab and reconnect."
+msgstr "El fragmento se añadió al archivo de configuración del shell. Funcionará después de volver a iniciar sesión: cierra la pestaña y vuelve a conectarte."
+
+msgid "Following cd Already Enabled"
+msgstr "El seguimiento de cd ya está activado"
+
+msgid "The sshdeck-cwd snippet is already in the shell settings file."
+msgstr "El fragmento sshdeck-cwd ya está en el archivo de configuración del shell."
+
+msgid "Nothing to Change"
+msgstr "No hay nada que cambiar"
+
+msgid "The server uses fish, which reports the current folder by itself."
+msgstr "El servidor usa fish, que informa de la carpeta actual por sí mismo."
+
+msgid "Shell Not Supported"
+msgstr "Shell no compatible"
+
+msgid "Only bash and zsh can be set up automatically. No files on the server were changed."
+msgstr "Solo bash y zsh se pueden configurar automáticamente. No se modificó ningún archivo del servidor."
+
+msgid "Setup was interrupted by an internal error"
+msgstr "La configuración se interrumpió por un error interno"
+
+msgid "Could Not Start SFTP"
+msgstr "No se pudo iniciar SFTP"
+
+msgid "Home folder"
+msgstr "Carpeta personal"
+
+msgid "Up one level"
+msgstr "Subir un nivel"
+
+msgid "Refresh (F5)"
+msgstr "Actualizar (F5)"
+
+msgid "Current folder. Type a path and press Enter"
+msgstr "Carpeta actual. Escribe una ruta y pulsa Intro"
+
+msgid "Files…"
+msgstr "Archivos…"
+
+msgid "Folder…"
+msgstr "Carpeta…"
+
+msgid "Upload"
+msgstr "Subir"
+
+msgid "Upload to the current folder on the server"
+msgstr "Subir a la carpeta actual del servidor"
+
+msgid "Download"
+msgstr "Descargar"
+
+msgid "Download the selection to a local folder"
+msgstr "Descargar la selección a una carpeta local"
+
+msgid "New folder"
+msgstr "Nueva carpeta"
+
+msgid "Show hidden files"
+msgstr "Mostrar archivos ocultos"
+
+msgid "Follow cd in the terminal"
+msgstr "Seguir cd en el terminal"
+
+msgid "Size"
+msgstr "Tamaño"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "Name"
+msgstr "Nombre"
+
+msgid "Open or Edit"
+msgstr "Abrir o editar"
+
+msgid "Download…"
+msgstr "Descargar…"
+
+msgid "Go Here in Terminal"
+msgstr "Ir aquí en el terminal"
+
+msgid "Copy Path"
+msgstr "Copiar ruta"
+
+msgid "Upload Files…"
+msgstr "Subir archivos…"
+
+msgid "Upload Folder…"
+msgstr "Subir carpeta…"
+
+msgid "New Folder…"
+msgstr "Nueva carpeta…"
+
+msgid "Rename…"
+msgstr "Cambiar nombre…"
+
+msgid "Delete"
+msgstr "Eliminar"
+
+msgid "Refresh"
+msgstr "Actualizar"
+
+msgid "Broken symbolic link"
+msgstr "Enlace simbólico roto"
+
+msgid "Symbolic link"
+msgstr "Enlace simbólico"
+
+msgid "{} and {} more"
+msgid_plural "{} and {} more"
+msgstr[0] "{} y {} más"
+msgstr[1] "{} y {} más"
+
+msgid "Could not open “{}”: {}"
+msgstr "No se pudo abrir «{}»: {}"
+
+msgid "Could not read “{}”: {}"
+msgstr "No se pudo leer «{}»: {}"
+
+msgid "Connection Closed"
+msgstr "Conexión cerrada"
+
+msgid "Click “Reconnect” to log in again."
+msgstr "Pulsa «Reconectar» para volver a iniciar sesión."
+
+msgid "Waiting for Login"
+msgstr "Esperando el inicio de sesión"
+
+msgid "Enter your password or key passphrase in the terminal on the right — the file panel will connect automatically."
+msgstr "Introduce la contraseña o la frase de contraseña de la clave en el terminal de la derecha: el panel de archivos se conectará solo."
+
+msgid "No SFTP Connection"
+msgstr "No hay conexión SFTP"
+
+msgid "{}\nThe panel will connect once you log in in the terminal."
+msgstr "{}\nEl panel se conectará cuando inicies sesión en el terminal."
+
+msgid "Connecting…"
+msgstr "Conectando…"
+
+msgid "“{}” cannot be opened: it is neither a file nor a folder"
+msgstr "No se puede abrir «{}»: no es un archivo ni una carpeta"
+
+msgid "Copied: {}"
+msgstr "Copiado: {}"
+
+msgid "Select a single file or folder"
+msgstr "Selecciona un solo archivo o carpeta"
+
+msgid "New Folder"
+msgstr "Nueva carpeta"
+
+msgid "Name of the new folder in {}"
+msgstr "Nombre de la nueva carpeta en {}"
+
+msgid "Create"
+msgstr "Crear"
+
+msgid "The name cannot contain “/”"
+msgstr "El nombre no puede contener «/»"
+
+msgid "Select a single item to rename"
+msgstr "Selecciona un solo elemento para cambiarle el nombre"
+
+msgid "Rename"
+msgstr "Cambiar nombre"
+
+msgid "New name for “{}”"
+msgstr "Nuevo nombre para «{}»"
+
+msgid "Select what to delete"
+msgstr "Selecciona lo que quieres eliminar"
+
+msgid "Delete “{}” from the Server?"
+msgstr "¿Eliminar «{}» del servidor?"
+
+msgid "Delete {} Item from the Server?"
+msgid_plural "Delete {} Items from the Server?"
+msgstr[0] "¿Eliminar {} elemento del servidor?"
+msgstr[1] "¿Eliminar {} elementos del servidor?"
+
+msgid "Folders are deleted with all their contents."
+msgstr "Las carpetas se eliminan con todo su contenido."
+
+msgid "This action cannot be undone."
+msgstr "Esta acción no se puede deshacer."
+
+msgid "Select files or folders to download"
+msgstr "Selecciona archivos o carpetas para descargar"
+
+msgid "Download to Folder"
+msgstr "Descargar en una carpeta"
+
+msgid "Download Here"
+msgstr "Descargar aquí"
+
+msgid "The selected folder is not local"
+msgstr "La carpeta seleccionada no es local"
+
+msgid "Downloading {}"
+msgstr "Descargando: {}"
+
+msgid "Replace Existing Local Files?"
+msgstr "¿Reemplazar los archivos locales existentes?"
+
+msgid "The selected folder already contains: {}"
+msgstr "La carpeta seleccionada ya contiene: {}"
+
+msgid "Replace"
+msgstr "Reemplazar"
+
+msgid "Upload Folder"
+msgstr "Subir carpeta"
+
+msgid "Upload Files"
+msgstr "Subir archivos"
+
+msgid "Uploading {}"
+msgstr "Subiendo: {}"
+
+msgid "Replace Existing Files on the Server?"
+msgstr "¿Reemplazar los archivos existentes en el servidor?"
+
+msgid "{} already contains: {}"
+msgstr "{} ya contiene: {}"
+
+msgid "Cancel transfer"
+msgstr "Cancelar la transferencia"
+
+msgid "Preparing…"
+msgstr "Preparando…"
+
+msgid "{} of {}"
+msgstr "{} de {}"
+
+msgid "{} — skipped (links to folders and special files): {}"
+msgstr "{}: se omitieron (enlaces a carpetas y archivos especiales): {}"
+
+msgid "Could not create a temporary folder: {}"
+msgstr "No se pudo crear una carpeta temporal: {}"
+
+msgid "the tab is closed"
+msgstr "la pestaña está cerrada"
+
+msgid "Dragging {}"
+msgstr "Arrastrando: {}"
+
+msgid "the transfer was cancelled"
+msgstr "se canceló la transferencia"
+
+msgid "the transfer was interrupted"
+msgstr "se interrumpió la transferencia"
+
+msgid "Open “{}”?"
+msgstr "¿Abrir «{}»?"
+
+msgid "The file is large ({}); it will be downloaded in full to a temporary folder."
+msgstr "El archivo es grande ({}); se descargará completo en una carpeta temporal."
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Opening {}"
+msgstr "Abriendo: {}"
+
+msgid "Could not watch “{}” for changes: {}"
+msgstr "No se pudieron vigilar los cambios de «{}»: {}"
+
+msgid "Saving {} to the server"
+msgstr "Guardando en el servidor: {}"
+
+msgid "Saved to the server: {}"
+msgstr "Guardado en el servidor: {}"

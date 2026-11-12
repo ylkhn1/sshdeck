@@ -37,9 +37,9 @@ impl Status {
     /// Подсказка к значку состояния.
     pub fn describe(&self) -> String {
         match self {
-            Self::Online { latency_ms } => format!("В сети · {latency_ms} мс"),
-            Self::Offline(reason) => format!("Недоступен: {reason}"),
-            Self::Unknown(reason) => format!("Не проверяется: {reason}"),
+            Self::Online { latency_ms } => tr!("Online · {} ms", latency_ms),
+            Self::Offline(reason) => tr!("Unreachable: {}", reason),
+            Self::Unknown(reason) => tr!("Not checked: {}", reason),
         }
     }
 }
@@ -97,21 +97,21 @@ pub fn check(address: &str, config: Option<&Path>) -> Status {
             parse_resolved(&String::from_utf8_lossy(&output.stdout))
         }
         Ok(_) => None,
-        Err(err) => return Status::Unknown(format!("не удалось запустить ssh: {err}")),
+        Err(err) => return Status::Unknown(tr!("could not start ssh: {}", err)),
     };
     match route {
         Some(Route::Direct { host, port }) => connect(&host, port),
-        Some(Route::Proxied(kind)) => Status::Unknown(format!("подключение через {kind}")),
-        None => Status::Unknown("ssh не смог разобрать адрес".to_string()),
+        Some(Route::Proxied(kind)) => Status::Unknown(tr!("connects through {}", kind)),
+        None => Status::Unknown(tr!("ssh could not parse the address").to_string()),
     }
 }
 
 fn connect(host: &str, port: u16) -> Status {
     let addresses: Vec<SocketAddr> = match (host, port).to_socket_addrs() {
         Ok(addresses) => addresses.collect(),
-        Err(_) => return Status::Offline(format!("имя {host} не найдено")),
+        Err(_) => return Status::Offline(tr!("name {} not found", host)),
     };
-    let mut last_error = format!("у {host} нет адресов");
+    let mut last_error = tr!("{} has no addresses", host);
     for address in addresses {
         let started = Instant::now();
         match TcpStream::connect_timeout(&address, TIMEOUT) {
@@ -138,10 +138,10 @@ fn read_banner(mut stream: TcpStream) -> Result<(), String> {
     let mut chunk = [0u8; 512];
     while received.len() < MAX_BANNER_BYTES {
         let read = match stream.read(&mut chunk) {
-            Ok(0) => return Err("сервер закрыл соединение без приветствия SSH".to_string()),
+            Ok(0) => return Err(tr!("the server closed the connection without an SSH greeting").to_string()),
             Ok(read) => read,
             Err(err) if is_timeout(&err) => {
-                return Err("порт открыт, но приветствия SSH нет".to_string());
+                return Err(tr!("the port is open, but there is no SSH greeting").to_string());
             }
             Err(err) => return Err(describe_io(&err, 0)),
         };
@@ -150,7 +150,7 @@ fn read_banner(mut stream: TcpStream) -> Result<(), String> {
             return Ok(());
         }
     }
-    Err("на порту отвечает не SSH".to_string())
+    Err(tr!("something other than SSH answers on the port").to_string())
 }
 
 /// Есть ли среди полностью принятых строк приветствие `SSH-`.
@@ -172,13 +172,13 @@ fn is_timeout(err: &std::io::Error) -> bool {
 fn describe_io(err: &std::io::Error, port: u16) -> String {
     use std::io::ErrorKind;
     match err.kind() {
-        ErrorKind::ConnectionRefused => format!("порт {port} закрыт"),
+        ErrorKind::ConnectionRefused => tr!("port {} is closed", port),
         ErrorKind::ConnectionReset | ErrorKind::ConnectionAborted => {
-            "сервер сбросил соединение".to_string()
+            tr!("the server reset the connection").to_string()
         }
-        ErrorKind::TimedOut | ErrorKind::WouldBlock => "нет ответа".to_string(),
+        ErrorKind::TimedOut | ErrorKind::WouldBlock => tr!("no response").to_string(),
         ErrorKind::HostUnreachable | ErrorKind::NetworkUnreachable => {
-            "нет маршрута до сервера".to_string()
+            tr!("no route to the server").to_string()
         }
         _ => err.to_string(),
     }
@@ -264,12 +264,12 @@ mod tests {
         use std::io::{Error, ErrorKind};
         assert_eq!(
             describe_io(&Error::from(ErrorKind::ConnectionRefused), 2222),
-            "порт 2222 закрыт"
+            "port 2222 is closed"
         );
-        assert_eq!(describe_io(&Error::from(ErrorKind::TimedOut), 22), "нет ответа");
+        assert_eq!(describe_io(&Error::from(ErrorKind::TimedOut), 22), "no response");
         assert_eq!(
             describe_io(&Error::from(ErrorKind::ConnectionReset), 22),
-            "сервер сбросил соединение"
+            "the server reset the connection"
         );
     }
 }

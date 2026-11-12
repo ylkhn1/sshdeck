@@ -157,16 +157,16 @@ impl Usage {
     }
 }
 
-/// Аптайм двумя старшими единицами: `12 д 4 ч`, `3 ч 20 мин`, `45 мин`.
+/// Аптайм двумя старшими единицами: `12 d 4 h`, `3 h 20 min`, `45 min`.
 pub fn format_uptime(seconds: f64) -> String {
     let minutes = (seconds.max(0.0) / 60.0) as u64;
     let (days, hours, mins) = (minutes / 1440, minutes % 1440 / 60, minutes % 60);
     if days > 0 {
-        format!("{days} д {hours} ч")
+        tr!("{} d {} h", days, hours)
     } else if hours > 0 {
-        format!("{hours} ч {mins} мин")
+        tr!("{} h {} min", hours, mins)
     } else {
-        format!("{mins} мин")
+        tr!("{} min", mins)
     }
 }
 
@@ -231,9 +231,9 @@ mod tests {
 
     #[test]
     fn uptime_text() {
-        assert_eq!(format_uptime(59.0), "0 мин");
-        assert_eq!(format_uptime(45.0 * 60.0), "45 мин");
-        assert_eq!(format_uptime(3.0 * 3600.0 + 20.0 * 60.0), "3 ч 20 мин");
-        assert_eq!(format_uptime(12.0 * 86400.0 + 4.0 * 3600.0), "12 д 4 ч");
+        assert_eq!(format_uptime(59.0), "0 min");
+        assert_eq!(format_uptime(45.0 * 60.0), "45 min");
+        assert_eq!(format_uptime(3.0 * 3600.0 + 20.0 * 60.0), "3 h 20 min");
+        assert_eq!(format_uptime(12.0 * 86400.0 + 4.0 * 3600.0), "12 d 4 h");
     }
 }

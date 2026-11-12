@@ -30,7 +30,7 @@ const PREVIEW_ROWS: usize = 200;
 const CELL_PREVIEW_CHARS: usize = 200;
 const NAV_WIDTH: i32 = 280;
 const EDITOR_HEIGHT: i32 = 200;
-const LOADING: &str = "Загрузка…";
+const LOADING: &str = n_!("Loading…");
 
 const CANCEL: &str = "cancel";
 const ACCEPT: &str = "accept";
@@ -247,12 +247,12 @@ impl DbTab {
 
         // --- дерево
         let search = gtk::SearchEntry::builder()
-            .placeholder_text("Поиск таблиц")
+            .placeholder_text(tr!("Search tables"))
             .hexpand(true)
             .build();
         let refresh = gtk::Button::builder()
             .icon_name("view-refresh-symbolic")
-            .tooltip_text("Перечитать базы и таблицы")
+            .tooltip_text(tr!("Reload databases and tables"))
             .css_classes(["flat"])
             .build();
         let nav_header = gtk::Box::new(gtk::Orientation::Horizontal, 4);
@@ -260,7 +260,7 @@ impl DbTab {
         nav_header.append(&search);
         nav_header.append(&refresh);
         let nav_placeholder = gtk::Label::builder()
-            .label("Подключение…")
+            .label(tr!("Connecting…"))
             .wrap(true)
             .justify(gtk::Justification::Center)
             .margin_top(24)
@@ -307,7 +307,7 @@ impl DbTab {
                 Some("executed"),
                 &[("background-rgba", &gdk::RGBA::new(0.36, 0.55, 1.0, 0.16))],
             )
-            .expect("новый буфер без тегов");
+            .expect("a new buffer has no tags");
         let syntax_tag = |name: &str, color: &str, bold: bool, italic: bool| {
             let tag = gtk::TextTag::builder().name(name).foreground(color).build();
             if bold {
@@ -341,11 +341,11 @@ impl DbTab {
             .build();
         // Подсказка в пустом редакторе.
         let editor_hint = gtk::Label::builder()
-            .label(
+            .label(tr!(
                 "SELECT * FROM …\n\n\
-                 Ctrl+Enter — выполнить запрос под курсором или выделение\n\
-                 Ctrl+Shift+Enter — весь текст",
-            )
+                 Ctrl+Enter — run the query under the cursor or the selection\n\
+                 Ctrl+Shift+Enter — run all text"
+            ))
             .xalign(0.0)
             .yalign(0.0)
             .halign(gtk::Align::Start)
@@ -370,25 +370,25 @@ impl DbTab {
             .child(
                 &adw::ButtonContent::builder()
                     .icon_name("media-playback-start-symbolic")
-                    .label("Выполнить")
+                    .label(tr!("Run"))
                     .build(),
             )
-            .tooltip_text(
-                "Выполнить запрос под курсором или выделенный текст (Ctrl+Enter)\n\
-                 Весь текст редактора — Ctrl+Shift+Enter",
-            )
+            .tooltip_text(tr!(
+                "Run the query under the cursor or the selected text (Ctrl+Enter)\n\
+                 Run all editor text — Ctrl+Shift+Enter"
+            ))
             .css_classes(["flat"])
             .sensitive(false)
             .build();
         let stop_button = gtk::Button::builder()
             .icon_name("media-playback-stop-symbolic")
-            .tooltip_text("Прервать запрос, экспорт или импорт")
+            .tooltip_text(tr!("Stop the query, export or import"))
             .css_classes(["flat"])
             .sensitive(false)
             .build();
         let spinner = adw::Spinner::builder().visible(false).build();
         let status = gtk::Label::builder()
-            .label("Подключение…")
+            .label(tr!("Connecting…"))
             .xalign(0.0)
             .hexpand(true)
             .ellipsize(pango::EllipsizeMode::End)
@@ -396,7 +396,7 @@ impl DbTab {
             .build();
         let reconnect = gtk::Button::builder()
             .icon_name("network-transmit-receive-symbolic")
-            .tooltip_text("Переподключиться")
+            .tooltip_text(tr!("Reconnect"))
             .css_classes(["flat"])
             .build();
         let toolbar = gtk::Box::new(gtk::Orientation::Horizontal, 6);
@@ -435,7 +435,7 @@ impl DbTab {
             .css_classes(["sshdeck-split"])
             .build();
         let banner = adw::Banner::builder()
-            .button_label("Переподключиться")
+            .button_label(tr!("Reconnect"))
             .revealed(false)
             .build();
         let content = gtk::Box::new(gtk::Orientation::Vertical, 0);
@@ -475,7 +475,7 @@ impl DbTab {
             root,
             nav_scroll,
             nav_placeholder,
-            nav_note: RefCell::new("Подключение…".to_string()),
+            nav_note: RefCell::new(tr!("Connecting…").to_string()),
             nav_menu,
             menu_node: RefCell::new(None),
             main_db: RefCell::new(String::new()),
@@ -643,7 +643,7 @@ impl DbTab {
             add("copy-name", |tab, node| {
                 if let Some(name) = tab.node_name(node) {
                     tab.editor.clipboard().set_text(&name);
-                    tab.notifier.info(&format!("Скопировано: {name}"));
+                    tab.notifier.info(&tr!("Copied: {}", name));
                 }
             });
             self.widget().insert_action_group("dbnav", Some(&actions));
@@ -795,13 +795,15 @@ impl DbTab {
                 self.db_labels
                     .borrow_mut()
                     .insert(info.name.clone(), name.downgrade());
-                let mut tooltip = format!("База данных {}", info.name);
+                let mut tooltip = tr!("Database {}", info.name);
                 if let Some(size) = info.size {
-                    tooltip.push_str(&format!("\nРазмер: {}", format_size(size)));
+                    tooltip.push('\n');
+                    tooltip.push_str(&tr!("Size: {}", format_size(size)));
                 }
-                tooltip.push_str(
-                    "\nДвойной щелчок — сделать активной: запросы редактора пойдут в неё",
-                );
+                tooltip.push('\n');
+                tooltip.push_str(tr!(
+                    "Double-click to make it active: editor queries will run in it"
+                ));
                 (
                     "drive-multidisk-symbolic",
                     info.name.clone(),
@@ -819,29 +821,34 @@ impl DbTab {
                 schema.clone(),
                 size.map(format_size),
                 format!(
-                    "Схема {schema}: {}{}",
-                    plural(*tables as u64, "таблица", "таблицы", "таблиц"),
+                    "{}{}",
+                    trn!(
+                        "Schema {1}: {0} table",
+                        "Schema {1}: {0} tables",
+                        *tables,
+                        group_digits(*tables as u64),
+                        schema
+                    ),
                     size.map(|s| format!(", {}", format_size(s)))
                         .unwrap_or_default()
                 ),
             ),
             NodeKind::Table { info, .. } => {
-                let kind = if info.view {
-                    "Представление"
+                let mut tooltip = if info.view {
+                    tr!("View {}.{}", info.schema, info.name)
                 } else {
-                    "Таблица"
+                    tr!("Table {}.{}", info.schema, info.name)
                 };
-                let mut tooltip = format!("{kind} {}.{}", info.schema, info.name);
                 if let Some(rows) = info.rows {
-                    tooltip.push_str(&format!("\n≈ {} строк", group_digits(rows)));
+                    tooltip.push('\n');
+                    tooltip.push_str(&trn!("≈ {} row", "≈ {} rows", rows, group_digits(rows)));
                 }
                 if let Some(size) = info.size {
-                    tooltip.push_str(&format!(
-                        "\nРазмер вместе с индексами: {}",
-                        format_size(size)
-                    ));
+                    tooltip.push('\n');
+                    tooltip.push_str(&tr!("Size including indexes: {}", format_size(size)));
                 }
-                tooltip.push_str("\nДвойной щелчок — данные, правая кнопка — меню");
+                tooltip.push('\n');
+                tooltip.push_str(tr!("Double-click for data, right-click for the menu"));
                 (
                     if info.view {
                         "view-reveal-symbolic"
@@ -863,7 +870,8 @@ impl DbTab {
                     tooltip.push_str(", NOT NULL");
                 }
                 if column.primary {
-                    tooltip.push_str(", первичный ключ");
+                    tooltip.push_str(", ");
+                    tooltip.push_str(tr!("primary key"));
                 }
                 (
                     if column.primary {
@@ -905,9 +913,9 @@ impl DbTab {
         self.banner.set_revealed(false);
         let tunnel = self.profile.is_networked() && !self.profile.ssh.is_empty();
         self.status.set_text(if tunnel {
-            "Подключение через SSH…"
+            tr!("Connecting via SSH…")
         } else {
-            "Подключение…"
+            tr!("Connecting…")
         });
         self.databases.borrow_mut().clear();
         self.catalogs.borrow_mut().clear();
@@ -915,7 +923,7 @@ impl DbTab {
         self.requested_catalogs.borrow_mut().clear();
         self.columns.borrow_mut().clear();
         self.requested_columns.borrow_mut().clear();
-        self.set_nav_note("Подключение…");
+        self.set_nav_note(tr!("Connecting…"));
         self.rebuild_tree();
         self.set_busy(true);
 
@@ -978,31 +986,31 @@ impl DbTab {
                     self.request_catalog(&active);
                 }
                 self.update_status();
-                self.set_nav_note("Загрузка списка таблиц…");
-                self.results.show_hint(
-                    "Напишите запрос и нажмите Ctrl+Enter.\n\
-                     Двойной щелчок по таблице слева показывает её данные, \
-                     правая кнопка — структуру, экспорт и импорт.",
-                );
+                self.set_nav_note(tr!("Loading the table list…"));
+                self.results.show_hint(tr!(
+                    "Write a query and press Ctrl+Enter.\n\
+                     Double-click a table on the left to see its data; \
+                     right-click it for structure, export and import."
+                ));
                 self.set_busy(false);
             }
             Event::ConnectFailed(message) => {
                 let auth = self.profile.is_networked() && db::is_auth_error(&message);
                 self.auth_failed.set(auth);
                 self.connected.set(false);
-                self.status.set_text("Нет соединения");
+                self.status.set_text(tr!("Not connected"));
                 self.status.set_tooltip_text(None);
                 if auth {
-                    self.banner.set_title("Сервер не принял пароль");
-                    self.banner.set_button_label(Some("Ввести пароль"));
+                    self.banner.set_title(tr!("The server rejected the password"));
+                    self.banner.set_button_label(Some(tr!("Enter Password")));
                 } else {
                     self.banner
-                        .set_title("Не удалось подключиться к базе данных");
-                    self.banner.set_button_label(Some("Переподключиться"));
+                        .set_title(tr!("Could not connect to the database"));
+                    self.banner.set_button_label(Some(tr!("Reconnect")));
                 }
                 self.banner.set_revealed(true);
-                self.set_nav_note("Нет соединения");
-                self.results.show_error("Подключение не удалось", &message);
+                self.set_nav_note(tr!("Not connected"));
+                self.results.show_error(tr!("Connection failed"), &message);
                 self.set_busy(false);
                 if auth {
                     // Сохранённый пароль не подошёл — сразу просим новый.
@@ -1043,7 +1051,7 @@ impl DbTab {
                 match result {
                     Ok(output) => self.results.show_output(output, elapsed),
                     Err(error) => {
-                        self.results.show_error("Ошибка", &error.message);
+                        self.results.show_error(tr!("Error"), &error.message);
                         if error.lost {
                             self.lost();
                         }
@@ -1076,22 +1084,32 @@ impl DbTab {
                             &transfer.target,
                             elapsed,
                         );
-                        let rows = plural(report.rows, "строка", "строки", "строк");
+                        let rows = group_digits(report.rows);
                         if transfer.import {
-                            self.notifier
-                                .info(&format!("Загружено {rows} в {}", transfer.target));
+                            self.notifier.info(&trn!(
+                                "Loaded {0} row into {1}",
+                                "Loaded {0} rows into {1}",
+                                report.rows,
+                                rows,
+                                transfer.target
+                            ));
                             // Размеры таблиц изменились.
                             self.request_catalog(&transfer.database);
                         } else {
-                            self.notifier
-                                .info(&format!("Выгружено {rows} в {}", file_name(&report.path)));
+                            self.notifier.info(&trn!(
+                                "Exported {0} row to {1}",
+                                "Exported {0} rows to {1}",
+                                report.rows,
+                                rows,
+                                file_name(&report.path)
+                            ));
                         }
                     }
                     Err(error) => self.results.show_error(
                         if transfer.import {
-                            "Импорт не удался, таблица не изменилась"
+                            tr!("Import failed; the table was not changed")
                         } else {
-                            "Экспорт не удался"
+                            tr!("Export failed")
                         },
                         &error.message,
                     ),
@@ -1141,8 +1159,8 @@ impl DbTab {
                 .get(&database)
                 .is_none_or(|c| c.tables.is_empty());
             let note = match self.catalog_errors.borrow().get(&database) {
-                Some(error) => format!("Не удалось прочитать список таблиц:\n{error}"),
-                None if empty => "В базе нет таблиц".to_string(),
+                Some(error) => tr!("Could not read the table list:\n{}", error),
+                None if empty => tr!("The database has no tables").to_string(),
                 None => String::new(),
             };
             self.set_nav_note(&note);
@@ -1155,7 +1173,7 @@ impl DbTab {
                 let mut expanded = self.expanded_keys();
                 expanded.extend(self.want_expanded.borrow_mut().drain());
                 let children = self.database_children(&database, &self.filter());
-                node.set_children(&non_empty(children, "Нет схем"));
+                node.set_children(&non_empty(children, tr!("No schemas")));
                 self.expand_matching(&expanded, false);
             }
             None => self.rebuild_tree(),
@@ -1168,7 +1186,7 @@ impl DbTab {
         let weak = Rc::downgrade(&tab);
         self.store.ask_password(
             &self.profile,
-            Some("Сервер не принял пароль. Введите его ещё раз."),
+            Some(tr!("The server rejected the password. Enter it again.")),
             move |password| {
                 if let Some(tab) = weak.upgrade() {
                     *tab.password.borrow_mut() = password;
@@ -1227,8 +1245,8 @@ impl DbTab {
 
     fn lost(&self) {
         self.connected.set(false);
-        self.status.set_text("Нет соединения");
-        self.banner.set_title("Соединение с базой данных потеряно");
+        self.status.set_text(tr!("Not connected"));
+        self.banner.set_title(tr!("Connection to the database was lost"));
         self.banner.set_revealed(true);
         self.set_busy(false);
     }
@@ -1245,7 +1263,8 @@ impl DbTab {
         let mut text = self.status_base.borrow().clone();
         let active = self.active_db.borrow();
         if !active.is_empty() {
-            text.push_str(&format!(" · база {active}"));
+            text.push_str(" · ");
+            text.push_str(&tr!("database {}", active));
         }
         self.status.set_text(&text);
     }
@@ -1273,7 +1292,7 @@ impl DbTab {
             let cursor = char_to_byte(&text, buffer.cursor_position());
             let Some(range) = db::sql::statement_at(&text, cursor, self.profile.kind) else {
                 self.notifier
-                    .info("Нечего выполнять: напишите запрос в редакторе");
+                    .info(tr!("Nothing to run: write a query in the editor"));
                 return;
             };
             (
@@ -1284,7 +1303,7 @@ impl DbTab {
         };
         if sql.trim().is_empty() {
             self.notifier
-                .info("Нечего выполнять: напишите запрос в редакторе");
+                .info(tr!("Nothing to run: write a query in the editor"));
             return;
         }
         let database = self.active_db.borrow().clone();
@@ -1328,12 +1347,12 @@ impl DbTab {
     /// подпись над результатом.
     fn begin_request(&self, caption: &str) -> Option<u64> {
         if !self.connected.get() {
-            self.notifier.info("Нет соединения с базой данных");
+            self.notifier.info(tr!("Not connected to the database"));
             return None;
         }
         if self.pending.get().is_some() {
             self.notifier
-                .info("Дождитесь окончания запроса или прервите его");
+                .info(tr!("Wait for the query to finish or stop it"));
             return None;
         }
         let id = self.next_id.get();
@@ -1372,7 +1391,7 @@ impl DbTab {
 
     fn open_structure(&self, database: &str, table: &TableInfo) {
         let name = self.qualified(table);
-        let Some(id) = self.begin_request(&format!("Структура {name}")) else {
+        let Some(id) = self.begin_request(&tr!("Structure of {}", name)) else {
             return;
         };
         self.last_query.take();
@@ -1456,7 +1475,7 @@ impl DbTab {
         );
         let children = match self.columns.borrow().get(&key) {
             Some(result) => column_nodes(result),
-            None => vec![Node::note(LOADING)],
+            None => vec![Node::note(crate::i18n::tr(LOADING))],
         };
         let node = Node::with_children(
             NodeKind::Table {
@@ -1475,8 +1494,8 @@ impl DbTab {
         let catalogs = self.catalogs.borrow();
         let Some(catalog) = catalogs.get(database) else {
             let note = match self.catalog_errors.borrow().get(database) {
-                Some(error) => format!("Ошибка: {error}"),
-                None => LOADING.to_string(),
+                Some(error) => tr!("Error: {}", error),
+                None => crate::i18n::tr(LOADING).to_string(),
             };
             return vec![Node::note(&note)];
         };
@@ -1516,7 +1535,7 @@ impl DbTab {
                     size,
                     tables: tables.len(),
                 },
-                &non_empty(shown, "Нет таблиц"),
+                &non_empty(shown, tr!("No tables")),
             ));
         }
         nodes
@@ -1549,7 +1568,7 @@ impl DbTab {
                     }
                     let node = Node::with_children(
                         NodeKind::Database(info.clone()),
-                        &non_empty(children, "Нет схем"),
+                        &non_empty(children, tr!("No schemas")),
                     );
                     self.db_nodes
                         .borrow_mut()
@@ -1620,11 +1639,13 @@ impl DbTab {
             .iter()
             .any(|db| !catalogs.contains_key(&db.name));
         let text = if searching && unloaded {
-            "Ничего не найдено.\nПоиск идёт по раскрытым базам — раскройте базу, \
-             чтобы искать и в ней."
-                .to_string()
+            tr!(
+                "Nothing found.\nOnly expanded databases are searched — expand a database \
+                 to search it too."
+            )
+            .to_string()
         } else if searching && has_tables {
-            "Ничего не найдено".to_string()
+            tr!("Nothing found").to_string()
         } else {
             self.nav_note.borrow().clone()
         };
@@ -1671,7 +1692,7 @@ impl DbTab {
         }
         self.update_status();
         self.notifier
-            .info(&format!("Запросы редактора выполняются в базе {name}"));
+            .info(&tr!("Editor queries now run in database {}", name));
     }
 
     /// Имя узла для вставки в редактор.
@@ -1698,37 +1719,37 @@ impl DbTab {
         match &node.kind {
             NodeKind::Database(info) => {
                 if *self.active_db.borrow() != info.name {
-                    section(&[("Сделать активной", "dbnav.activate")]);
+                    section(&[(tr!("Make Active"), "dbnav.activate")]);
                 }
                 section(&[
-                    ("Обновить", "dbnav.refresh"),
-                    ("Скопировать имя", "dbnav.copy-name"),
+                    (tr!("Refresh"), "dbnav.refresh"),
+                    (tr!("Copy Name"), "dbnav.copy-name"),
                 ]);
             }
             NodeKind::Schema { .. } => section(&[
-                ("Вставить имя в редактор", "dbnav.insert-name"),
-                ("Скопировать имя", "dbnav.copy-name"),
-                ("Обновить", "dbnav.refresh"),
+                (tr!("Insert Name into Editor"), "dbnav.insert-name"),
+                (tr!("Copy Name"), "dbnav.copy-name"),
+                (tr!("Refresh"), "dbnav.refresh"),
             ]),
             NodeKind::Table { info, .. } => {
-                let preview = format!("Данные (первые {PREVIEW_ROWS} строк)");
-                section(&[(&preview, "dbnav.data"), ("Структура", "dbnav.structure")]);
+                let preview = trn!("Data (First {} Row)", "Data (First {} Rows)", PREVIEW_ROWS);
+                section(&[(&preview, "dbnav.data"), (tr!("Structure"), "dbnav.structure")]);
                 if info.view {
-                    section(&[("Экспорт данных…", "dbnav.export")]);
+                    section(&[(tr!("Export Data…"), "dbnav.export")]);
                 } else {
                     section(&[
-                        ("Экспорт данных…", "dbnav.export"),
-                        ("Импорт данных…", "dbnav.import"),
+                        (tr!("Export Data…"), "dbnav.export"),
+                        (tr!("Import Data…"), "dbnav.import"),
                     ]);
                 }
                 section(&[
-                    ("Вставить имя в редактор", "dbnav.insert-name"),
-                    ("Скопировать имя", "dbnav.copy-name"),
+                    (tr!("Insert Name into Editor"), "dbnav.insert-name"),
+                    (tr!("Copy Name"), "dbnav.copy-name"),
                 ]);
             }
             NodeKind::Column(_) => section(&[
-                ("Вставить имя в редактор", "dbnav.insert-name"),
-                ("Скопировать имя", "dbnav.copy-name"),
+                (tr!("Insert Name into Editor"), "dbnav.insert-name"),
+                (tr!("Copy Name"), "dbnav.copy-name"),
             ]),
             NodeKind::Note(_) => return None,
         }
@@ -1768,12 +1789,11 @@ impl DbTab {
 
     fn export_table(&self, database: &str, table: &TableInfo) {
         let name = self.qualified(table);
-        let what = if table.view {
-            "представления"
+        let mut description = if table.view {
+            tr!("All rows of view {}.{}", table.schema, table.name)
         } else {
-            "таблицы"
+            tr!("All rows of table {}.{}", table.schema, table.name)
         };
-        let mut description = format!("Все строки {what} {}.{}", table.schema, table.name);
         if let Some(rows) = table.rows {
             description.push_str(&format!(" (≈ {})", group_digits(rows)));
         }
@@ -1792,7 +1812,7 @@ impl DbTab {
     fn export_results(&self) {
         let output = Rc::clone(&self.results.current.borrow());
         if output.columns.is_empty() {
-            self.notifier.info("Нечего выгружать");
+            self.notifier.info(tr!("Nothing to export"));
             return;
         }
         let last = self.last_query.borrow().clone();
@@ -1817,22 +1837,29 @@ impl DbTab {
                 database,
                 table,
                 stem,
-                description: format!(
-                    "Запрос будет выполнен ещё раз, и в файл попадут все его строки, \
-                     а не только первые {MAX_ROWS}."
+                description: tr!(
+                    "The query will run again, and the file will get all of its rows, \
+                     not just the first {}.",
+                    MAX_ROWS
                 ),
                 local: None,
             }
         } else {
             let description = if output.truncated {
-                format!(
-                    "В файл попадут только первые {MAX_ROWS} строк: запрос изменяет данные, \
-                     поэтому повторно он не выполняется."
+                trn!(
+                    "Only the first {} row will be saved: the query changes data, \
+                     so it is not run again.",
+                    "Only the first {} rows will be saved: the query changes data, \
+                     so it is not run again.",
+                    MAX_ROWS
                 )
             } else {
-                format!(
-                    "В файл попадут {} результата.",
-                    plural(output.rows.len() as u64, "строка", "строки", "строк")
+                let rows = output.rows.len();
+                trn!(
+                    "{} row of the result will be saved.",
+                    "{} rows of the result will be saved.",
+                    rows,
+                    group_digits(rows as u64)
                 )
             };
             ExportSource {
@@ -1850,7 +1877,7 @@ impl DbTab {
     fn ask_export(&self, source: ExportSource) {
         let labels: Vec<&str> = ExportFormat::ALL.iter().map(|f| f.label()).collect();
         let format = adw::ComboRow::builder()
-            .title("Формат")
+            .title(tr!("Format"))
             .model(&gtk::StringList::new(&labels))
             .selected(self.export_format.get())
             .build();
@@ -1860,8 +1887,8 @@ impl DbTab {
             .width_request(380)
             .build();
         fields.append(&format);
-        let dialog = adw::AlertDialog::new(Some("Экспорт данных"), Some(&source.description));
-        dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, "Сохранить как…")]);
+        let dialog = adw::AlertDialog::new(Some(tr!("Export Data")), Some(&source.description));
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Save As…"))]);
         dialog.set_close_response(CANCEL);
         dialog.set_default_response(Some(ACCEPT));
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);
@@ -1888,7 +1915,7 @@ impl DbTab {
 
     fn pick_export_file(&self, source: ExportSource, format: ExportFormat) {
         let dialog = gtk::FileDialog::builder()
-            .title("Куда сохранить")
+            .title(tr!("Save To"))
             .initial_name(format!(
                 "{}.{}",
                 file_stem(&source.stem),
@@ -1914,18 +1941,20 @@ impl DbTab {
     fn start_export(&self, source: ExportSource, format: ExportFormat, path: PathBuf) {
         if let Some(output) = &source.local {
             match write_local(output, &path, format, &source.table, self.profile.kind) {
-                Ok(rows) => self.notifier.info(&format!(
-                    "Сохранено {} в {}",
-                    plural(rows, "строка", "строки", "строк"),
+                Ok(rows) => self.notifier.info(&trn!(
+                    "Saved {0} row to {1}",
+                    "Saved {0} rows to {1}",
+                    rows,
+                    group_digits(rows),
                     file_name(&path)
                 )),
                 Err(message) => self
                     .notifier
-                    .error(&format!("Не удалось сохранить файл: {message}")),
+                    .error(&tr!("Could not save the file: {}", message)),
             }
             return;
         }
-        let Some(id) = self.begin_request(&format!("Экспорт → {}", path.display())) else {
+        let Some(id) = self.begin_request(&tr!("Export → {}", path.display())) else {
             return;
         };
         *self.transfer.borrow_mut() = Some(Transfer {
@@ -1952,13 +1981,13 @@ impl DbTab {
             data.add_pattern(pattern);
         }
         let all = gtk::FileFilter::new();
-        all.set_name(Some("Все файлы"));
+        all.set_name(Some(tr!("All Files")));
         all.add_pattern("*");
         let filters = gio::ListStore::new::<gtk::FileFilter>();
         filters.append(&data);
         filters.append(&all);
         let dialog = gtk::FileDialog::builder()
-            .title(format!("Импорт в {}.{}", table.schema, table.name))
+            .title(tr!("Import into {}.{}", table.schema, table.name))
             .filters(&filters)
             .default_filter(&data)
             .modal(true)
@@ -1986,19 +2015,19 @@ impl DbTab {
             .is_some_and(|ext| ext.eq_ignore_ascii_case("json"));
         let defaults = ImportOptions::default();
         let header = adw::SwitchRow::builder()
-            .title("Первая строка — имена колонок")
-            .subtitle("Иначе значения идут в колонки таблицы по порядку")
+            .title(tr!("First row has column names"))
+            .subtitle(tr!("Otherwise values go into the table columns in order"))
             .active(defaults.header)
             .visible(!json)
             .build();
         let nulls = adw::SwitchRow::builder()
-            .title("Пустые значения — NULL")
-            .subtitle("Иначе — пустые строки")
+            .title(tr!("Empty values as NULL"))
+            .subtitle(tr!("Otherwise as empty strings"))
             .active(defaults.empty_as_null)
             .build();
         let truncate = adw::SwitchRow::builder()
-            .title("Очистить таблицу перед загрузкой")
-            .subtitle("Все строки таблицы будут удалены")
+            .title(tr!("Clear the table before loading"))
+            .subtitle(tr!("All rows of the table will be deleted"))
             .active(defaults.truncate)
             .build();
         let fields = gtk::ListBox::builder()
@@ -2011,18 +2040,19 @@ impl DbTab {
         fields.append(&truncate);
         let target = format!("{}.{}", table.schema, table.name);
         let atomic = if self.profile.kind == DbKind::Extension {
-            "Строки вставляются порциями: при ошибке уже вставленные останутся."
+            tr!("Rows are inserted in batches: on error, rows already inserted stay.")
         } else {
-            "Загрузка идёт одной транзакцией: при ошибке таблица не изменится."
+            tr!("Loading runs in a single transaction: on error, the table is not changed.")
         };
-        let body = format!(
-            "{} → {}.{}\n\nКолонки файла сопоставляются с колонками таблицы по именам. {atomic}",
+        let body = tr!(
+            "{} → {}.{}\n\nFile columns are matched to table columns by name. {}",
             file_name(&path),
             table.schema,
-            table.name
+            table.name,
+            atomic
         );
-        let dialog = adw::AlertDialog::new(Some("Импорт данных"), Some(&body));
-        dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, "Загрузить")]);
+        let dialog = adw::AlertDialog::new(Some(tr!("Import Data")), Some(&body));
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Load"))]);
         dialog.set_close_response(CANCEL);
         dialog.set_default_response(Some(ACCEPT));
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);
@@ -2042,7 +2072,7 @@ impl DbTab {
                     truncate: truncate.is_active(),
                 };
                 let Some(id) =
-                    tab.begin_request(&format!("Импорт {} → {target}", file_name(&path)))
+                    tab.begin_request(&tr!("Import {} → {}", file_name(&path), target))
                 else {
                     return;
                 };
@@ -2067,12 +2097,12 @@ impl DbTab {
 /// Дети узла таблицы: колонки, «Нет колонок» или ошибка.
 fn column_nodes(result: &Result<Vec<ColumnInfo>, String>) -> Vec<Rc<Node>> {
     match result {
-        Ok(columns) if columns.is_empty() => vec![Node::note("Нет колонок")],
+        Ok(columns) if columns.is_empty() => vec![Node::note(tr!("No columns"))],
         Ok(columns) => columns
             .iter()
             .map(|column| Node::new(NodeKind::Column(column.clone())))
             .collect(),
-        Err(error) => vec![Node::note(&format!("Ошибка: {error}"))],
+        Err(error) => vec![Node::note(&tr!("Error: {}", error))],
     }
 }
 
@@ -2200,7 +2230,7 @@ impl Results {
         let time_pill = pill();
         let export_button = gtk::Button::builder()
             .icon_name("document-save-symbolic")
-            .tooltip_text("Сохранить результат в файл (CSV, JSON, SQL)")
+            .tooltip_text(tr!("Save the result to a file (CSV, JSON, SQL)"))
             .css_classes(["flat"])
             .visible(false)
             .build();
@@ -2224,7 +2254,7 @@ impl Results {
             .hexpand(true)
             .build();
         let empty_note = gtk::Label::builder()
-            .label("Запрос не вернул строк")
+            .label(tr!("The query returned no rows"))
             .halign(gtk::Align::Center)
             .valign(gtk::Align::Center)
             .visible(false)
@@ -2325,7 +2355,7 @@ impl Results {
             });
             results.view.add_controller(keys);
         }
-        results.show_hint("Подключение…");
+        results.show_hint(tr!("Connecting…"));
         results
     }
 
@@ -2340,14 +2370,14 @@ impl Results {
         let line = sql.split_whitespace().collect::<Vec<_>>().join(" ");
         self.caption.set_text(&line);
         self.caption.set_tooltip_text(Some(sql));
-        self.set_pills(None, Some("выполняется…".to_string()));
+        self.set_pills(None, Some(tr!("running…").to_string()));
     }
 
     /// Сколько строк уже загружено при импорте.
     fn set_progress(&self, rows: u64) {
         self.set_pills(
-            Some(plural(rows, "строка", "строки", "строк")),
-            Some("выполняется…".to_string()),
+            Some(row_count(rows)),
+            Some(tr!("running…").to_string()),
         );
     }
 
@@ -2389,20 +2419,32 @@ impl Results {
         target: &str,
         elapsed: Duration,
     ) {
-        let rows = plural(report.rows, "строка", "строки", "строк");
+        let rows = row_count(report.rows);
         let title = if import {
-            format!("Загружено {rows} в {target}")
+            trn!(
+                "Loaded {0} row into {1}",
+                "Loaded {0} rows into {1}",
+                report.rows,
+                group_digits(report.rows),
+                target
+            )
         } else {
-            format!("Выгружено {rows}")
+            trn!(
+                "Exported {} row",
+                "Exported {} rows",
+                report.rows,
+                group_digits(report.rows)
+            )
         };
         let mut text = if import {
-            format!("Из файла {}", report.path.display())
+            tr!("From file {}", report.path.display())
         } else {
-            format!("Файл: {}", report.path.display())
+            tr!("File: {}", report.path.display())
         };
         if !report.skipped.is_empty() {
-            text.push_str(&format!(
-                "\nПропущены колонки файла, которых нет в таблице: {}",
+            text.push('\n');
+            text.push_str(&tr!(
+                "Skipped file columns that are not in the table: {}",
                 report.skipped.join(", ")
             ));
         }
@@ -2419,14 +2461,20 @@ impl Results {
         let time = format_elapsed(elapsed);
         if output.columns.is_empty() {
             let title = match output.affected {
-                Some(rows) => format!(
-                    "Готово: затронуто {}",
-                    plural(rows, "строка", "строки", "строк")
+                Some(rows) => trn!(
+                    "Done: {} row affected",
+                    "Done: {} rows affected",
+                    rows,
+                    group_digits(rows)
                 ),
-                None => "Готово".to_string(),
+                None => tr!("Done").to_string(),
             };
             let detail = if output.statements > 1 {
-                format!("Выполнено запросов: {}", output.statements)
+                trn!(
+                    "{} statement executed",
+                    "{} statements executed",
+                    output.statements
+                )
             } else {
                 String::new()
             };
@@ -2437,9 +2485,9 @@ impl Results {
         }
 
         let rows = if output.truncated {
-            format!("первые {MAX_ROWS} строк")
+            trn!("first {} row", "first {} rows", MAX_ROWS)
         } else {
-            plural(output.rows.len() as u64, "строка", "строки", "строк")
+            row_count(output.rows.len() as u64)
         };
         self.set_pills(Some(rows), Some(time));
 
@@ -2534,8 +2582,8 @@ impl Results {
             .min_content_width(520)
             .css_classes(["card"])
             .build();
-        let dialog = adw::AlertDialog::new(Some(&format!("Строка {}", position + 1)), None);
-        dialog.add_responses(&[("copy", "Скопировать"), ("close", "Закрыть")]);
+        let dialog = adw::AlertDialog::new(Some(&tr!("Row {}", position + 1)), None);
+        dialog.add_responses(&[("copy", tr!("Copy")), ("close", tr!("Close"))]);
         dialog.set_close_response("close");
         dialog.set_default_response(Some("close"));
         dialog.set_extra_child(Some(&scroll));
@@ -2695,23 +2743,20 @@ fn cell_preview(text: &str) -> String {
     preview
 }
 
-/// `1 строка`, `3 строки`, `11 строк`.
-fn plural(n: u64, one: &str, few: &str, many: &str) -> String {
-    let word = match (n % 10, n % 100) {
-        (1, rest) if rest != 11 => one,
-        (2..=4, rest) if !(12..=14).contains(&rest) => few,
-        _ => many,
-    };
-    format!("{} {word}", group_digits(n))
+/// `1 row`, `12 345 rows` (по-русски `1 строка`, `3 строки`, `11 строк`).
+fn row_count(n: u64) -> String {
+    trn!("{} row", "{} rows", n, group_digits(n))
 }
 
-/// `12 мс`, `1,4 с`.
+/// `12 ms`, `1.4 s` (по-русски `12 мс`, `1,4 с`).
 fn format_elapsed(elapsed: Duration) -> String {
     let ms = elapsed.as_millis();
     if ms < 1000 {
-        format!("{ms} мс")
+        tr!("{} ms", ms)
     } else {
-        format!("{:.1} с", elapsed.as_secs_f64()).replace('.', ",")
+        let seconds = format!("{:.1}", elapsed.as_secs_f64())
+            .replace('.', &crate::i18n::decimal_separator().to_string());
+        tr!("{} s", seconds)
     }
 }
 
@@ -2750,19 +2795,11 @@ mod tests {
     }
 
     #[test]
-    fn plurals() {
-        assert_eq!(plural(1, "строка", "строки", "строк"), "1 строка");
-        assert_eq!(plural(3, "строка", "строки", "строк"), "3 строки");
-        assert_eq!(plural(5, "строка", "строки", "строк"), "5 строк");
-        assert_eq!(plural(11, "строка", "строки", "строк"), "11 строк");
-        assert_eq!(plural(12, "строка", "строки", "строк"), "12 строк");
-        assert_eq!(plural(21, "строка", "строки", "строк"), "21 строка");
-        assert_eq!(plural(104, "строка", "строки", "строк"), "104 строки");
-        assert_eq!(plural(0, "строка", "строки", "строк"), "0 строк");
-        assert_eq!(
-            plural(12_341, "строка", "строки", "строк"),
-            "12\u{a0}341 строка"
-        );
+    fn row_counts() {
+        assert_eq!(row_count(0), "0 rows");
+        assert_eq!(row_count(1), "1 row");
+        assert_eq!(row_count(21), "21 rows");
+        assert_eq!(row_count(12_341), "12\u{a0}341 rows");
     }
 
     #[test]
@@ -2782,8 +2819,8 @@ mod tests {
 
     #[test]
     fn elapsed() {
-        assert_eq!(format_elapsed(Duration::from_millis(12)), "12 мс");
-        assert_eq!(format_elapsed(Duration::from_millis(1440)), "1,4 с");
+        assert_eq!(format_elapsed(Duration::from_millis(12)), "12 ms");
+        assert_eq!(format_elapsed(Duration::from_millis(1440)), "1.4 s");
     }
 
     #[test]

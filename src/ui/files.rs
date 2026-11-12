@@ -131,7 +131,7 @@ impl FilePanel {
             Ok(worker) => *inner.worker.borrow_mut() = Some(worker),
             Err(err) => inner.show_status(
                 false,
-                "Не удалось запустить SFTP",
+                tr!("Could Not Start SFTP"),
                 &err.to_string(),
             ),
         }
@@ -197,13 +197,13 @@ impl FilePanel {
 impl Inner {
     fn build(weak: &Weak<Inner>, scratch_dir: PathBuf, notifier: Notifier) -> Inner {
         // --- панель инструментов
-        let home_button = icon_button("go-home-symbolic", "Домашний каталог");
-        let up_button = icon_button("go-up-symbolic", "На уровень вверх");
-        let refresh_button = icon_button("view-refresh-symbolic", "Обновить (F5)");
+        let home_button = icon_button("go-home-symbolic", tr!("Home folder"));
+        let up_button = icon_button("go-up-symbolic", tr!("Up one level"));
+        let refresh_button = icon_button("view-refresh-symbolic", tr!("Refresh (F5)"));
         refresh_button.set_action_name(Some("files.refresh"));
         let path_entry = gtk::Entry::builder()
             .hexpand(true)
-            .tooltip_text("Текущий каталог. Впишите путь и нажмите Enter")
+            .tooltip_text(tr!("Current folder. Type a path and press Enter"))
             .build();
         // Класс `toolbar` даёт плоские кнопки и стандартные отступы.
         let nav_row = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -214,38 +214,38 @@ impl Inner {
         nav_row.append(&refresh_button);
 
         let upload_menu = gio::Menu::new();
-        upload_menu.append(Some("Файлы…"), Some("files.upload-files"));
-        upload_menu.append(Some("Каталог…"), Some("files.upload-folder"));
+        upload_menu.append(Some(tr!("Files…")), Some("files.upload-files"));
+        upload_menu.append(Some(tr!("Folder…")), Some("files.upload-folder"));
         let upload_button = gtk::MenuButton::builder()
             .child(
                 &adw::ButtonContent::builder()
                     .icon_name("document-send-symbolic")
-                    .label("Загрузить")
+                    .label(tr!("Upload"))
                     .build(),
             )
             .always_show_arrow(true)
-            .tooltip_text("Загрузить на сервер в текущий каталог")
+            .tooltip_text(tr!("Upload to the current folder on the server"))
             .menu_model(&upload_menu)
             .build();
         let download_button = gtk::Button::builder()
             .child(
                 &adw::ButtonContent::builder()
                     .icon_name("folder-download-symbolic")
-                    .label("Скачать")
+                    .label(tr!("Download"))
                     .build(),
             )
-            .tooltip_text("Скачать выбранное в локальный каталог")
+            .tooltip_text(tr!("Download the selection to a local folder"))
             .action_name("files.download")
             .build();
-        let mkdir_button = icon_button("folder-new-symbolic", "Создать каталог");
+        let mkdir_button = icon_button("folder-new-symbolic", tr!("New folder"));
         mkdir_button.set_action_name(Some("files.mkdir"));
         let hidden_toggle = gtk::ToggleButton::builder()
             .icon_name("view-reveal-symbolic")
-            .tooltip_text("Показывать скрытые файлы")
+            .tooltip_text(tr!("Show hidden files"))
             .build();
         let follow_toggle = gtk::ToggleButton::builder()
             .icon_name("media-playlist-consecutive-symbolic")
-            .tooltip_text("Следовать за cd в терминале")
+            .tooltip_text(tr!("Follow cd in the terminal"))
             .active(true)
             .build();
         let spacer = gtk::Box::new(gtk::Orientation::Horizontal, 0);
@@ -303,13 +303,13 @@ impl Inner {
         name_column.set_expand(true);
         name_column.set_resizable(true);
         view.append_column(&name_column);
-        let size_column = text_column("Размер", weak, 1.0, |entry| match entry.kind {
+        let size_column = text_column(tr!("Size"), weak, 1.0, |entry| match entry.kind {
             EntryKind::File => entry.size.map(format_size).unwrap_or_default(),
             _ => String::new(),
         });
         size_column.set_resizable(true);
         view.append_column(&size_column);
-        let mtime_column = text_column("Изменён", weak, 0.0, |entry| {
+        let mtime_column = text_column(tr!("Modified"), weak, 0.0, |entry| {
             entry.modified.map(format_mtime).unwrap_or_default()
         });
         mtime_column.set_resizable(true);
@@ -340,22 +340,22 @@ impl Inner {
         // --- контекстное меню
         let menu = gio::Menu::new();
         let open_section = gio::Menu::new();
-        open_section.append(Some("Открыть или править"), Some("files.open"));
-        open_section.append(Some("Скачать…"), Some("files.download"));
-        open_section.append(Some("Перейти сюда в терминале"), Some("files.cd-terminal"));
-        open_section.append(Some("Копировать путь"), Some("files.copy-path"));
+        open_section.append(Some(tr!("Open or Edit")), Some("files.open"));
+        open_section.append(Some(tr!("Download…")), Some("files.download"));
+        open_section.append(Some(tr!("Go Here in Terminal")), Some("files.cd-terminal"));
+        open_section.append(Some(tr!("Copy Path")), Some("files.copy-path"));
         menu.append_section(None, &open_section);
         let create_section = gio::Menu::new();
-        create_section.append(Some("Загрузить файлы…"), Some("files.upload-files"));
-        create_section.append(Some("Загрузить каталог…"), Some("files.upload-folder"));
-        create_section.append(Some("Создать каталог…"), Some("files.mkdir"));
+        create_section.append(Some(tr!("Upload Files…")), Some("files.upload-files"));
+        create_section.append(Some(tr!("Upload Folder…")), Some("files.upload-folder"));
+        create_section.append(Some(tr!("New Folder…")), Some("files.mkdir"));
         menu.append_section(None, &create_section);
         let change_section = gio::Menu::new();
-        change_section.append(Some("Переименовать…"), Some("files.rename"));
-        change_section.append(Some("Удалить"), Some("files.delete"));
+        change_section.append(Some(tr!("Rename…")), Some("files.rename"));
+        change_section.append(Some(tr!("Delete")), Some("files.delete"));
         menu.append_section(None, &change_section);
         let refresh_section = gio::Menu::new();
-        refresh_section.append(Some("Обновить"), Some("files.refresh"));
+        refresh_section.append(Some(tr!("Refresh")), Some("files.refresh"));
         menu.append_section(None, &refresh_section);
         let context_menu = gtk::PopoverMenu::from_model(Some(&menu));
         context_menu.set_parent(&view);
@@ -595,8 +595,8 @@ fn name_column(weak: &Weak<Inner>) -> gtk::ColumnViewColumn {
         if let Some(label) = content.last_child().and_downcast::<gtk::Label>() {
             label.set_text(&entry.name);
             label.set_tooltip_text(match (entry.is_link, entry.kind) {
-                (true, EntryKind::Other) => Some("Битая символическая ссылка"),
-                (true, _) => Some("Символическая ссылка"),
+                (true, EntryKind::Other) => Some(tr!("Broken symbolic link")),
+                (true, _) => Some(tr!("Symbolic link")),
                 (false, _) => None,
             });
         }
@@ -610,7 +610,7 @@ fn name_column(weak: &Weak<Inner>) -> gtk::ColumnViewColumn {
             expander.set_list_row(None);
         }
     });
-    gtk::ColumnViewColumn::new(Some("Имя"), Some(factory))
+    gtk::ColumnViewColumn::new(Some(tr!("Name")), Some(factory))
 }
 
 fn text_column(
@@ -765,14 +765,15 @@ fn top_level(entries: Vec<RemoteEntry>) -> Vec<RemoteEntry> {
 /// «a, b, c и ещё 4» — для заголовков и подтверждений.
 fn summarize(names: &[String]) -> String {
     const SHOWN: usize = 3;
-    let mut text = names
+    let text = names
         .iter()
         .take(SHOWN)
         .map(String::as_str)
         .collect::<Vec<_>>()
         .join(", ");
     if names.len() > SHOWN {
-        text.push_str(&format!(" и ещё {}", names.len() - SHOWN));
+        let more = names.len() - SHOWN;
+        return trn!("{} and {} more", "{} and {} more", more, text, more);
     }
     text
 }
@@ -817,7 +818,7 @@ impl Inner {
                 Ok((path, entries)) => self.show_dir(path, entries),
                 Err(err) => {
                     self.notifier
-                        .error(&format!("Не удалось открыть «{requested}»: {err}"));
+                        .error(&tr!("Could not open “{}”: {}", requested, err));
                     let cwd = self.state.borrow().cwd.clone();
                     self.path_entry.set_text(&cwd);
                 }
@@ -826,7 +827,7 @@ impl Inner {
                 Ok(entries) => self.on_listing(&path, entries),
                 Err(err) => self
                     .notifier
-                    .error(&format!("Не удалось прочитать «{path}»: {err}")),
+                    .error(&tr!("Could not read “{}”: {}", path, err)),
             },
             Event::OpDone { error, refresh } => {
                 if let Some(error) = error {
@@ -861,23 +862,25 @@ impl Inner {
         match state {
             ConnState::Waiting { .. } if !self.ssh_running.get() => self.show_status(
                 false,
-                "Соединение закрыто",
-                "Нажмите «Переподключиться», чтобы войти снова.",
+                tr!("Connection Closed"),
+                tr!("Click “Reconnect” to log in again."),
             ),
             ConnState::Waiting { last_error: None } => self.show_status(
                 true,
-                "Ожидание входа",
-                "Введите пароль или фразу ключа в терминале справа — панель файлов \
-                 подключится сама.",
+                tr!("Waiting for Login"),
+                tr!(
+                    "Enter your password or key passphrase in the terminal on the right — the file \
+                     panel will connect automatically."
+                ),
             ),
             ConnState::Waiting {
                 last_error: Some(error),
             } => self.show_status(
                 true,
-                "Нет SFTP-соединения",
-                &format!("{error}\nПанель подключится, когда в терминале будет выполнен вход."),
+                tr!("No SFTP Connection"),
+                &tr!("{}\nThe panel will connect once you log in in the terminal.", error),
             ),
-            ConnState::Connecting => self.show_status(true, "Подключение…", ""),
+            ConnState::Connecting => self.show_status(true, tr!("Connecting…"), ""),
             ConnState::Connected { home } => {
                 let target = {
                     let mut state = self.state.borrow_mut();
@@ -1073,7 +1076,7 @@ impl Inner {
             EntryKind::File => self.open_for_edit(entry),
             EntryKind::Other => self
                 .notifier
-                .info(&format!("«{}» нельзя открыть: это не файл и не каталог", entry.name)),
+                .info(&tr!("“{}” cannot be opened: it is neither a file nor a folder", entry.name)),
         }
     }
 
@@ -1102,13 +1105,13 @@ impl Inner {
             .target_path()
             .map_or_else(|| self.state.borrow().cwd.clone(), |entry| entry.path);
         self.root.clipboard().set_text(&path);
-        self.notifier.info(&format!("Скопировано: {path}"));
+        self.notifier.info(&tr!("Copied: {}", path));
     }
 
     fn open_selected(self: &Rc<Self>) {
         match self.selected().as_slice() {
             [entry] => self.activate_entry(entry.clone()),
-            _ => self.notifier.info("Выберите один файл или каталог"),
+            _ => self.notifier.info(tr!("Select a single file or folder")),
         }
     }
 
@@ -1117,14 +1120,14 @@ impl Inner {
         let weak = Rc::downgrade(self);
         dialogs::prompt_text(
             &self.root,
-            "Создать каталог",
-            &format!("Имя нового каталога в {cwd}"),
+            tr!("New Folder"),
+            &tr!("Name of the new folder in {}", cwd),
             "",
-            "Создать",
+            tr!("Create"),
             move |name| {
                 let Some(inner) = weak.upgrade() else { return };
                 if name.contains('/') {
-                    inner.notifier.error("Имя не может содержать «/»");
+                    inner.notifier.error(tr!("The name cannot contain “/”"));
                     return;
                 }
                 inner.send(Command::Mkdir {
@@ -1137,7 +1140,7 @@ impl Inner {
     fn rename_selected(self: &Rc<Self>) {
         let selected = self.selected();
         let [entry] = selected.as_slice() else {
-            self.notifier.info("Для переименования выберите один элемент");
+            self.notifier.info(tr!("Select a single item to rename"));
             return;
         };
         let entry = entry.clone();
@@ -1145,14 +1148,14 @@ impl Inner {
         let weak = Rc::downgrade(self);
         dialogs::prompt_text(
             &self.root,
-            "Переименовать",
-            &format!("Новое имя для «{current_name}»"),
+            tr!("Rename"),
+            &tr!("New name for “{}”", current_name),
             &current_name,
-            "Переименовать",
+            tr!("Rename"),
             move |name| {
                 let Some(inner) = weak.upgrade() else { return };
                 if name.contains('/') {
-                    inner.notifier.error("Имя не может содержать «/»");
+                    inner.notifier.error(tr!("The name cannot contain “/”"));
                     return;
                 }
                 if name == entry.name {
@@ -1170,7 +1173,7 @@ impl Inner {
     fn delete_selected(self: &Rc<Self>) {
         let entries = top_level(self.selected());
         if entries.is_empty() {
-            self.notifier.info("Выберите, что удалить");
+            self.notifier.info(tr!("Select what to delete"));
             return;
         }
         let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
@@ -1178,22 +1181,28 @@ impl Inner {
             .iter()
             .any(|e| e.kind == EntryKind::Dir && !e.is_link);
         let message = if entries.len() == 1 {
-            format!("Удалить «{}» с сервера?", names[0])
+            tr!("Delete “{}” from the Server?", names[0])
         } else {
-            format!("Удалить с сервера элементы: {}?", entries.len())
+            trn!(
+                "Delete {} Item from the Server?",
+                "Delete {} Items from the Server?",
+                entries.len()
+            )
         };
         let mut detail = summarize(&names);
         if has_dirs {
-            detail.push_str("\nКаталоги удаляются вместе со всем содержимым.");
+            detail.push('\n');
+            detail.push_str(tr!("Folders are deleted with all their contents."));
         }
-        detail.push_str("\nЭто действие нельзя отменить.");
+        detail.push('\n');
+        detail.push_str(tr!("This action cannot be undone."));
         let paths: Vec<String> = entries.into_iter().map(|e| e.path).collect();
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             &self.root,
             &message,
             &detail,
-            "Удалить",
+            tr!("Delete"),
             true,
             move || {
                 if let Some(inner) = weak.upgrade() {
@@ -1208,12 +1217,12 @@ impl Inner {
     fn download_selected(self: &Rc<Self>) {
         let entries = self.selected_transferable();
         if entries.is_empty() {
-            self.notifier.info("Выберите файлы или каталоги для скачивания");
+            self.notifier.info(tr!("Select files or folders to download"));
             return;
         }
         let dialog = gtk::FileDialog::builder()
-            .title("Скачать в каталог")
-            .accept_label("Скачать сюда")
+            .title(tr!("Download to Folder"))
+            .accept_label(tr!("Download Here"))
             .modal(true)
             .build();
         let weak = Rc::downgrade(self);
@@ -1225,7 +1234,7 @@ impl Inner {
                 match result {
                     Ok(folder) => match folder.path() {
                         Some(dest) => inner.download_to(entries, dest),
-                        None => inner.notifier.error("Выбранный каталог не локальный"),
+                        None => inner.notifier.error(tr!("The selected folder is not local")),
                     },
                     Err(err) if dialog_dismissed(&err) => {}
                     Err(err) => inner.notifier.error(&err.to_string()),
@@ -1246,7 +1255,7 @@ impl Inner {
         let start = move || {
             if let Some(inner) = weak.upgrade() {
                 inner.start_transfer(
-                    &format!("Скачивание: {}", summarize(&names)),
+                    &tr!("Downloading {}", summarize(&names)),
                     |id| Command::Download {
                         id,
                         sources,
@@ -1262,9 +1271,9 @@ impl Inner {
         } else {
             dialogs::confirm(
                 &self.root,
-                "Заменить существующие локальные файлы?",
-                &format!("В выбранном каталоге уже есть: {}", summarize(&conflicts)),
-                "Заменить",
+                tr!("Replace Existing Local Files?"),
+                &tr!("The selected folder already contains: {}", summarize(&conflicts)),
+                tr!("Replace"),
                 true,
                 start,
             );
@@ -1276,8 +1285,8 @@ impl Inner {
         let window = self.window();
         if folder {
             let dialog = gtk::FileDialog::builder()
-                .title("Загрузить каталог")
-                .accept_label("Загрузить")
+                .title(tr!("Upload Folder"))
+                .accept_label(tr!("Upload"))
                 .modal(true)
                 .build();
             dialog.select_folder(window.as_ref(), gio::Cancellable::NONE, move |result| {
@@ -1290,8 +1299,8 @@ impl Inner {
             });
         } else {
             let dialog = gtk::FileDialog::builder()
-                .title("Загрузить файлы")
-                .accept_label("Загрузить")
+                .title(tr!("Upload Files"))
+                .accept_label(tr!("Upload"))
                 .modal(true)
                 .build();
             dialog.open_multiple(window.as_ref(), gio::Cancellable::NONE, move |result| {
@@ -1320,7 +1329,7 @@ impl Inner {
             let state = self.state.borrow();
             if state.cwd.is_empty() {
                 drop(state);
-                self.notifier.error("Нет SFTP-соединения");
+                self.notifier.error(tr!("No SFTP connection"));
                 return;
             }
             let existing: Vec<String> = state
@@ -1346,7 +1355,7 @@ impl Inner {
         let start = move || {
             if let Some(inner) = weak.upgrade() {
                 inner.start_transfer(
-                    &format!("Загрузка: {}", summarize(&names)),
+                    &tr!("Uploading {}", summarize(&names)),
                     |id| Command::Upload {
                         id,
                         sources: paths,
@@ -1362,9 +1371,9 @@ impl Inner {
         } else {
             dialogs::confirm(
                 &self.root,
-                "Заменить существующие файлы на сервере?",
-                &format!("В {cwd} уже есть: {}", summarize(&conflicts)),
-                "Заменить",
+                tr!("Replace Existing Files on the Server?"),
+                &tr!("{} already contains: {}", cwd, summarize(&conflicts)),
+                tr!("Replace"),
                 true,
                 start,
             );
@@ -1389,7 +1398,7 @@ impl Inner {
             .build();
         let cancel = gtk::Button::builder()
             .icon_name("process-stop-symbolic")
-            .tooltip_text("Отменить передачу")
+            .tooltip_text(tr!("Cancel transfer"))
             .valign(gtk::Align::Center)
             .css_classes(["flat", "circular"])
             .build();
@@ -1398,7 +1407,7 @@ impl Inner {
         header.append(&cancel);
         let bar = gtk::ProgressBar::builder()
             .show_text(true)
-            .text("Подготовка…")
+            .text(tr!("Preparing…"))
             .margin_end(6)
             .build();
         let widget = gtk::Box::new(gtk::Orientation::Vertical, 2);
@@ -1447,7 +1456,7 @@ impl Inner {
             done as f64 / total as f64
         };
         row.bar.set_fraction(fraction.clamp(0.0, 1.0));
-        let amounts = format!("{} из {}", format_size(done), format_size(total));
+        let amounts = tr!("{} of {}", format_size(done), format_size(total));
         let text = if current.is_empty() {
             amounts
         } else {
@@ -1476,8 +1485,8 @@ impl Inner {
                         .iter()
                         .map(|path| sftp::base_name(path).to_string())
                         .collect();
-                    self.notifier.info(&format!(
-                        "{} — пропущено (ссылки на каталоги и спецфайлы): {}",
+                    self.notifier.info(&tr!(
+                        "{} — skipped (links to folders and special files): {}",
                         row.title,
                         summarize(&names)
                     ));
@@ -1504,7 +1513,7 @@ impl Inner {
         let dir = self.scratch_dir.join(format!("{kind}-{seq}"));
         session::ensure_private_dir(&self.scratch_dir)
             .and_then(|()| session::ensure_private_dir(&dir))
-            .map_err(|err| format!("Не удалось создать временный каталог: {err}"))?;
+            .map_err(|err| tr!("Could not create a temporary folder: {}", err))?;
         Ok(dir)
     }
 
@@ -1522,13 +1531,13 @@ impl Inner {
             Box::pin(async move {
                 let inner = weak
                     .upgrade()
-                    .ok_or_else(|| "вкладка закрыта".to_string())?;
+                    .ok_or_else(|| tr!("the tab is closed").to_string())?;
                 let dir = inner.new_scratch_dir("drag")?;
                 let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
                 let sources: Vec<String> = entries.into_iter().map(|e| e.path).collect();
                 let (tx, rx) = async_channel::bounded(1);
                 inner.start_transfer(
-                    &format!("Перетаскивание: {}", summarize(&names)),
+                    &tr!("Dragging {}", summarize(&names)),
                     |id| Command::Download {
                         id,
                         sources,
@@ -1544,9 +1553,9 @@ impl Inner {
                     Ok(TransferOutcome::Completed { .. }) => {
                         Ok(names.iter().map(|name| dir.join(name)).collect())
                     }
-                    Ok(TransferOutcome::Cancelled) => Err("передача отменена".to_string()),
+                    Ok(TransferOutcome::Cancelled) => Err(tr!("the transfer was cancelled").to_string()),
                     Ok(TransferOutcome::Failed(error)) => Err(error),
-                    Err(_) => Err("передача прервана".to_string()),
+                    Err(_) => Err(tr!("the transfer was interrupted").to_string()),
                 }
             })
         }));
@@ -1575,9 +1584,12 @@ impl Inner {
             let size = format_size(entry.size.unwrap_or(0));
             dialogs::confirm(
                 &self.root,
-                &format!("Открыть «{}»?", entry.name),
-                &format!("Файл большой ({size}); он будет скачан целиком во временный каталог."),
-                "Открыть",
+                &tr!("Open “{}”?", entry.name),
+                &tr!(
+                    "The file is large ({}); it will be downloaded in full to a temporary folder.",
+                    size
+                ),
+                tr!("Open"),
                 false,
                 move || {
                     if let Some(inner) = weak.upgrade() {
@@ -1602,7 +1614,7 @@ impl Inner {
         let remote = entry.path.clone();
         let weak = Rc::downgrade(self);
         self.start_transfer(
-            &format!("Открытие: {}", entry.name),
+            &tr!("Opening {}", entry.name),
             |id| Command::Download {
                 id,
                 sources: vec![entry.path],
@@ -1625,9 +1637,10 @@ impl Inner {
             gio::File::for_path(dir)
                 .monitor_directory(gio::FileMonitorFlags::NONE, gio::Cancellable::NONE)
                 .map_err(|err| {
-                    self.notifier.error(&format!(
-                        "Не удалось включить слежение за изменениями «{}»: {err}",
-                        local.display()
+                    self.notifier.error(&tr!(
+                        "Could not watch “{}” for changes: {}",
+                        local.display(),
+                        err
                     ));
                 })
                 .ok()
@@ -1689,7 +1702,7 @@ impl Inner {
         let weak_watch = Rc::downgrade(watch);
         let (local, remote) = (watch.local.clone(), watch.remote.clone());
         self.start_transfer(
-            &format!("Сохранение на сервер: {name}"),
+            &tr!("Saving {} to the server", name),
             |id| Command::UploadFile { id, local, remote },
             Some(sftp::parent_remote(&watch.remote)),
             Some(Box::new(move |outcome| {
@@ -1700,7 +1713,7 @@ impl Inner {
                 match outcome {
                     TransferOutcome::Completed { .. } => inner
                         .notifier
-                        .info(&format!("Сохранено на сервер: {}", sftp::base_name(&watch.remote))),
+                        .info(&tr!("Saved to the server: {}", sftp::base_name(&watch.remote))),
                     // Не удалось: при следующем сохранении попробуем снова.
                     _ => watch.stamp.set(None),
                 }
@@ -1726,7 +1739,7 @@ impl Inner {
             }
             Err(err) => self
                 .notifier
-                .error(&format!("Не удалось запустить xdg-open: {err}")),
+                .error(&tr!("Could not start {}: {}", "xdg-open", err)),
         }
     }
 }

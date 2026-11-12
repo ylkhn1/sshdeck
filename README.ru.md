@@ -114,8 +114,8 @@ Rust удобнее всего поставить через [rustup](https://ru
 ### Сборка и запуск
 
 ```sh
-git clone https://github.com/ylkhn1/mobaxterm-for-linux.git
-cd mobaxterm-for-linux
+git clone https://github.com/ylkhn1/sshdeck.git
+cd sshdeck
 cargo build --release
 
 ./target/release/sshdeck            # окно со списком хостов

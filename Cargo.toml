@@ -2,7 +2,7 @@
 name = "sshdeck"
 version = "0.1.0"
 edition = "2024"
-description = "Лёгкий SSH-клиент для Linux: SFTP-дерево файлов и терминал в одном окне"
+description = "Lightweight native SSH client for Linux: SFTP file tree, terminal and database client in one window"
 license = "MIT"
 
 [dependencies]

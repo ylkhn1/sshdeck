@@ -73,7 +73,7 @@ impl SessionTab {
         let status = StatusBar::new();
 
         let exit_banner = adw::Banner::builder()
-            .button_label("Переподключиться")
+            .button_label(tr!("Reconnect"))
             .revealed(false)
             .build();
 
@@ -115,16 +115,16 @@ impl SessionTab {
             tab.term.connect_child_exited(move |_, status| {
                 let Some(tab) = weak.upgrade() else { return };
                 match terminal::exit_code(status) {
-                    Some(SSH_ERROR_CODE) => tab.show_exit(
-                        "Соединение не установлено или разорвано — подробности в терминале",
-                    ),
+                    Some(SSH_ERROR_CODE) => tab.show_exit(tr!(
+                        "Could not connect, or the connection was lost — see the terminal for details"
+                    )),
                     Some(_) => {
                         // Вкладку нельзя разрушать прямо из обработчика
                         // сигнала её же терминала.
                         let on_finished = Rc::clone(&on_finished);
                         glib::idle_add_local_once(move || on_finished());
                     }
-                    None => tab.show_exit("ssh был прерван сигналом"),
+                    None => tab.show_exit(tr!("ssh was terminated by a signal")),
                 }
             });
         }
@@ -285,23 +285,25 @@ impl SessionTab {
         let ssh_dir = glib::home_dir().join(".ssh");
         let target = self.session.target().to_string();
         let key_note = match keysetup::existing_key(&ssh_dir) {
-            Some(public) => format!("Будет использован ваш ключ {}.", short_path(&public)),
-            None => format!(
-                "Локального ключа пока нет: будет создан {} (ed25519, без парольной фразы).",
+            Some(public) => tr!("Your key {} will be used.", short_path(&public)),
+            None => tr!(
+                "There is no local key yet: {} will be created (ed25519, no passphrase).",
                 short_path(&keysetup::new_key_path(&ssh_dir))
             ),
         };
-        let body = format!(
-            "{key_note}\n\nЕго открытая часть будет дописана в ~/.ssh/authorized_keys \
-             на {target}. После этого ssh будет входить на этот сервер по ключу, \
-             не спрашивая пароль. Сам пароль приложение не видит и не сохраняет."
+        let body = tr!(
+            "{}\n\nIts public part will be added to ~/.ssh/authorized_keys on {}. After that, \
+             ssh will log in to this server with the key instead of asking for a password. \
+             The app never sees or stores the password itself.",
+            key_note,
+            target
         );
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             self.widget(),
-            "Настроить вход без пароля?",
+            tr!("Set Up Passwordless Login?"),
             &body,
-            "Настроить",
+            tr!("Set Up"),
             false,
             move || {
                 let Some(tab) = weak.upgrade() else { return };
@@ -316,24 +318,29 @@ impl SessionTab {
                         Ok(Ok(outcome)) => {
                             let key = short_path(&outcome.public_key);
                             let created = if outcome.created {
-                                format!("Создан новый ключ {key}.\n\n")
+                                tr!("A new key {} was created.", key) + "\n\n"
                             } else {
                                 String::new()
                             };
                             let (heading, body) = match outcome.installed {
                                 Installed::Added => (
-                                    "Вход без пароля настроен",
-                                    format!(
-                                        "{created}Ключ {key} установлен на {target}. \
-                                         Следующий вход пройдёт без пароля."
-                                    ),
+                                    tr!("Passwordless Login Enabled"),
+                                    created
+                                        + &tr!(
+                                            "Key {} is installed on {}. Next time you will log in \
+                                             without a password.",
+                                            key,
+                                            target
+                                        ),
                                 ),
                                 Installed::AlreadyPresent => (
-                                    "Ключ уже установлен",
-                                    format!(
-                                        "{created}Ключ {key} уже есть на {target}, \
-                                         ничего менять не пришлось."
-                                    ),
+                                    tr!("Key Already Installed"),
+                                    created
+                                        + &tr!(
+                                            "Key {} is already on {}; nothing had to be changed.",
+                                            key,
+                                            target
+                                        ),
                                 ),
                             };
                             dialogs::message(tab.widget(), heading, &body);
@@ -341,7 +348,7 @@ impl SessionTab {
                         Ok(Err(message)) => tab.notifier.error(&message),
                         Err(_) => tab
                             .notifier
-                            .error("Настройка входа по ключу прервалась из-за внутренней ошибки"),
+                            .error(tr!("Key login setup was interrupted by an internal error")),
                     }
                 });
             },
@@ -356,14 +363,15 @@ impl SessionTab {
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             self.widget(),
-            "Включить слежение за cd?",
-            &format!(
-                "Чтобы панель файлов переходила вслед за cd в терминале, оболочка на \
-                 {target} должна сообщать текущий каталог. fish делает это сам. Для bash и \
-                 zsh в конец ~/.bashrc или ~/.zshrc на сервере будет дописано три строки \
-                 с пометкой sshdeck-cwd; они действуют в новых сеансах."
+            tr!("Follow cd in the File Panel?"),
+            &tr!(
+                "For the file panel to follow cd in the terminal, the shell on {} must report \
+                 the current folder. fish does this by itself. For bash and zsh, three lines \
+                 marked sshdeck-cwd will be appended to ~/.bashrc or ~/.zshrc on the server; \
+                 they take effect in new sessions.",
+                target
             ),
-            "Включить",
+            tr!("Enable"),
             false,
             move || {
                 let Some(tab) = weak.upgrade() else { return };
@@ -375,22 +383,26 @@ impl SessionTab {
                     let Some(tab) = weak.upgrade() else { return };
                     let (heading, body) = match result {
                         Ok(Ok(CwdTracking::Added)) => (
-                            "Слежение включено",
-                            "Фрагмент дописан в файл настроек оболочки. Он заработает после \
-                             нового входа: закройте вкладку и подключитесь снова.",
+                            tr!("Following cd Enabled"),
+                            tr!(
+                                "The snippet was added to the shell settings file. It takes effect \
+                                 after you log in again: close the tab and reconnect."
+                            ),
                         ),
                         Ok(Ok(CwdTracking::Present)) => (
-                            "Слежение уже включено",
-                            "Фрагмент sshdeck-cwd уже есть в файле настроек оболочки.",
+                            tr!("Following cd Already Enabled"),
+                            tr!("The sshdeck-cwd snippet is already in the shell settings file."),
                         ),
                         Ok(Ok(CwdTracking::Builtin)) => (
-                            "Ничего менять не нужно",
-                            "На сервере оболочка fish: она сама сообщает текущий каталог.",
+                            tr!("Nothing to Change"),
+                            tr!("The server uses fish, which reports the current folder by itself."),
                         ),
                         Ok(Ok(CwdTracking::Unsupported)) => (
-                            "Оболочка не поддерживается",
-                            "Автоматически настраиваются только bash и zsh. Файлы сервера \
-                             не изменены.",
+                            tr!("Shell Not Supported"),
+                            tr!(
+                                "Only bash and zsh can be set up automatically. No files on the \
+                                 server were changed."
+                            ),
                         ),
                         Ok(Err(message)) => {
                             tab.notifier.error(&message);
@@ -398,7 +410,7 @@ impl SessionTab {
                         }
                         Err(_) => {
                             tab.notifier
-                                .error("Настройка прервалась из-за внутренней ошибки");
+                                .error(tr!("Setup was interrupted by an internal error"));
                             return;
                         }
                     };
@@ -414,7 +426,7 @@ impl SessionTab {
         let weak = Rc::downgrade(self);
         terminal::spawn(&self.term, &self.session.terminal_argv(), move |error| {
             if let Some(tab) = weak.upgrade() {
-                tab.show_exit(&format!("Не удалось запустить ssh: {error}"));
+                tab.show_exit(&tr!("Could not start ssh: {}", error));
             }
         });
     }

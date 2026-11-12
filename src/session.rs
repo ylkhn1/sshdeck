@@ -38,7 +38,7 @@ pub fn runtime_dir() -> io::Result<PathBuf> {
         .ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::NotFound,
-                "переменная XDG_RUNTIME_DIR не задана",
+                tr!("XDG_RUNTIME_DIR is not set"),
             )
         })?;
     let dir = base.join("sshdeck");
@@ -116,10 +116,10 @@ pub fn config_override() -> Option<PathBuf> {
 /// никакие параметры не принимаются, а сам адрес не может начинаться с `-`
 /// и содержать пробелы или управляющие символы.
 pub fn validate_target(input: &str) -> Result<String, String> {
-    const EMPTY: &str = "Введите адрес в виде user@host";
+    let empty = || tr!("Enter an address like user@host").to_string();
 
     if input.trim().chars().any(char::is_control) {
-        return Err("Адрес содержит недопустимые символы".to_string());
+        return Err(tr!("The address contains invalid characters").to_string());
     }
     let mut tokens: Vec<&str> = input.split_whitespace().collect();
     if tokens.len() > 1 && tokens[0] == "ssh" {
@@ -134,32 +134,33 @@ pub fn validate_target(input: &str) -> Result<String, String> {
             let value = if inline.is_empty() {
                 tokens
                     .next()
-                    .ok_or_else(|| "После -p нужно указать порт".to_string())?
+                    .ok_or_else(|| tr!("A port number must follow -p").to_string())?
             } else {
                 inline
             };
             if port.is_some() {
-                return Err("Порт указан дважды".to_string());
+                return Err(tr!("The port is specified twice").to_string());
             }
             port = Some(parse_port(value)?);
         } else if token.starts_with('-') {
-            return Err(format!(
-                "Параметр «{token}» не поддерживается: можно указать только -p <порт>"
+            return Err(tr!(
+                "Option “{}” is not supported: only -p <port> is allowed",
+                token
             ));
         } else if destination.is_some() {
-            return Err("Адрес не должен содержать пробелов".to_string());
+            return Err(tr!("The address must not contain spaces").to_string());
         } else {
             destination = Some(token);
         }
     }
-    let destination = destination.ok_or_else(|| EMPTY.to_string())?;
+    let destination = destination.ok_or_else(empty)?;
 
     let (bare, is_uri) = match destination.strip_prefix("ssh://") {
         Some(rest) => (rest, true),
         None => (destination, false),
     };
     if bare.is_empty() {
-        return Err(EMPTY.to_string());
+        return Err(empty());
     }
 
     // `user@host:2222` без схемы. Адрес IPv6 без скобок содержит несколько
@@ -173,7 +174,7 @@ pub fn validate_target(input: &str) -> Result<String, String> {
                 && digits.chars().all(|c| c.is_ascii_digit()) =>
         {
             if port.is_some() {
-                return Err("Порт указан дважды".to_string());
+                return Err(tr!("The port is specified twice").to_string());
             }
             (host, Some(parse_port(digits)?))
         }
@@ -184,14 +185,14 @@ pub fn validate_target(input: &str) -> Result<String, String> {
         return Ok(destination.to_string());
     };
     if is_uri && uri_has_port(bare) {
-        return Err("Порт указан дважды".to_string());
+        return Err(tr!("The port is specified twice").to_string());
     }
     let (user, host) = match bare.rsplit_once('@') {
         Some((user, host)) => (Some(user), host),
         None => (None, bare),
     };
     if host.is_empty() {
-        return Err(EMPTY.to_string());
+        return Err(empty());
     }
     // В URI адрес IPv6 записывается в квадратных скобках.
     let host = if host.contains(':') && !host.starts_with('[') {
@@ -208,7 +209,7 @@ pub fn validate_target(input: &str) -> Result<String, String> {
 fn parse_port(value: &str) -> Result<u16, String> {
     match value.parse::<u16>() {
         Ok(port) if port != 0 => Ok(port),
-        _ => Err(format!("Неверный порт: «{value}» (нужно число от 1 до 65535)")),
+        _ => Err(tr!("Invalid port “{}” (must be a number from 1 to 65535)", value)),
     }
 }
 

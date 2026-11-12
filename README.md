@@ -114,8 +114,8 @@ Install Rust with [rustup](https://rustup.rs/).
 ### Build and run
 
 ```sh
-git clone https://github.com/ylkhn1/mobaxterm-for-linux.git
-cd mobaxterm-for-linux
+git clone https://github.com/ylkhn1/sshdeck.git
+cd sshdeck
 cargo build --release
 
 ./target/release/sshdeck            # window with the host list

@@ -36,7 +36,7 @@ impl SnippetsButton {
             .child(
                 &adw::ButtonContent::builder()
                     .icon_name("list-add-symbolic")
-                    .label("Добавить команду…")
+                    .label(tr!("Add Command…"))
                     .build(),
             )
             .css_classes(["flat"])
@@ -49,7 +49,7 @@ impl SnippetsButton {
         let popover = gtk::Popover::builder().child(&content).build();
         let button = gtk::MenuButton::builder()
             .icon_name("utilities-terminal-symbolic")
-            .tooltip_text("Сохранённые команды")
+            .tooltip_text(tr!("Saved commands"))
             .popover(&popover)
             .build();
 
@@ -91,10 +91,10 @@ impl Inner {
         if snippets.is_empty() {
             self.list.append(
                 &gtk::Label::builder()
-                    .label(
-                        "Здесь будут ваши команды. Щелчок по команде выполняет её \
-                         в терминале текущей вкладки.",
-                    )
+                    .label(tr!(
+                        "Your commands will appear here. Click a command to run it \
+                         in the terminal of the current tab."
+                    ))
                     .wrap(true)
                     .xalign(0.0)
                     .max_width_chars(36)
@@ -128,18 +128,18 @@ impl Inner {
             let run_button = gtk::Button::builder()
                 .child(&labels)
                 .hexpand(true)
-                .tooltip_text(format!("Выполнить в терминале:\n{}", snippet.command))
+                .tooltip_text(tr!("Run in the terminal:\n{}", snippet.command))
                 .css_classes(["flat"])
                 .build();
             let edit_button = gtk::Button::builder()
                 .icon_name("document-edit-symbolic")
-                .tooltip_text("Изменить")
+                .tooltip_text(tr!("Edit"))
                 .valign(gtk::Align::Center)
                 .css_classes(["flat"])
                 .build();
             let delete_button = gtk::Button::builder()
                 .icon_name("user-trash-symbolic")
-                .tooltip_text("Удалить")
+                .tooltip_text(tr!("Delete"))
                 .valign(gtk::Align::Center)
                 .css_classes(["flat"])
                 .build();
@@ -177,14 +177,14 @@ impl Inner {
         let done = self.run.borrow().as_ref().is_some_and(|run| run(command));
         if !done {
             self.notifier
-                .info("Нет открытой вкладки: команду некуда отправить");
+                .info(tr!("No open tab to send the command to"));
         }
     }
 
     fn save(self: &Rc<Self>) {
         if let Err(err) = self.settings.borrow().save() {
             self.notifier
-                .error(&format!("Не удалось сохранить настройки: {err}"));
+                .error(&tr!("Could not save settings: {}", err));
         }
         self.rebuild();
     }
@@ -197,9 +197,9 @@ impl Inner {
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             &self.button,
-            "Удалить команду?",
-            &format!("«{}» исчезнет из списка сохранённых команд.", snippet.name),
-            "Удалить",
+            tr!("Delete Command?"),
+            &tr!("“{}” will be removed from the saved commands.", snippet.name),
+            tr!("Delete"),
             true,
             move || {
                 let Some(inner) = weak.upgrade() else { return };
@@ -221,12 +221,12 @@ impl Inner {
         self.popover.popdown();
 
         let name_row = adw::EntryRow::builder()
-            .title("Название")
+            .title(tr!("Name"))
             .text(original.as_ref().map_or("", |s| s.name.as_str()))
             .activates_default(true)
             .build();
         let command_row = adw::EntryRow::builder()
-            .title("Команда")
+            .title(tr!("Command"))
             .text(original.as_ref().map_or("", |s| s.command.as_str()))
             .activates_default(true)
             .build();
@@ -241,16 +241,16 @@ impl Inner {
 
         let dialog = adw::AlertDialog::new(
             Some(if original.is_some() {
-                "Изменить команду"
+                tr!("Edit Command")
             } else {
-                "Новая команда"
+                tr!("New Command")
             }),
-            Some(
-                "Щелчок по команде в списке набирает её в терминале текущей вкладки \
-                 и нажимает Enter.",
-            ),
+            Some(tr!(
+                "Clicking a command in the list types it into the terminal of the current tab \
+                 and presses Enter."
+            )),
         );
-        dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, "Сохранить")]);
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Save"))]);
         dialog.set_close_response(CANCEL);
         dialog.set_default_response(Some(ACCEPT));
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);

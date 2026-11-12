@@ -54,12 +54,12 @@ impl StatusBar {
             row.append(&cell);
             value
         };
-        let cpu = item("CPU", "Загрузка процессора сервера");
-        let memory = item("ОЗУ", "Занято памяти из всей памяти сервера");
-        let disk = item("Диск /", "Заполненность корневого раздела");
-        let network = item("Сеть", "Приём и передача по всем интерфейсам сервера");
-        let uptime = item("Аптайм", "Время работы сервера без перезагрузки");
-        let load = item("Нагрузка", "Средняя нагрузка за минуту (load average)");
+        let cpu = item("CPU", tr!("Server CPU usage"));
+        let memory = item(tr!("RAM"), tr!("Memory in use out of the server’s total memory"));
+        let disk = item(tr!("Disk /"), tr!("Root partition usage"));
+        let network = item(tr!("Network"), tr!("Receive and send rates across all server interfaces"));
+        let uptime = item(tr!("Uptime"), tr!("Time since the server was last rebooted"));
+        let load = item(tr!("Load"), tr!("One-minute load average"));
 
         // Прокрутка без полосы: строка не задаёт минимальную ширину окна.
         let root = gtk::ScrolledWindow::builder()
@@ -149,10 +149,11 @@ impl Inner {
 
         match &usage {
             Some(usage) => {
-                self.cpu.set_text(&format!("{:.0} %", usage.cpu_percent));
+                self.cpu
+                    .set_text(&tr!("{}%", format!("{:.0}", usage.cpu_percent)));
                 mark_level(&self.cpu, usage.cpu_percent);
-                self.network.set_text(&format!(
-                    "↓ {}/с  ↑ {}/с",
+                self.network.set_text(&tr!(
+                    "↓ {}/s  ↑ {}/s",
                     format_size(usage.rx_per_sec as u64),
                     format_size(usage.tx_per_sec as u64)
                 ));
@@ -176,13 +177,14 @@ impl Inner {
         }
         match sample.disk_percent() {
             Some(percent) => {
-                self.disk.set_text(&format!("{percent:.0} %"));
+                self.disk.set_text(&tr!("{}%", format!("{percent:.0}")));
                 mark_level(&self.disk, percent);
             }
             None => self.disk.set_text("—"),
         }
-        self.load
-            .set_text(&format!("{:.2}", sample.load1).replace('.', ","));
+        let load = format!("{:.2}", sample.load1)
+            .replace('.', &crate::i18n::decimal_separator().to_string());
+        self.load.set_text(&load);
         self.uptime
             .set_text(&sysstat::format_uptime(sample.uptime_secs));
 

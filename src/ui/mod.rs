@@ -75,12 +75,12 @@ impl Notifier {
             .priority(priority)
             .build();
         if truncated {
-            toast.set_button_label(Some("Подробнее"));
+            toast.set_button_label(Some(tr!("Details")));
             let overlay = self.overlay.downgrade();
             let full = text.to_string();
             toast.connect_button_clicked(move |_| {
                 if let Some(overlay) = overlay.upgrade() {
-                    dialogs::message(&overlay, "Сообщение", &full);
+                    dialogs::message(&overlay, tr!("Message"), &full);
                 }
             });
         }
@@ -101,11 +101,11 @@ fn shorten(text: &str) -> (String, bool) {
     (short, true)
 }
 
-/// Размер в человекочитаемом виде: `512 Б`, `1,4 МБ`.
+/// Размер в человекочитаемом виде: `512 B`, `1.4 MB` (`1,4 МБ`).
 pub fn format_size(bytes: u64) -> String {
-    const UNITS: [&str; 5] = ["Б", "КБ", "МБ", "ГБ", "ТБ"];
+    const UNITS: [&str; 5] = [n_!("B"), n_!("KB"), n_!("MB"), n_!("GB"), n_!("TB")];
     if bytes < 1024 {
-        return format!("{bytes} Б");
+        return format!("{bytes} {}", crate::i18n::tr(UNITS[0]));
     }
     let mut value = bytes as f64;
     let mut unit = 0;
@@ -113,7 +113,8 @@ pub fn format_size(bytes: u64) -> String {
         value /= 1024.0;
         unit += 1;
     }
-    format!("{value:.1} {}", UNITS[unit]).replace('.', ",")
+    let number = format!("{value:.1}").replace('.', &crate::i18n::decimal_separator().to_string());
+    format!("{number} {}", crate::i18n::tr(UNITS[unit]))
 }
 
 /// Время изменения в местном часовом поясе: для этого года — день, месяц
@@ -217,12 +218,12 @@ mod tests {
 
     #[test]
     fn sizes() {
-        assert_eq!(format_size(0), "0 Б");
-        assert_eq!(format_size(1023), "1023 Б");
-        assert_eq!(format_size(1024), "1,0 КБ");
-        assert_eq!(format_size(1536), "1,5 КБ");
-        assert_eq!(format_size(5 * 1024 * 1024), "5,0 МБ");
-        assert_eq!(format_size(3 * 1024 * 1024 * 1024), "3,0 ГБ");
+        assert_eq!(format_size(0), "0 B");
+        assert_eq!(format_size(1023), "1023 B");
+        assert_eq!(format_size(1024), "1.0 KB");
+        assert_eq!(format_size(1536), "1.5 KB");
+        assert_eq!(format_size(5 * 1024 * 1024), "5.0 MB");
+        assert_eq!(format_size(3 * 1024 * 1024 * 1024), "3.0 GB");
     }
 
     #[test]

@@ -191,13 +191,13 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 pub(crate) fn error_text(err: &(dyn std::error::Error + 'static)) -> String {
     if let Some(SftpError::SftpError(kind, message)) = err.downcast_ref::<SftpError>() {
         return match kind {
-            SftpErrorKind::NoSuchFile => "нет такого файла или каталога".to_string(),
-            SftpErrorKind::PermDenied => "недостаточно прав".to_string(),
-            SftpErrorKind::OpUnsupported => "сервер не поддерживает эту операцию".to_string(),
+            SftpErrorKind::NoSuchFile => tr!("no such file or folder").to_string(),
+            SftpErrorKind::PermDenied => tr!("permission denied").to_string(),
+            SftpErrorKind::OpUnsupported => tr!("the server does not support this operation").to_string(),
             // «Failure» — общий отказ без подробностей: каталог не пуст, имя
             // занято, кончилось место и т. п.
-            SftpErrorKind::Failure => "сервер отклонил операцию".to_string(),
-            _ => format!("ошибка сервера: {}", message.get().0),
+            SftpErrorKind::Failure => tr!("the server rejected the operation").to_string(),
+            _ => tr!("server error: {}", message.get().0),
         };
     }
     let mut text = err.to_string();
@@ -301,7 +301,7 @@ async fn idle(
 }
 
 fn reject(command: Command, events: &Sender<Event>) {
-    let message = "Нет SFTP-соединения".to_string();
+    let message = tr!("No SFTP connection").to_string();
     let event = match command {
         Command::Navigate { path } => Event::Navigated {
             requested: path,
@@ -359,10 +359,10 @@ async fn connect(session: &Session) -> Result<(Connection, String), String> {
         .stderr(Stdio::piped())
         .kill_on_drop(true)
         .spawn()
-        .map_err(|err| format!("Не удалось запустить ssh: {err}"))?;
+        .map_err(|err| tr!("Could not start ssh: {}", err))?;
 
     let (Some(stdin), Some(stdout)) = (child.stdin.take(), child.stdout.take()) else {
-        return Err("Не удалось получить каналы ввода-вывода ssh".to_string());
+        return Err(tr!("Could not get the ssh input/output pipes").to_string());
     };
 
     let stderr = Arc::new(Mutex::new(String::new()));
@@ -398,10 +398,10 @@ async fn connect(session: &Session) -> Result<(Connection, String), String> {
             } else {
                 reported
             };
-            return Err(format!("Не удалось открыть SFTP-сессию: {detail}"));
+            return Err(tr!("Could not open an SFTP session: {}", detail));
         }
         Err(_) => {
-            return Err(with_stderr("Сервер не ответил на запрос SFTP".to_string(), &stderr).await);
+            return Err(with_stderr(tr!("The server did not respond to the SFTP request").to_string(), &stderr).await);
         }
     };
 
@@ -468,8 +468,8 @@ async fn serve(
             },
             status = child.wait() => {
                 let base = match status {
-                    Ok(status) => format!("ssh завершился ({status})"),
-                    Err(err) => format!("ssh завершился: {err}"),
+                    Ok(status) => tr!("ssh exited ({})", status),
+                    Err(err) => tr!("ssh exited: {}", err),
                 };
                 break ServeEnd::Lost(with_stderr(base, &stderr).await);
             }
@@ -512,8 +512,8 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
         Command::Mkdir { path } => {
             tokio::spawn(async move {
                 let error = sftp.fs().create_dir(&path).await.err().map(|e| {
-                    format!(
-                        "Не удалось создать каталог «{}»: {}",
+                    tr!(
+                        "Could not create folder “{}”: {}",
                         base_name(&path),
                         error_text(&e)
                     )
@@ -532,7 +532,7 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
                 let error = rename(&sftp, &from, &to)
                     .await
                     .err()
-                    .map(|e| format!("Не удалось переименовать «{}»: {e}", base_name(&from)));
+                    .map(|e| tr!("Could not rename “{}”: {}", base_name(&from), e));
                 let mut refresh = vec![parent_remote(&from)];
                 let to_parent = parent_remote(&to);
                 if !refresh.contains(&to_parent) {
@@ -551,8 +551,8 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
                         refresh.push(parent);
                     }
                     if let Err(err) = remove_recursive(&sftp, path).await {
-                        error = Some(format!(
-                            "Не удалось удалить «{}»: {}",
+                        error = Some(tr!(
+                            "Could not delete “{}”: {}",
                             base_name(path),
                             error_text(&err)
                         ));
@@ -611,7 +611,7 @@ fn spawn_transfer(
                 skipped: std::mem::take(&mut job.skipped),
             },
             Err(transfer::Abort::Cancelled) if transfers.lost.load(Ordering::SeqCst) => {
-                TransferOutcome::Failed("Соединение потеряно".to_string())
+                TransferOutcome::Failed(tr!("Connection lost").to_string())
             }
             Err(transfer::Abort::Cancelled) => TransferOutcome::Cancelled,
             Err(transfer::Abort::Failed(message)) => TransferOutcome::Failed(message),
@@ -691,7 +691,7 @@ pub(crate) async fn list_dir(sftp: &Sftp, path: &str) -> Result<Vec<RemoteEntry>
 async fn rename(sftp: &Sftp, from: &str, to: &str) -> Result<(), String> {
     let mut fs = sftp.fs();
     if fs.symlink_metadata(to).await.is_ok() {
-        return Err(format!("имя «{}» уже занято", base_name(to)));
+        return Err(tr!("the name “{}” is already taken", base_name(to)));
     }
     fs.rename(from, to).await.map_err(|e| error_text(&e))
 }

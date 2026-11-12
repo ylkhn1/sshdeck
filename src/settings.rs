@@ -13,6 +13,8 @@ pub const DEFAULT_FONT: &str = "Monospace 10";
 pub const DEFAULT_THEME: &str = "system";
 /// Оформление окна: `system`, `light` или `dark`.
 pub const DEFAULT_SCHEME: &str = "system";
+/// Язык интерфейса: `system` (как в системе) или код из `i18n::LANGUAGES`.
+pub const DEFAULT_LANGUAGE: &str = "system";
 
 const GROUP_TERMINAL: &str = "terminal";
 const KEY_FONT: &str = "font";
@@ -20,6 +22,7 @@ const KEY_THEME: &str = "theme";
 const GROUP_APPEARANCE: &str = "appearance";
 const KEY_SCHEME: &str = "scheme";
 const KEY_FILES_PANEL: &str = "files_panel";
+const KEY_LANGUAGE: &str = "language";
 const GROUP_SNIPPET: &str = "snippet";
 const KEY_NAME: &str = "name";
 const KEY_COMMAND: &str = "command";
@@ -40,6 +43,8 @@ pub struct Settings {
     pub color_scheme: String,
     /// Видна ли панель файлов во вкладках.
     pub show_files: bool,
+    /// Язык интерфейса; применяется при следующем запуске.
+    pub language: String,
     pub snippets: Vec<Snippet>,
 }
 
@@ -50,6 +55,7 @@ impl Default for Settings {
             terminal_theme: DEFAULT_THEME.to_string(),
             color_scheme: DEFAULT_SCHEME.to_string(),
             show_files: true,
+            language: DEFAULT_LANGUAGE.to_string(),
             snippets: Vec::new(),
         }
     }
@@ -107,6 +113,9 @@ impl Settings {
         if let Ok(show) = key_file.boolean(GROUP_APPEARANCE, KEY_FILES_PANEL) {
             settings.show_files = show;
         }
+        if let Some(language) = field(GROUP_APPEARANCE, KEY_LANGUAGE) {
+            settings.language = language;
+        }
         for group in key_file.groups().iter() {
             let group = group.as_str();
             if !group.starts_with(GROUP_SNIPPET) {
@@ -126,6 +135,7 @@ impl Settings {
         key_file.set_string(GROUP_TERMINAL, KEY_THEME, &self.terminal_theme);
         key_file.set_string(GROUP_APPEARANCE, KEY_SCHEME, &self.color_scheme);
         key_file.set_boolean(GROUP_APPEARANCE, KEY_FILES_PANEL, self.show_files);
+        key_file.set_string(GROUP_APPEARANCE, KEY_LANGUAGE, &self.language);
         for (index, snippet) in self.snippets.iter().enumerate() {
             let group = format!("{GROUP_SNIPPET}-{}", index + 1);
             key_file.set_string(&group, KEY_NAME, &snippet.name);
@@ -155,6 +165,7 @@ mod tests {
         assert_eq!(settings.terminal_font, "JetBrains Mono 12");
         assert_eq!(settings.terminal_theme, DEFAULT_THEME);
         assert!(settings.show_files);
+        assert_eq!(settings.language, super::DEFAULT_LANGUAGE);
         assert!(settings.snippets.is_empty());
     }
 
@@ -165,6 +176,7 @@ mod tests {
             terminal_theme: "dracula".to_string(),
             color_scheme: "dark".to_string(),
             show_files: false,
+            language: "es".to_string(),
             snippets: vec![
                 Snippet {
                     name: "Логи nginx".to_string(),

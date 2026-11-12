@@ -1,7 +1,15 @@
 [Desktop Entry]
 Type=Application
 Name=sshdeck
-Comment=SSH-клиент с панелью файлов
+GenericName=SSH Client
+GenericName[ru]=SSH-клиент
+GenericName[es]=Cliente SSH
+Comment=SSH client with a file panel and a database client
+Comment[ru]=SSH-клиент с панелью файлов и клиентом баз данных
+Comment[es]=Cliente SSH con panel de archivos y cliente de bases de datos
+Keywords=ssh;sftp;terminal;remote;server;database;postgresql;mysql;
+Keywords[ru]=ssh;sftp;терминал;сервер;удалённый;база данных;
+Keywords[es]=ssh;sftp;terminal;servidor;remoto;base de datos;
 Exec=sshdeck
 Icon=dev.sshdeck.App
 Terminal=false

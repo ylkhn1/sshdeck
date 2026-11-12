@@ -78,11 +78,9 @@ pub fn generate_key(ssh_dir: &Path) -> Result<PathBuf, String> {
     let private = new_key_path(ssh_dir);
     if private.exists() {
         // Существующий закрытый ключ не перезаписываем ни при каких условиях.
-        return Err(format!(
-            "{} уже существует, но рядом нет файла .pub. Восстановите его командой: \
-             ssh-keygen -y -f {} > {}.pub",
-            private.display(),
-            private.display(),
+        return Err(tr!(
+            "{0} already exists, but there is no .pub file next to it. Restore it with: \
+             ssh-keygen -y -f {0} > {0}.pub",
             private.display()
         ));
     }
@@ -91,10 +89,10 @@ pub fn generate_key(ssh_dir: &Path) -> Result<PathBuf, String> {
         .arg(&private)
         .stdin(Stdio::null())
         .output()
-        .map_err(|err| format!("Не удалось запустить {SSH_KEYGEN_BIN}: {err}"))?;
+        .map_err(|err| tr!("Could not start {}: {}", SSH_KEYGEN_BIN, err))?;
     if !output.status.success() {
-        return Err(format!(
-            "ssh-keygen завершился с ошибкой: {}",
+        return Err(tr!(
+            "ssh-keygen failed: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         ));
     }
@@ -115,7 +113,7 @@ pub fn read_public(path: &Path) -> Result<String, String> {
         .iter()
         .any(|prefix| kind.starts_with(prefix));
     if !known_kind || parts.next().is_none() || line.chars().any(char::is_control) {
-        return Err(format!("{}: это не открытый ключ SSH", path.display()));
+        return Err(tr!("{}: not an SSH public key", path.display()));
     }
     Ok(line.to_string())
 }
@@ -140,9 +138,9 @@ fn parse_reply(stdout: &str, stderr: &str) -> Result<Installed, String> {
     } else {
         let detail = stderr.trim();
         Err(if detail.is_empty() {
-            "Сервер не подтвердил установку ключа".to_string()
+            tr!("The server did not confirm that the key was installed").to_string()
         } else {
-            format!("Не удалось установить ключ на сервер: {detail}")
+            tr!("Could not install the key on the server: {}", detail)
         })
     }
 }

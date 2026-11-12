@@ -58,7 +58,7 @@ mod imp {
                 return Box::pin(async {
                     Err(glib::Error::new(
                         gio::IOErrorEnum::NotSupported,
-                        "неподдерживаемый формат",
+                        tr!("Unsupported format"),
                     ))
                 });
             }
@@ -87,7 +87,7 @@ mod imp {
             let download = self.fetch.borrow().as_ref().map(|fetch| fetch());
             let future: LocalBoxFuture<'static, Result<String, String>> = Box::pin(async move {
                 let Some(download) = download else {
-                    return Err("источник данных недоступен".to_string());
+                    return Err(tr!("The data source is unavailable").to_string());
                 };
                 let paths = download.await?;
                 let mut text = String::new();
