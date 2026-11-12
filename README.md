@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![GTK 4](https://img.shields.io/badge/GTK_4-libadwaita-4a86cf?logo=gtk&logoColor=white)](https://gtk.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux&logoColor=white)](#installation)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 **English** · [Русский](README.ru.md)
 
@@ -295,4 +295,4 @@ Strings in the code are English and are wrapped in `tr!("…")`, or in `trn!` wh
 
 ## License
 
-MIT, as declared in [`Cargo.toml`](Cargo.toml).
+[MIT](LICENSE).

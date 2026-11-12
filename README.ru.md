@@ -9,7 +9,7 @@
 [![Rust](https://img.shields.io/badge/Rust-2024_edition-orange?logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![GTK 4](https://img.shields.io/badge/GTK_4-libadwaita-4a86cf?logo=gtk&logoColor=white)](https://gtk.org/)
 [![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?logo=linux&logoColor=white)](#установка)
-![License: MIT](https://img.shields.io/badge/license-MIT-green)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 [English](README.md) · **Русский**
 
@@ -295,4 +295,4 @@ po/                переводы на русский и испанский (g
 
 ## Лицензия
 
-MIT, как указано в [`Cargo.toml`](Cargo.toml).
+[MIT](LICENSE).
