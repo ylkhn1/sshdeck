@@ -1,8 +1,0 @@
-msgid "System default"
-msgstr "Как в системе"
-
-msgid "Language"
-msgstr "Язык (Language)"
-
-msgid "The new language will be used after sshdeck is restarted."
-msgstr "Новый язык включится после перезапуска sshdeck."
