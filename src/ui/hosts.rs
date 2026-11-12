@@ -373,6 +373,7 @@ impl Inner {
             }
         });
         add("db-new", |this| this.databases.create());
+        add("db-extensions", |this| this.databases.extensions());
         add("db-edit", |this| {
             if let Some(profile) = this.menu_database() {
                 this.databases.edit(&profile);
@@ -859,6 +860,7 @@ impl Inner {
             RowKind::Static => section(&[
                 ("Новое подключение…", "hosts.new"),
                 ("Новое подключение к базе…", "hosts.db-new"),
+                ("Расширения СУБД…", "hosts.db-extensions"),
             ]),
         }
         self.menu.set_menu_model(Some(&menu));

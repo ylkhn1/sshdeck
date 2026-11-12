@@ -6,6 +6,7 @@ mod databases;
 mod dbtab;
 mod dialogs;
 mod dnd;
+mod extensions;
 mod files;
 mod hosts;
 mod snippets;

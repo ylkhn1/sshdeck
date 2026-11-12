@@ -27,6 +27,12 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, Command};
 use tokio::sync::oneshot;
 
+mod install;
+pub use install::{
+    Offer, dismiss_offer, download_offers, downloads_dir, install_file, install_url, is_removable,
+    uninstall,
+};
+
 /// Версия протокола, которую понимает программа.
 pub const PROTOCOL: u64 = 1;
 /// Префикс расширений в `$PATH`.
@@ -227,31 +233,35 @@ fn registry() -> &'static RwLock<Vec<ExtensionInfo>> {
     &REGISTRY
 }
 
+/// Описание расширения по файлу: из кеша, если файл не менялся, иначе
+/// программа опрашивается заново.
+fn info_for(path: &Path) -> Option<ExtensionInfo> {
+    let key: CacheKey = std::fs::metadata(path)
+        .map(|meta| (meta.modified().ok(), meta.len()))
+        .unwrap_or((None, 0));
+    let cached = cache()
+        .lock()
+        .ok()
+        .and_then(|cache| cache.get(path).cloned())
+        .filter(|(old, _)| *old == key)
+        .map(|(_, info)| info);
+    if let Some(info) = cached {
+        return info;
+    }
+    let info = query_info(path).ok();
+    if let Ok(mut cache) = cache().lock() {
+        cache.insert(path.to_path_buf(), (key, info.clone()));
+    }
+    info
+}
+
 /// Ищет расширения заново и запоминает список. Новые и изменённые файлы
 /// опрашиваются, остальные берутся из кеша, так что повторный вызов почти
 /// ничего не стоит.
 pub fn scan() -> Vec<ExtensionInfo> {
     let mut found: Vec<ExtensionInfo> = Vec::new();
     for path in candidates() {
-        let key: CacheKey = std::fs::metadata(&path)
-            .map(|meta| (meta.modified().ok(), meta.len()))
-            .unwrap_or((None, 0));
-        let cached = cache()
-            .lock()
-            .ok()
-            .and_then(|cache| cache.get(&path).cloned())
-            .filter(|(old, _)| *old == key)
-            .map(|(_, info)| info);
-        let info = match cached {
-            Some(info) => info,
-            None => {
-                let info = query_info(&path).ok();
-                if let Ok(mut cache) = cache().lock() {
-                    cache.insert(path.clone(), (key, info.clone()));
-                }
-                info
-            }
-        };
+        let info = info_for(&path);
         if let Some(info) = info
             && !found.iter().any(|known| known.id == info.id)
         {

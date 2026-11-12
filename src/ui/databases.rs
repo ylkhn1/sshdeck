@@ -11,7 +11,7 @@ use std::rc::{Rc, Weak};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use super::{Notifier, dialogs};
+use super::{Notifier, dialogs, extensions};
 use crate::db::{self, DbKind, DbProfile, Profiles, profile, secrets};
 
 const CANCEL: &str = "cancel";
@@ -111,6 +111,22 @@ impl Databases {
 
     pub fn profiles(&self) -> Vec<DbProfile> {
         self.inner.profiles.borrow().items().to_vec()
+    }
+
+    /// Окно расширений СУБД.
+    pub fn extensions(&self) {
+        let Some(parent) = self.inner.parent() else {
+            return;
+        };
+        let weak = Rc::downgrade(&self.inner);
+        extensions::present(&parent, move |_| {
+            // Значки и названия СУБД в списке баз берутся из расширений.
+            if let Some(inner) = weak.upgrade() {
+                for handler in inner.changed.borrow().iter() {
+                    handler();
+                }
+            }
+        });
     }
 
     /// Открывает базу: пароль берётся из памяти, затем из хранилища
@@ -343,6 +359,16 @@ impl Inner {
             .or(template)
             .unwrap_or_else(|| DbProfile::template(DbKind::Postgres));
         let form = ProfileForm::new(start.clone());
+        {
+            let weak = self.me.clone();
+            *form.on_extensions.borrow_mut() = Some(Box::new(move || {
+                if let Some(this) = weak.upgrade() {
+                    for handler in this.changed.borrow().iter() {
+                        handler();
+                    }
+                }
+            }));
+        }
         // Пароль из хранилища подставляется в поле, когда придёт.
         if start.is_networked() {
             let key = secrets::key(&start);
@@ -489,7 +515,22 @@ fn kind_choices(current: &DbProfile) -> Vec<KindChoice> {
 struct ProfileForm {
     widget: gtk::ListBox,
     kind: adw::ComboRow,
-    choices: Vec<KindChoice>,
+    choices: RefCell<Vec<KindChoice>>,
+    /// Строка о расширениях; если в «Загрузках» есть новое — с кнопкой
+    /// «Установить».
+    ext_row: adw::ActionRow,
+    ext_install: gtk::Button,
+    offer: RefCell<Option<db::extension::Offer>>,
+    downloads_watch: RefCell<Option<gio::FileMonitor>>,
+    /// СУБД профиля при открытии: её расширение остаётся в списке, даже
+    /// если его удалили.
+    start_kind: (DbKind, String),
+    /// Порт и пользователь по умолчанию выбранной СУБД. Хранятся
+    /// значения, а не шаблон: у удалённого расширения их уже не узнать.
+    kind_defaults: RefCell<(u16, String)>,
+    /// Вызывается, когда расширения поставили или удалили (панель баз
+    /// перерисовывает значки).
+    on_extensions: RefCell<Option<Box<dyn Fn()>>>,
     name: adw::EntryRow,
     host: adw::EntryRow,
     port: adw::EntryRow,
@@ -554,8 +595,21 @@ impl ProfileForm {
             .css_classes(["boxed-list"])
             .width_request(420)
             .build();
+        let ext_row = adw::ActionRow::builder()
+            .title("Другие СУБД — расширения")
+            .subtitle_lines(3)
+            .activatable(true)
+            .build();
+        let ext_install = gtk::Button::builder()
+            .label("Установить")
+            .valign(gtk::Align::Center)
+            .css_classes(["suggested-action", "pill"])
+            .visible(false)
+            .build();
+        ext_row.add_suffix(&ext_install);
+        ext_row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
         widget.append(&kind);
-        widget.append(&extensions_row());
+        widget.append(&ext_row);
         widget.append(&name);
         widget.append(&host);
         widget.append(&port);
@@ -569,7 +623,17 @@ impl ProfileForm {
         let form = Rc::new(Self {
             widget,
             kind,
-            choices,
+            choices: RefCell::new(choices),
+            ext_row,
+            ext_install,
+            offer: RefCell::new(None),
+            downloads_watch: RefCell::new(None),
+            start_kind: (profile.kind, profile.driver.clone()),
+            kind_defaults: RefCell::new({
+                let template = DbProfile::template_for(profile.kind, profile.driver.clone());
+                (template.default_port(), template.default_user())
+            }),
+            on_extensions: RefCell::new(None),
             name,
             host,
             port,
@@ -629,36 +693,163 @@ impl ProfileForm {
             // Порт и пользователь по умолчанию следуют за СУБД, если их не
             // меняли.
             let weak = Rc::downgrade(&form);
-            let previous = RefCell::new(DbProfile::template_for(
-                profile.kind,
-                profile.driver.clone(),
-            ));
             form.kind.connect_selected_notify(move |_| {
-                let Some(form) = weak.upgrade() else { return };
-                let new = form.selected().template();
-                let old = previous.replace(new.clone());
-                let port = form.port.text();
-                if port.trim().is_empty() || port.trim() == old.default_port().to_string() {
-                    form.port.set_text(&new.default_port().to_string());
+                if let Some(form) = weak.upgrade() {
+                    form.kind_switched();
                 }
-                if form.user.text().trim() == old.default_user() {
-                    form.user.set_text(&new.default_user());
-                }
-                if new.is_networked() && form.host.text().trim().is_empty() {
-                    form.host.set_text("localhost");
-                }
-                form.sync_visibility();
             });
         }
+        form.connect_extensions();
         form.sync_visibility();
         form
     }
 
+    /// Порт и пользователь по умолчанию следуют за СУБД, если их не меняли.
+    fn kind_switched(&self) {
+        let new = self.selected().template();
+        let (old_port, old_user) = self
+            .kind_defaults
+            .replace((new.default_port(), new.default_user()));
+        let port = self.port.text();
+        if port.trim().is_empty() || port.trim() == old_port.to_string() {
+            self.port.set_text(&new.default_port().to_string());
+        }
+        if self.user.text().trim() == old_user {
+            self.user.set_text(&new.default_user());
+        }
+        if new.is_networked() && self.host.text().trim().is_empty() {
+            self.host.set_text("localhost");
+        }
+        self.sync_visibility();
+    }
+
     fn selected(&self) -> KindChoice {
-        self.choices
+        let choices = self.choices.borrow();
+        choices
             .get(self.kind.selected() as usize)
             .cloned()
-            .unwrap_or_else(|| self.choices[0].clone())
+            .unwrap_or_else(|| choices[0].clone())
+    }
+
+    /// Строка расширений: открывает окно расширений, а если в «Загрузках»
+    /// появилось новое — предлагает поставить его прямо отсюда.
+    fn connect_extensions(self: &Rc<Self>) {
+        {
+            let weak = Rc::downgrade(self);
+            self.ext_row.connect_activated(move |row| {
+                let weak = weak.clone();
+                extensions::present(row, move |info| {
+                    if let Some(form) = weak.upgrade() {
+                        form.extensions_changed(info.map(|info| info.id.as_str()));
+                    }
+                });
+            });
+        }
+        {
+            let weak = Rc::downgrade(self);
+            self.ext_install.connect_clicked(move |button| {
+                let Some(form) = weak.upgrade() else { return };
+                let Some(offer) = form.offer.borrow().clone() else {
+                    return;
+                };
+                button.set_sensitive(false);
+                form.ext_row
+                    .set_subtitle(&format!("Устанавливаю {}…", offer.file_name()));
+                let weak = weak.clone();
+                let button = button.clone();
+                extensions::install(extensions::Source::File(offer.path), move |result| {
+                    button.set_sensitive(true);
+                    let Some(form) = weak.upgrade() else { return };
+                    match result {
+                        Ok(info) => {
+                            form.extensions_changed(Some(&info.id));
+                            form.refresh_extensions_row(Some(&format!(
+                                "Установлено: {} — выбрано в списке СУБД",
+                                info.name
+                            )));
+                        }
+                        Err(error) => {
+                            form.refresh_extensions_row(None);
+                            dialogs::message(
+                                &form.widget,
+                                "Не удалось установить расширение",
+                                &error,
+                            );
+                        }
+                    }
+                });
+            });
+        }
+        {
+            let weak = Rc::downgrade(self);
+            *self.downloads_watch.borrow_mut() = extensions::watch_downloads(move || {
+                if let Some(form) = weak.upgrade() {
+                    form.refresh_extensions_row(None);
+                }
+            });
+        }
+        self.refresh_extensions_row(None);
+    }
+
+    /// `note` — что только что произошло (показывается первым).
+    fn refresh_extensions_row(&self, note: Option<&str>) {
+        let offer = db::extension::download_offers().into_iter().next();
+        match &offer {
+            Some(offer) => {
+                self.ext_row.set_title("Скачано новое расширение");
+                let file = format!(
+                    "{} — {}",
+                    offer.file_name(),
+                    extensions::age(offer.modified)
+                );
+                self.ext_row.set_subtitle(&match note {
+                    Some(note) => format!("{note}. Ещё скачано: {file}"),
+                    None => file,
+                });
+            }
+            None => {
+                let count = db::extension::installed().len();
+                self.ext_row.set_title("Другие СУБД — расширения");
+                self.ext_row.set_subtitle(&if let Some(note) = note {
+                    note.to_string()
+                } else if count == 0 {
+                    "Скачайте расширение — sshdeck сам его найдёт и предложит установить"
+                        .to_string()
+                } else {
+                    format!(
+                        "Установлено расширений: {count}. Чтобы добавить ещё, просто скачайте файл"
+                    )
+                });
+            }
+        }
+        self.ext_install.set_visible(offer.is_some());
+        *self.offer.borrow_mut() = offer;
+    }
+
+    /// Расширение поставили или удалили: список СУБД пересобирается, новое
+    /// расширение сразу выбирается.
+    fn extensions_changed(&self, select: Option<&str>) {
+        let current = self.selected();
+        let (kind, driver) = self.start_kind.clone();
+        let choices = kind_choices(&DbProfile::template_for(kind, driver));
+        let labels: Vec<&str> = choices.iter().map(|choice| choice.label.as_str()).collect();
+        let model = gtk::StringList::new(&labels);
+        let position = choices
+            .iter()
+            .position(|choice| match select {
+                Some(id) => choice.kind == DbKind::Extension && choice.driver == id,
+                None => choice.kind == current.kind && choice.driver == current.driver,
+            })
+            .unwrap_or(0) as u32;
+        *self.choices.borrow_mut() = choices;
+        self.kind.set_model(Some(&model));
+        self.kind.set_selected(position);
+        // При замене модели выбор меняется без сигнала.
+        self.kind_switched();
+        self.refresh_extensions_row(None);
+        if let Some(notify) = self.on_extensions.borrow().as_ref() {
+            notify();
+        }
     }
 
     fn sync_visibility(&self) {
@@ -794,41 +985,4 @@ impl ProfileForm {
         }
         notify();
     }
-}
-
-/// Строка о расширениях: где они лежат, и кнопка «открыть папку».
-fn extensions_row() -> adw::ActionRow {
-    let dir = db::extension::drivers_dir();
-    let count = db::extension::installed().len();
-    // Домашний каталог — как `~`: путь короче и понятнее.
-    let shown = match dir.strip_prefix(glib::home_dir()) {
-        Ok(rest) => format!("~/{}", rest.display()),
-        Err(_) => dir.display().to_string(),
-    };
-    let row = adw::ActionRow::builder()
-        .title("Другие СУБД — расширения")
-        .subtitle(format!(
-            "{}. Положите расширение в {} — оно появится в списке выше",
-            if count == 0 {
-                "Расширений пока нет".to_string()
-            } else {
-                format!("Установлено расширений: {count}")
-            },
-            shown
-        ))
-        .subtitle_lines(3)
-        .build();
-    let open = gtk::Button::builder()
-        .icon_name("folder-open-symbolic")
-        .tooltip_text("Открыть папку расширений")
-        .valign(gtk::Align::Center)
-        .css_classes(["flat"])
-        .build();
-    open.connect_clicked(move |_| {
-        let _ = std::fs::create_dir_all(&dir);
-        let uri = gio::File::for_path(&dir).uri();
-        let _ = gio::AppInfo::launch_default_for_uri(&uri, gio::AppLaunchContext::NONE);
-    });
-    row.add_suffix(&open);
-    row
 }
