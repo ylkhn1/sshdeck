@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2024"
 description = "Lightweight native SSH client for Linux: SFTP file tree, terminal and database client in one window"
 license = "MIT"
+repository = "https://github.com/ylkhn1/sshdeck"
+homepage = "https://github.com/ylkhn1/sshdeck"
+readme = "README.md"
 
 [dependencies]
 gtk = { package = "gtk4", version = "0.11", features = ["v4_14"] }
@@ -29,3 +32,44 @@ tempfile = "3"
 [profile.release]
 lto = "thin"
 strip = true
+
+# Пакеты для Debian/Ubuntu (`cargo deb`) и Fedora/openSUSE (`cargo generate-rpm`).
+# Собираются в контейнерах скриптом packaging/build-packages.sh.
+[package.metadata.deb]
+maintainer = "ylkhn1 <ylkhn1@users.noreply.github.com>"
+copyright = "2026, ylkhn1"
+license-file = ["LICENSE", "0"]
+section = "net"
+priority = "optional"
+# Нижние границы, которых не видно по символам: CSS-переменные GTK 4.16, libadwaita 1.6.
+depends = "$auto, libgtk-4-1 (>= 4.16), libadwaita-1-0 (>= 1.6), openssh-client, xdg-utils"
+extended-description = """\
+sshdeck puts the remote server's files (SFTP), an SSH terminal and a server \
+status bar in one window, with a built-in client for PostgreSQL, MySQL/MariaDB \
+and SQLite. It runs the system OpenSSH client, so ~/.ssh/config, keys and \
+ssh-agent work as usual, and the file panel reuses the terminal's login."""
+assets = [
+    ["target/release/sshdeck", "usr/bin/", "755"],
+    ["data/dev.sshdeck.App.desktop", "usr/share/applications/", "644"],
+    ["data/dev.sshdeck.App.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+    ["README.md", "usr/share/doc/sshdeck/README.md", "644"],
+]
+
+[package.metadata.generate-rpm]
+summary = "Lightweight native SSH client: SFTP file tree, terminal and database client"
+assets = [
+    { source = "target/release/sshdeck", dest = "/usr/bin/sshdeck", mode = "755" },
+    { source = "data/dev.sshdeck.App.desktop", dest = "/usr/share/applications/dev.sshdeck.App.desktop", mode = "644" },
+    { source = "data/dev.sshdeck.App.svg", dest = "/usr/share/icons/hicolor/scalable/apps/dev.sshdeck.App.svg", mode = "644" },
+    { source = "LICENSE", dest = "/usr/share/licenses/sshdeck/LICENSE", mode = "644", doc = true },
+    { source = "README.md", dest = "/usr/share/doc/sshdeck/README.md", mode = "644", doc = true },
+]
+
+[package.metadata.generate-rpm.requires]
+gtk4 = ">= 4.16"
+libadwaita = ">= 1.6"
+# Значок приложения лежит в hicolor; символьные значки интерфейса — из Adwaita.
+hicolor-icon-theme = "*"
+adwaita-icon-theme = "*"
+openssh-clients = "*"
+xdg-utils = "*"
