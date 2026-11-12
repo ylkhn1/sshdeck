@@ -1936,3 +1936,84 @@ msgstr "Настраиваются автоматически после вхо�
 
 msgid "The saved connection “{}” was renamed or deleted, so the forwards were not saved in it"
 msgstr "Сохранённое подключение «{}» переименовано или удалено, поэтому пробросы в нём не сохранены"
+
+msgid "Split Terminal Right"
+msgstr "Разделить терминал вправо"
+
+msgid "Split Terminal Down"
+msgstr "Разделить терминал вниз"
+
+msgid "Close Current Terminal"
+msgstr "Закрыть текущий терминал"
+
+msgid "Reconnect first: the tab is not connected"
+msgstr "Сначала переподключитесь: вкладка не подключена"
+
+msgid "This is the only terminal in the tab"
+msgstr "Это единственный терминал вкладки"
+
+msgid "A split terminal lost its connection and was closed"
+msgstr "Один из терминалов вкладки потерял соединение и закрыт"
+
+msgid "All connections from the file are already in the list."
+msgstr "Все подключения из файла уже есть в списке."
+
+msgid "Already in the list and skipped: {}"
+msgstr "Уже были в списке и пропущены: {}"
+
+msgid "Connections Imported"
+msgstr "Подключения импортированы"
+
+msgid "Connections added: {}"
+msgstr "Добавлено подключений: {}"
+
+msgid "Connections exported: {} (passwords are never included)"
+msgstr "Экспортировано подключений: {} (пароли в файл не попадают)"
+
+msgid "Could Not Import Connections"
+msgstr "Не удалось импортировать подключения"
+
+msgid "Could not read {}: {}"
+msgstr "Не удалось прочитать {}: {}"
+
+msgid "Could not write {}: {}"
+msgstr "Не удалось записать {}: {}"
+
+msgid "Export Connections"
+msgstr "Экспорт подключений"
+
+msgid "Export Connections…"
+msgstr "Экспорт подключений…"
+
+msgid "Import Connections"
+msgstr "Импорт подключений"
+
+msgid "Import Connections…"
+msgstr "Импорт подключений…"
+
+msgid "The file has a connection without an address"
+msgstr "В файле есть подключение без адреса"
+
+msgid "The file has a folder without a name"
+msgstr "В файле есть папка без названия"
+
+msgid "The file has an entry that is not an object"
+msgstr "В файле есть запись, которая не является объектом"
+
+msgid "The file is an ssh config: only the host address, user and port were taken. Keys, ProxyJump and other options stay in that file."
+msgstr "Это конфиг ssh: из него взяты только адрес хоста, пользователь и порт. Ключи, ProxyJump и другие параметры остались в том файле."
+
+msgid "The file is neither an sshdeck export nor an ssh config with Host entries"
+msgstr "Файл не является ни экспортом sshdeck, ни конфигом ssh с записями Host"
+
+msgid "The file is not valid JSON: {}"
+msgstr "Файл не является корректным JSON: {}"
+
+msgid "The file was made by a newer version of sshdeck; update the app to import it"
+msgstr "Файл создан более новой версией sshdeck; обновите приложение, чтобы импортировать его"
+
+msgid "There are no saved connections to export"
+msgstr "Нет сохранённых подключений для экспорта"
+
+msgid "This JSON file is not an sshdeck connections export"
+msgstr "Этот JSON-файл не является экспортом подключений sshdeck"

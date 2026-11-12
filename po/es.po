@@ -1916,3 +1916,84 @@ msgstr "Se configuran automáticamente tras iniciar sesión y se escriben como e
 
 msgid "The saved connection “{}” was renamed or deleted, so the forwards were not saved in it"
 msgstr "La conexión guardada «{}» se renombró o eliminó, así que los reenvíos no se guardaron en ella"
+
+msgid "Split Terminal Right"
+msgstr "Dividir terminal a la derecha"
+
+msgid "Split Terminal Down"
+msgstr "Dividir terminal hacia abajo"
+
+msgid "Close Current Terminal"
+msgstr "Cerrar el terminal actual"
+
+msgid "Reconnect first: the tab is not connected"
+msgstr "Primero vuelve a conectar: la pestaña no está conectada"
+
+msgid "This is the only terminal in the tab"
+msgstr "Es el único terminal de la pestaña"
+
+msgid "A split terminal lost its connection and was closed"
+msgstr "Uno de los terminales de la pestaña perdió la conexión y se cerró"
+
+msgid "All connections from the file are already in the list."
+msgstr "Todas las conexiones del archivo ya están en la lista."
+
+msgid "Already in the list and skipped: {}"
+msgstr "Ya estaban en la lista y se omitieron: {}"
+
+msgid "Connections Imported"
+msgstr "Conexiones importadas"
+
+msgid "Connections added: {}"
+msgstr "Conexiones añadidas: {}"
+
+msgid "Connections exported: {} (passwords are never included)"
+msgstr "Conexiones exportadas: {} (las contraseñas nunca se incluyen)"
+
+msgid "Could Not Import Connections"
+msgstr "No se pudieron importar las conexiones"
+
+msgid "Could not read {}: {}"
+msgstr "No se pudo leer {}: {}"
+
+msgid "Could not write {}: {}"
+msgstr "No se pudo escribir {}: {}"
+
+msgid "Export Connections"
+msgstr "Exportar conexiones"
+
+msgid "Export Connections…"
+msgstr "Exportar conexiones…"
+
+msgid "Import Connections"
+msgstr "Importar conexiones"
+
+msgid "Import Connections…"
+msgstr "Importar conexiones…"
+
+msgid "The file has a connection without an address"
+msgstr "El archivo tiene una conexión sin dirección"
+
+msgid "The file has a folder without a name"
+msgstr "El archivo tiene una carpeta sin nombre"
+
+msgid "The file has an entry that is not an object"
+msgstr "El archivo tiene una entrada que no es un objeto"
+
+msgid "The file is an ssh config: only the host address, user and port were taken. Keys, ProxyJump and other options stay in that file."
+msgstr "El archivo es una configuración de ssh: solo se tomaron la dirección del host, el usuario y el puerto. Las claves, ProxyJump y otras opciones se quedan en ese archivo."
+
+msgid "The file is neither an sshdeck export nor an ssh config with Host entries"
+msgstr "El archivo no es ni una exportación de sshdeck ni una configuración de ssh con entradas Host"
+
+msgid "The file is not valid JSON: {}"
+msgstr "El archivo no es un JSON válido: {}"
+
+msgid "The file was made by a newer version of sshdeck; update the app to import it"
+msgstr "El archivo se creó con una versión más reciente de sshdeck; actualiza la aplicación para importarlo"
+
+msgid "There are no saved connections to export"
+msgstr "No hay conexiones guardadas para exportar"
+
+msgid "This JSON file is not an sshdeck connections export"
+msgstr "Este archivo JSON no es una exportación de conexiones de sshdeck"

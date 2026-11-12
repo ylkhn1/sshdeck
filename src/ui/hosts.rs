@@ -18,6 +18,7 @@ use gtk::{gdk, gio, glib, pango};
 use super::databases::{Databases, describe as describe_db, profile_badge};
 use super::{Notifier, collapsing_revealer, dialogs, reveal};
 use crate::db::DbProfile;
+use crate::exchange;
 use crate::forward::{self, Forward};
 use crate::connections::{
     self, Connection, Connections, FOLDER_COLORS, FolderPath, Loc, Node, Target, join_path, split_path,
@@ -344,6 +345,16 @@ impl HostsSidebar {
     pub fn reload(&self) {
         self.inner.reload();
     }
+
+    /// Сохраняет все подключения в JSON-файл (выбор файла — диалогом).
+    pub fn export_dialog(&self) {
+        self.inner.export_dialog();
+    }
+
+    /// Добавляет подключения из экспорта sshdeck или ssh_config.
+    pub fn import_dialog(&self) {
+        self.inner.import_dialog();
+    }
 }
 
 impl Inner {
@@ -560,6 +571,102 @@ impl Inner {
         }
         self.rebuild();
         self.probe(false);
+    }
+
+    // ----- импорт и экспорт
+
+    fn export_dialog(&self) {
+        let count = self
+            .connections
+            .borrow()
+            .walk()
+            .iter()
+            .filter(|item| matches!(item.node, Node::Connection(_)))
+            .count();
+        if count == 0 {
+            self.notifier
+                .info(tr!("There are no saved connections to export"));
+            return;
+        }
+        let dialog = gtk::FileDialog::builder()
+            .title(tr!("Export Connections"))
+            .initial_name(exchange::DEFAULT_FILE_NAME)
+            .modal(true)
+            .build();
+        let weak = self.me.clone();
+        dialog.save(
+            super::parent_window(&self.root).as_ref(),
+            gio::Cancellable::NONE,
+            move |result| {
+                let (Some(this), Ok(file)) = (weak.upgrade(), result) else {
+                    return;
+                };
+                let Some(path) = file.path() else { return };
+                let text = exchange::export(&this.connections.borrow());
+                match std::fs::write(&path, text) {
+                    Ok(()) => this.notifier.info(&tr!(
+                        "Connections exported: {} (passwords are never included)",
+                        count
+                    )),
+                    Err(err) => this
+                        .notifier
+                        .error(&tr!("Could not write {}: {}", path.display(), err)),
+                }
+            },
+        );
+    }
+
+    fn import_dialog(&self) {
+        // Без фильтров: ssh_config обычно без расширения.
+        let dialog = gtk::FileDialog::builder()
+            .title(tr!("Import Connections"))
+            .modal(true)
+            .build();
+        let weak = self.me.clone();
+        dialog.open(
+            super::parent_window(&self.root).as_ref(),
+            gio::Cancellable::NONE,
+            move |result| {
+                let (Some(this), Ok(file)) = (weak.upgrade(), result) else {
+                    return;
+                };
+                if let Some(path) = file.path() {
+                    this.import_file(&path);
+                }
+            },
+        );
+    }
+
+    fn import_file(&self, path: &std::path::Path) {
+        let current = self.connections.borrow().clone();
+        let (list, report) = match exchange::import(&current, path, &glib::home_dir()) {
+            Ok(result) => result,
+            Err(err) => {
+                dialogs::message(&self.root, tr!("Could Not Import Connections"), &err);
+                return;
+            }
+        };
+        if report.added > 0 {
+            *self.connections.borrow_mut() = list;
+            self.commit();
+        }
+        let mut body = if report.added == 0 {
+            tr!("All connections from the file are already in the list.").to_string()
+        } else {
+            tr!("Connections added: {}", report.added)
+        };
+        if report.added > 0 && report.skipped > 0 {
+            body.push('\n');
+            body.push_str(&tr!("Already in the list and skipped: {}", report.skipped));
+        }
+        if report.from_ssh_config {
+            body.push_str("\n\n");
+            body.push_str(tr!(
+                "The file is an ssh config: only the host address, user and port were taken. \
+                 Keys, ProxyJump and other options stay in that file."
+            ));
+        }
+        dialogs::message(&self.root, tr!("Connections Imported"), &body);
     }
 
     /// Записывает список на диск и перерисовывает панель.

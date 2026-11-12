@@ -8,6 +8,7 @@
 mod i18n;
 
 mod connections;
+mod exchange;
 mod db;
 mod forward;
 mod keysetup;

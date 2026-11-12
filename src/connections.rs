@@ -515,6 +515,11 @@ impl Connections {
 
     // ----- чтение
 
+    /// Элементы верхнего уровня.
+    pub fn nodes(&self) -> &[Node] {
+        &self.root
+    }
+
     pub fn is_empty(&self) -> bool {
         self.root.is_empty()
     }
@@ -659,7 +664,7 @@ impl Connections {
     // ----- изменение
 
     /// Находит папку по пути, создавая недостающие в конце родителя.
-    fn ensure_folder(&mut self, path: &[String]) -> Loc {
+    pub fn ensure_folder(&mut self, path: &[String]) -> Loc {
         let mut loc = Vec::new();
         let mut nodes = &mut self.root;
         for name in path {

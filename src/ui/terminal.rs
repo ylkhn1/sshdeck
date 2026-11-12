@@ -422,7 +422,7 @@ fn install_shortcuts(term: &vte::Terminal) {
 /// Латинская буква нажатой клавиши независимо от раскладки: сам `keyval`,
 /// если он латинский, иначе буква той же физической клавиши из латинской
 /// раскладки (на ЙЦУКЕН клавиша `М` даёт `v`).
-fn latin_letter(widget: &impl IsA<gtk::Widget>, keyval: gdk::Key, keycode: u32) -> Option<char> {
+pub(super) fn latin_letter(widget: &impl IsA<gtk::Widget>, keyval: gdk::Key, keycode: u32) -> Option<char> {
     let latin = |key: gdk::Key| key.to_lower().to_unicode().filter(char::is_ascii_lowercase);
     latin(keyval).or_else(|| {
         widget

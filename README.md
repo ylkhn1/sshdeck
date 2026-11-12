@@ -156,6 +156,7 @@ cargo clippy --all-targets  # no warnings
 - **Status dots.** sshdeck checks each server by reading its `SSH-…` greeting, without logging in. The hover tooltip shows the latency.
 - **Command after login.** You can set a command that runs right after login, for example `cd /srv/app`.
 - **Saved commands.** The terminal button in the title bar opens a list of commands. Click one to type it into the current tab and press Enter. sshdeck never records what you type in the terminal, because that would capture passwords.
+- **Import and export.** *Menu → Export Connections…* saves all saved connections and folders, with their colors, commands after login and port forwards, to a JSON file; it never contains passwords. *Menu → Import Connections…* adds connections from such a file or from an ssh config file taken from another machine (for those, only the address, user and port are used). Connections already in the same folder with the same name and address are skipped, so importing the same file twice adds nothing.
 
 ### Files
 
@@ -173,6 +174,7 @@ cargo clippy --all-targets  # no warnings
 - Links and IP addresses are underlined under the mouse pointer. Ctrl+click opens a link in the browser or copies an address.
 - ssh pings the server every 30 seconds so idle sessions do not drop.
 - After a normal `exit` the tab closes. If the connection fails, the tab stays open with a **Reconnect** button.
+- **Split terminal.** Ctrl+Shift+E opens another terminal to the right of the current one, Ctrl+Shift+O opens one below, Ctrl+Shift+W closes the current one (the same items are in the menu). Once you are logged in, a new terminal goes through the tab's connection and does not ask for the password again. Commands, snippets and *Go Here in Terminal* go to the terminal you last clicked, and the file panel follows its folder. `exit` in a split terminal closes only that terminal.
 - **Passwordless login.** Choose *Menu → Passwordless Login (Key) for This Tab…* after you have logged in. sshdeck uses the key ssh would use for this server: the host's `IdentityFile` from `~/.ssh/config` if it has one, otherwise your default key (`id_ed25519`, `id_ecdsa` or `id_rsa`). If that key does not exist yet, it is created. The public key is appended to `~/.ssh/authorized_keys` on the server, skipping it if it is already there, and sshdeck then checks that key login really works.
 
 ### Port forwarding
@@ -204,6 +206,8 @@ The database client works in the spirit of DBeaver. It supports PostgreSQL, MySQ
 | Terminal | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> / <kbd>V</kbd> | Copy / paste |
 | Terminal | <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>−</kbd> / <kbd>0</kbd> | Zoom in / out / reset |
 | Terminal | <kbd>Ctrl</kbd>+click | Open link / copy IP address |
+| Terminal | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> / <kbd>O</kbd> | Split the terminal to the right / down |
+| Terminal | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> | Close the current terminal of a split tab |
 | Files | <kbd>F2</kbd> | Rename |
 | Files | <kbd>Delete</kbd> | Delete (after confirmation) |
 | Files | <kbd>F5</kbd> | Refresh |

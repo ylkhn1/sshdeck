@@ -13,7 +13,7 @@ use super::forwards;
 use super::hosts::HostsSidebar;
 use super::snippets::SnippetsButton;
 use super::terminal;
-use super::tab::SessionTab;
+use super::tab::{PaneAction, SessionTab};
 use super::{ANIMATION_MS, Notifier, collapsing_revealer, dialogs, reveal};
 use crate::connections::Connection;
 use crate::db::DbProfile;
@@ -147,6 +147,9 @@ dialog.floating sheet { border-radius: 3px; }
 paned.sshdeck-split > separator {
   background-color: color-mix(in srgb, currentColor 12%, transparent);
 }
+/* split terminal: the one being typed in is marked by an accent line on top */
+.sshdeck-terms.split .sshdeck-pane { border-top: 2px solid transparent; }
+.sshdeck-terms.split .sshdeck-pane.active { border-top-color: var(--accent-bg-color); }
 vte-terminal { padding: 4px 8px; }
 .sshdeck-files-toolbar { padding: 2px 2px 0 2px; }
 .sshdeck-files-toolbar > .toolbar + .toolbar { padding-top: 0; }
@@ -527,6 +530,19 @@ impl AppWindow {
             Some("win.port-forwarding"),
         );
         menu.append_section(None, &server_section);
+        // Терминалы вкладки. Сочетания в меню только подписаны: ловит их
+        // сам терминал (см. `tab::pane_shortcut`).
+        let pane_section = gio::Menu::new();
+        for (label, target, accel) in [
+            (tr!("Split Terminal Right"), "split-right", "<Control><Shift>e"),
+            (tr!("Split Terminal Down"), "split-down", "<Control><Shift>o"),
+            (tr!("Close Current Terminal"), "close", "<Control><Shift>w"),
+        ] {
+            let item = gio::MenuItem::new(Some(label), Some(&format!("win.pane::{target}")));
+            item.set_attribute_value("accel", Some(&accel.to_variant()));
+            pane_section.append_item(&item);
+        }
+        menu.append_section(None, &pane_section);
         let look_section = gio::Menu::new();
         let theme_menu = gio::Menu::new();
         let standard_themes = gio::Menu::new();
@@ -553,6 +569,8 @@ impl AppWindow {
         look_section.append(Some(tr!("Terminal Font…")), Some("win.font"));
         menu.append_section(None, &look_section);
         let list_section = gio::Menu::new();
+        list_section.append(Some(tr!("Import Connections…")), Some("win.import-connections"));
+        list_section.append(Some(tr!("Export Connections…")), Some("win.export-connections"));
         list_section.append(Some(tr!("Reload Connection List")), Some("win.reload-hosts"));
         menu.append_section(None, &list_section);
         let menu_button = gtk::MenuButton::builder()
@@ -854,6 +872,26 @@ impl AppWindow {
             this.window.add_action(&action);
         }
         {
+            let weak = Rc::downgrade(&this);
+            let action = gio::SimpleAction::new("pane", Some(glib::VariantTy::STRING));
+            action.connect_activate(move |_, parameter| {
+                let Some(this) = weak.upgrade() else { return };
+                let action = match parameter.and_then(|p| p.str()) {
+                    Some("split-right") => PaneAction::SplitRight,
+                    Some("split-down") => PaneAction::SplitDown,
+                    Some("close") => PaneAction::Close,
+                    _ => return,
+                };
+                match this.current_tab() {
+                    Some(tab) => tab.pane_action(action),
+                    None => this
+                        .notifier
+                        .info(tr!("Open a tab and log in to a server first")),
+                }
+            });
+            this.window.add_action(&action);
+        }
+        {
             // Значок пробросов на ярлыке вкладки открывает их диалог.
             let weak = Rc::downgrade(&this);
             this.tab_view.connect_indicator_activated(move |_, page| {
@@ -880,6 +918,19 @@ impl AppWindow {
                     None => this.notifier.info(tr!(
                         "Open a tab and log in to a server first — the key is installed through it"
                     )),
+                }
+            });
+            this.window.add_action(&action);
+        }
+        for (name, export) in [("import-connections", false), ("export-connections", true)] {
+            let weak = Rc::downgrade(&this);
+            let action = gio::SimpleAction::new(name, None);
+            action.connect_activate(move |_, _| {
+                let Some(this) = weak.upgrade() else { return };
+                if export {
+                    this.sidebar.export_dialog();
+                } else {
+                    this.sidebar.import_dialog();
                 }
             });
             this.window.add_action(&action);
