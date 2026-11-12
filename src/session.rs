@@ -1,15 +1,51 @@
-//! Параметры ssh-сессии одной вкладки: управляющий сокет и командные строки
-//! для системного `ssh`.
+//! Параметры ssh-сессии вкладки: управляющий сокет мастер-соединения и
+//! командные строки для системного `ssh`.
 //!
 //! Терминал запускает `ssh` с `ControlMaster=auto`, а SFTP-панель и служебные
 //! команды (`-O check`, `-O exit`) ходят через тот же сокет. Модуль ничего не
-//! знает ни о GTK, ни о tokio — только собирает аргументы.
+//! знает ни о GTK, ни о tokio — только собирает аргументы и считает, сколько
+//! вкладок пользуется каждым мастером.
+//!
+//! # Общий мастер
+//!
+//! Вкладки с одним и тем же адресом назначения делят одно мастер-соединение
+//! ([`Session::shared`]): сокет называется по хэшу итоговых `user`, `hostname`
+//! и `port` (из `ssh -G`) и пути к конфигу. Первый `ssh` с
+//! `ControlMaster=auto` входит на сервер и становится мастером; из-за
+//! `ControlPersist` мастер сразу уходит в фон, а сам терминал становится его
+//! клиентом. Поэтому выход из шелла в первой вкладке мастер не гасит: он
+//! живёт, пока у него есть клиенты (терминалы и SFTP других вкладок), и ещё
+//! [`PERSIST_SECS`] секунд после последнего. Следующие вкладки с тем же
+//! адресом подключаются к сокету как клиенты и пароль не спрашивают. Если
+//! мастера нет (разрыв связи), первый же `ssh` любой вкладки поднимает новый.
+//!
+//! Каждая [`Session`] держит «аренду» сокета: счётчик вкладок ведётся в
+//! процессе, и `ssh -O exit` отправляется, только когда сокет отпускает
+//! последняя вкладка ([`Session::close_master`]). В имени сокета есть pid
+//! процесса — по нему [`cleanup_stale`] убирает сокеты упавших запусков, а
+//! разные экземпляры приложения не гасят мастера друг друга.
+//!
+//! Для другого кода, которому нужен мастер вкладки (туннели, проброс
+//! портов): [`Session::control_path`] — путь к сокету, [`Session::control_argv`]
+//! — команда `ssh -S <сокет> -O <операция>` (например, `forward`/`cancel` с
+//! `-L`/`-R`), `remote::master_alive` — жив ли мастер. Проброс, добавленный
+//! через `-O forward`, живёт в общем мастере, виден всем вкладкам с этим
+//! адресом и пропадает вместе с мастером; снимать его нужно `-O cancel`.
+//! Для таких команд лучше [`Session::mux_argv`]: он не читает ssh-конфиг, и
+//! `-O cancel` не снимает заодно `LocalForward` из конфига хоста (см.
+//! `crate::forward`).
 
+use std::collections::HashMap;
 use std::fs;
 use std::io;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
+use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, LazyLock, Mutex};
+
+use crate::ssh_config::{self, Resolved};
 
 /// Системный клиент OpenSSH.
 pub const SSH_BIN: &str = "/usr/bin/ssh";
@@ -24,7 +60,7 @@ pub const CONFIG_ENV: &str = "SSHDECK_SSH_CONFIG";
 /// выхода из шелла: без него мастер ждёт, пока отключится SFTP-клиент, и
 /// вкладка «зависает». Небольшое значение гарантирует, что после аварийного
 /// завершения приложения фоновый мастер сам исчезнет.
-const PERSIST_SECS: u32 = 10;
+pub const PERSIST_SECS: u32 = 10;
 
 /// Как часто ssh в терминале проверяет связь с сервером при простое.
 const KEEPALIVE_SECS: u32 = 30;
@@ -82,19 +118,26 @@ pub fn cleanup_stale(runtime_dir: &Path) {
     }
 }
 
-/// Идентификатор процесса-владельца из имени `<pid>-<n>.sock`,
-/// `files-<pid>-<n>` или `db-<pid>-<n>` (каталог туннеля к базе данных);
-/// для посторонних имён — `None`.
+/// Идентификатор процесса-владельца из имени `<pid>-<n>.sock` (сокет
+/// отдельной сессии), `<pid>-m<хэш>.sock` (общий мастер), `files-<pid>-<n>`
+/// или `db-<pid>-<n>` (каталог туннеля к базе данных); для посторонних
+/// имён — `None`.
 fn owner_pid(name: &str) -> Option<u32> {
-    let rest = match name
+    let (rest, socket) = match name
         .strip_prefix("files-")
         .or_else(|| name.strip_prefix("db-"))
     {
-        Some(rest) => rest,
-        None => name.strip_suffix(".sock")?,
+        Some(rest) => (rest, false),
+        None => (name.strip_suffix(".sock")?, true),
     };
-    let (pid, tab) = rest.split_once('-')?;
-    tab.parse::<u32>().ok()?;
+    let (pid, id) = rest.split_once('-')?;
+    let shared = socket
+        && id
+            .strip_prefix('m')
+            .is_some_and(|hash| !hash.is_empty() && hash.chars().all(|c| c.is_ascii_hexdigit()));
+    if !shared {
+        id.parse::<u32>().ok()?;
+    }
     pid.parse().ok()
 }
 
@@ -222,27 +265,188 @@ fn uri_has_port(bare: &str) -> bool {
     }
 }
 
+// ------------------------------------------------------- общие мастера
+
+/// Сколько сессий процесса пользуется каждым сокетом.
+static MASTERS: LazyLock<Mutex<HashMap<PathBuf, usize>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Сколько сессий процесса сейчас держат сокет `control_path`.
+#[cfg(test)]
+fn master_users(control_path: &Path) -> usize {
+    MASTERS
+        .lock()
+        .map_or(0, |masters| masters.get(control_path).copied().unwrap_or(0))
+}
+
+/// Регистрирует ещё одного пользователя сокета. Первый пользователь в
+/// процессе убирает оставшийся файл сокета, если за ним никого нет: с таким
+/// файлом `ssh` не смог бы стать мастером.
+fn acquire(control_path: &Path) {
+    let mut masters = MASTERS.lock().unwrap_or_else(|e| e.into_inner());
+    let users = masters.entry(control_path.to_path_buf()).or_insert(0);
+    *users += 1;
+    if *users == 1 && control_path.exists() && UnixStream::connect(control_path).is_err() {
+        let _ = fs::remove_file(control_path);
+    }
+}
+
+/// Снимает регистрацию; `true`, если это был последний пользователь.
+fn release(control_path: &Path) -> bool {
+    let mut masters = MASTERS.lock().unwrap_or_else(|e| e.into_inner());
+    match masters.get_mut(control_path) {
+        Some(users) if *users > 1 => {
+            *users -= 1;
+            false
+        }
+        Some(_) => {
+            masters.remove(control_path);
+            true
+        }
+        None => false,
+    }
+}
+
+/// Ключ общего мастера: FNV-1a от итоговых `user`, `hostname`, `port` и
+/// пути к конфигу. Если `ssh -G` не ответил, ключом служит сам адрес —
+/// тогда общими будут только вкладки с одинаково записанным адресом.
+fn master_key(resolved: Option<&Resolved>, target: &str, config: Option<&Path>) -> String {
+    let mut parts: Vec<&str> = match resolved {
+        Some(resolved) => ["user", "hostname", "port"]
+            .iter()
+            .map(|key| resolved.get(key).unwrap_or_default())
+            .collect(),
+        None => vec![target],
+    };
+    let config = config.map(|path| path.to_string_lossy().into_owned());
+    parts.push(config.as_deref().unwrap_or_default());
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in parts.join("\\0").bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{hash:016x}")
+}
+
+/// Доля сессии в сокете. Общая для всех клонов [`Session`]: отпускается
+/// один раз — явным [`Session::close_master`] или когда исчезнет последний
+/// клон.
+#[derive(Debug)]
+struct Lease {
+    control_path: PathBuf,
+    exit_argv: Vec<String>,
+    released: AtomicBool,
+}
+
+impl Lease {
+    fn release(&self) {
+        if self.released.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        if release(&self.control_path) && self.control_path.exists() {
+            run_detached(&self.exit_argv);
+        }
+    }
+}
+
+impl Drop for Lease {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+/// Запускает команду, не дожидаясь результата.
+fn run_detached(argv: &[String]) {
+    let spawned = Command::new(&argv[0])
+        .args(&argv[1..])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn();
+    if let Ok(mut child) = spawned {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+    }
+}
+
+/// `ssh [-F конфиг]`.
+fn ssh_base(config: Option<&Path>) -> Vec<String> {
+    let mut argv = vec![SSH_BIN.to_string()];
+    if let Some(config) = config {
+        argv.push("-F".to_string());
+        argv.push(config.to_string_lossy().into_owned());
+    }
+    argv
+}
+
+/// Путь сокета для ssh: `%` экранируется, иначе ssh примет его за токен.
+fn control_arg(control_path: &Path) -> String {
+    control_path.to_string_lossy().replace('%', "%%")
+}
+
+/// `ssh [-F конфиг] -S <сокет> <options…> -O <op> -- <хост>`.
+fn control_command(
+    config: Option<&Path>,
+    control_path: &Path,
+    target: &str,
+    op: &str,
+    options: &[&str],
+) -> Vec<String> {
+    let mut argv = ssh_base(config);
+    argv.extend(["-S".to_string(), control_arg(control_path)]);
+    argv.extend(options.iter().map(|option| option.to_string()));
+    argv.extend([
+        "-O".to_string(),
+        op.to_string(),
+        "--".to_string(),
+        target.to_string(),
+    ]);
+    argv
+}
+
 /// Сессия вкладки: куда подключаемся и через какой сокет.
 #[derive(Debug, Clone)]
 pub struct Session {
     target: String,
     control_path: PathBuf,
     config: Option<PathBuf>,
+    lease: Arc<Lease>,
 }
 
 impl Session {
-    /// `target` должен быть уже проверен [`validate_target`]. Имя сокета
-    /// уникально для процесса и вкладки, поэтому каждая вкладка держит
-    /// собственное мастер-соединение.
+    /// Сессия с собственным сокетом `<pid>-<tab_id>.sock`, которым никто
+    /// больше не пользуется (тесты и проверки на живом сервере). `target`
+    /// должен быть уже проверен [`validate_target`].
+    #[cfg(test)]
     pub fn new(target: &str, runtime_dir: &Path, tab_id: u32, config: Option<PathBuf>) -> Self {
         let control_path = runtime_dir.join(format!("{}-{tab_id}.sock", std::process::id()));
-        // Сокет с таким именем мог остаться только от упавшего процесса с тем
-        // же pid; живого мастера за ним нет.
-        let _ = fs::remove_file(&control_path);
+        Self::with_control_path(target, control_path, config)
+    }
+
+    /// Сессия вкладки на общем мастере: все вкладки процесса с тем же
+    /// итоговым адресом (пользователь, хост, порт) и тем же конфигом
+    /// получают один и тот же сокет. Блокирующая: спрашивает `ssh -G`
+    /// (обычно это миллисекунды).
+    pub fn shared(target: &str, runtime_dir: &Path, config: Option<PathBuf>) -> Self {
+        let resolved = ssh_config::resolve(target, config.as_deref()).ok();
+        let key = master_key(resolved.as_ref(), target, config.as_deref());
+        let control_path = runtime_dir.join(format!("{}-m{key}.sock", std::process::id()));
+        Self::with_control_path(target, control_path, config)
+    }
+
+    fn with_control_path(target: &str, control_path: PathBuf, config: Option<PathBuf>) -> Self {
+        acquire(&control_path);
+        let lease = Lease {
+            control_path: control_path.clone(),
+            exit_argv: control_command(config.as_deref(), &control_path, target, "exit", &[]),
+            released: AtomicBool::new(false),
+        };
         Self {
             target: target.to_string(),
             control_path,
             config,
+            lease: Arc::new(lease),
         }
     }
 
@@ -250,22 +454,24 @@ impl Session {
         &self.target
     }
 
+    /// Путь к управляющему сокету мастер-соединения.
     pub fn control_path(&self) -> &Path {
         &self.control_path
     }
 
-    /// Путь сокета для ssh: `%` экранируется, иначе ssh примет его за токен.
-    fn control_arg(&self) -> String {
-        self.control_path.to_string_lossy().replace('%', "%%")
+    /// Альтернативный ssh-конфиг (`ssh -F`), если он задан.
+    pub fn config(&self) -> Option<&Path> {
+        self.config.as_deref()
     }
 
-    fn base(&self) -> Vec<String> {
-        let mut argv = vec![SSH_BIN.to_string()];
-        if let Some(config) = &self.config {
-            argv.push("-F".to_string());
-            argv.push(config.to_string_lossy().into_owned());
-        }
-        argv
+    /// `ssh [-F конфиг]` — начало любой команды этой сессии.
+    pub fn base(&self) -> Vec<String> {
+        ssh_base(self.config.as_deref())
+    }
+
+    /// Путь сокета для ssh.
+    fn control_arg(&self) -> String {
+        control_arg(&self.control_path)
     }
 
     /// Команда для терминала: интерактивный ssh, который поднимает мастер.
@@ -287,27 +493,28 @@ impl Session {
         argv
     }
 
-    fn control_command(&self, op: &str) -> Vec<String> {
-        let mut argv = self.base();
-        argv.extend([
-            "-S".to_string(),
-            self.control_arg(),
-            "-O".to_string(),
-            op.to_string(),
-            "--".to_string(),
-            self.target.clone(),
-        ]);
-        argv
+    /// Команда управления мастером: `ssh [-F конфиг] -S <сокет> <options…>
+    /// -O <op> -- <хост>`. `op` — `check`, `exit`, `forward`, `cancel` и т. п.
+    /// (см. `ssh -O`); `options` — например, `["-L", "8080:localhost:80"]`
+    /// для `forward`/`cancel`.
+    pub fn control_argv(&self, op: &str, options: &[&str]) -> Vec<String> {
+        control_command(self.config.as_deref(), &self.control_path, &self.target, op, options)
+    }
+
+    /// Как [`Session::control_argv`], но без ssh-конфига (`-F /dev/null`).
+    ///
+    /// Клиент `ssh -O forward` и `ssh -O cancel` отправляет мастеру не только
+    /// пробросы из командной строки, но и все `LocalForward`/`RemoteForward`/
+    /// `DynamicForward` из конфига этого хоста: `-O cancel` снял бы заодно и
+    /// их. Для команды через сокет конфиг не нужен — сокет указан явно, а
+    /// сама команда не входит на сервер.
+    pub fn mux_argv(&self, op: &str, options: &[&str]) -> Vec<String> {
+        control_command(Some(Path::new("/dev/null")), &self.control_path, &self.target, op, options)
     }
 
     /// `ssh -S <сокет> -O check <хост>`: жив ли мастер.
     pub fn check_argv(&self) -> Vec<String> {
-        self.control_command("check")
-    }
-
-    /// `ssh -S <сокет> -O exit <хост>`: завершить мастер.
-    pub fn exit_argv(&self) -> Vec<String> {
-        self.control_command("exit")
+        self.control_argv("check", &[])
     }
 
     /// SFTP-подсистема через существующий мастер. `BatchMode` и
@@ -363,26 +570,18 @@ impl Session {
         argv
     }
 
-    /// Просит мастер завершиться, не дожидаясь результата. Вызывается при
-    /// закрытии вкладки; ошибки не важны — мастера может уже не быть.
+    /// Отпускает мастер-соединение этой сессии (вызывается при закрытии
+    /// вкладки). Если сокетом больше никто в процессе не пользуется, мастер
+    /// просят завершиться, не дожидаясь результата; ошибки не важны —
+    /// мастера может уже не быть. Повторные вызовы (в том числе из клонов)
+    /// ничего не делают.
     pub fn close_master(&self) {
-        if !self.control_path.exists() {
-            return;
-        }
-        let argv = self.exit_argv();
-        let spawned = Command::new(&argv[0])
-            .args(&argv[1..])
-            .stdin(Stdio::null())
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .spawn();
-        if let Ok(mut child) = spawned {
-            std::thread::spawn(move || {
-                let _ = child.wait();
-            });
-        }
+        self.lease.release();
     }
 }
+
+#[cfg(test)]
+mod live_tests;
 
 #[cfg(test)]
 mod tests {
@@ -407,6 +606,10 @@ mod tests {
         assert_eq!(owner_pid("abc-1.sock"), None);
         assert_eq!(owner_pid("1234-x.sock"), None);
         assert_eq!(owner_pid("unrelated"), None);
+        assert_eq!(owner_pid("1234-m0123abcdef456789.sock"), Some(1234));
+        assert_eq!(owner_pid("1234-m.sock"), None);
+        assert_eq!(owner_pid("1234-mxyz.sock"), None);
+        assert_eq!(owner_pid("files-1234-mabc"), None);
     }
 
     #[test]
@@ -502,7 +705,7 @@ mod tests {
         for argv in [
             s.terminal_argv(),
             s.check_argv(),
-            s.exit_argv(),
+            s.control_argv("exit", &[]),
             s.sftp_argv(),
         ] {
             assert_eq!(&argv[1..3], ["-F", "/tmp/alt_config"]);
@@ -519,11 +722,136 @@ mod tests {
     }
 
     #[test]
+    fn forward_commands_go_through_the_master() {
+        let s = session(Some("/tmp/alt_config"));
+        let argv = s.control_argv("forward", &["-L", "8080:localhost:80"]);
+        let sock = format!("/nonexistent-run/sshdeck/{}-7.sock", std::process::id());
+        assert_eq!(
+            argv,
+            [
+                SSH_BIN,
+                "-F",
+                "/tmp/alt_config",
+                "-S",
+                &sock,
+                "-L",
+                "8080:localhost:80",
+                "-O",
+                "forward",
+                "--",
+                "user@example",
+            ]
+        );
+    }
+
+    #[test]
+    fn mux_commands_ignore_the_ssh_config() {
+        let s = session(Some("/tmp/alt_config"));
+        let argv = s.mux_argv("cancel", &["-D", "1080"]);
+        let sock = format!("/nonexistent-run/sshdeck/{}-7.sock", std::process::id());
+        assert_eq!(
+            argv,
+            [SSH_BIN, "-F", "/dev/null", "-S", &sock, "-D", "1080", "-O", "cancel", "--", "user@example"]
+        );
+    }
+
+    #[test]
+    fn master_key_depends_on_destination_and_config() {
+        let a = Resolved::parse("user deploy\nhostname 10.0.0.5\nport 22\nidentityfile ~/.ssh/a\n");
+        let same = Resolved::parse("hostname 10.0.0.5\nuser deploy\nport 22\nidentityfile ~/.ssh/b\n");
+        let other_port = Resolved::parse("user deploy\nhostname 10.0.0.5\nport 2222\n");
+        let other_user = Resolved::parse("user root\nhostname 10.0.0.5\nport 22\n");
+        let key = master_key(Some(&a), "web", None);
+        assert_eq!(key.len(), 16);
+        assert_eq!(key, master_key(Some(&same), "deploy@10.0.0.5", None));
+        assert_ne!(key, master_key(Some(&other_port), "web", None));
+        assert_ne!(key, master_key(Some(&other_user), "web", None));
+        assert_ne!(key, master_key(Some(&a), "web", Some(Path::new("/tmp/cfg"))));
+        // Без ssh -G ключом служит сам адрес.
+        assert_eq!(master_key(None, "web", None), master_key(None, "web", None));
+        assert_ne!(master_key(None, "web", None), master_key(None, "db", None));
+    }
+
+    #[test]
+    fn last_session_releases_the_master() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let first = Session::new("h", dir.path(), 1, None);
+        let second = Session::new("h", dir.path(), 1, None);
+        let other = Session::new("h", dir.path(), 2, None);
+        assert_eq!(first.control_path(), second.control_path());
+        assert_eq!(master_users(first.control_path()), 2);
+        assert_eq!(master_users(other.control_path()), 1);
+
+        // Клон — та же вкладка: повторное закрытие ничего не меняет.
+        let clone = first.clone();
+        first.close_master();
+        clone.close_master();
+        assert_eq!(master_users(second.control_path()), 1);
+        drop(first);
+        drop(clone);
+        assert_eq!(master_users(second.control_path()), 1);
+
+        // Последний клон, исчезнув, отпускает сокет сам.
+        drop(second);
+        assert_eq!(master_users(&dir.path().join(format!("{}-1.sock", std::process::id()))), 0);
+        other.close_master();
+        assert_eq!(master_users(other.control_path()), 0);
+    }
+
+    #[test]
+    fn stale_socket_file_is_removed_by_the_first_user_only() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let path = dir.path().join(format!("{}-3.sock", std::process::id()));
+        fs::write(&path, "").expect("write");
+        let first = Session::new("h", dir.path(), 3, None);
+        assert!(!path.exists(), "мёртвый сокет мешал бы ssh стать мастером");
+
+        // Живой сокет первый пользователь не трогает.
+        let listener = std::os::unix::net::UnixListener::bind(&path).expect("bind");
+        first.close_master();
+        let again = Session::new("h", dir.path(), 3, None);
+        assert!(path.exists());
+        drop(listener);
+        drop(again);
+    }
+
+    #[test]
+    fn tabs_to_the_same_destination_share_a_socket() {
+        if !Path::new(SSH_BIN).exists() {
+            return;
+        }
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let config = dir.path().join("config");
+        fs::write(
+            &config,
+            "Host web\n  HostName 192.0.2.10\n  User deploy\n\
+             Host web-alias\n  HostName 192.0.2.10\n  User deploy\n  Port 22\n\
+             Host web-root\n  HostName 192.0.2.10\n  User root\n",
+        )
+        .expect("write config");
+        let run = dir.path().join("run");
+        fs::create_dir(&run).expect("mkdir");
+        let shared = |target: &str| Session::shared(target, &run, Some(config.clone()));
+        let web = shared("web");
+        let alias = shared("web-alias");
+        let direct = shared("deploy@192.0.2.10");
+        let root = shared("web-root");
+        assert_eq!(web.control_path(), alias.control_path());
+        assert_eq!(web.control_path(), direct.control_path());
+        assert_ne!(web.control_path(), root.control_path());
+        assert_eq!(master_users(web.control_path()), 3);
+        let name = web.control_path().file_name().expect("name").to_string_lossy().into_owned();
+        assert_eq!(owner_pid(&name), Some(std::process::id()));
+        // Сокет не создаётся заранее: его откроет первый ssh.
+        assert!(!web.control_path().exists());
+    }
+
+    #[test]
     fn control_commands() {
         let s = session(None);
         let check = s.check_argv();
         assert_eq!(&check[check.len() - 4..], ["-O", "check", "--", "user@example"]);
-        let exit = s.exit_argv();
+        let exit = s.control_argv("exit", &[]);
         assert_eq!(&exit[exit.len() - 4..], ["-O", "exit", "--", "user@example"]);
     }
 }

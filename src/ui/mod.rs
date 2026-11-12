@@ -8,6 +8,7 @@ mod dialogs;
 mod dnd;
 mod extensions;
 mod files;
+mod forwards;
 mod hosts;
 mod snippets;
 mod statusbar;

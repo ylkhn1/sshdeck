@@ -1,12 +1,13 @@
 pkgbase = sshdeck
 	pkgdesc = Lightweight native SSH client: SFTP file tree, terminal and database client in one window
-	pkgver = 0.1.0
+	pkgver = 0.2.0
 	pkgrel = 1
 	url = https://github.com/ylkhn1/sshdeck
 	arch = x86_64
 	arch = aarch64
 	license = MIT
 	makedepends = cargo
+	makedepends = git
 	depends = gcc-libs
 	depends = glib2
 	depends = glibc
@@ -19,7 +20,7 @@ pkgbase = sshdeck
 	depends = vte4
 	depends = openssh
 	depends = xdg-utils
-	source = sshdeck-0.1.0.tar.gz::https://github.com/ylkhn1/sshdeck/archive/v0.1.0.tar.gz
-	sha256sums = 94de3bda3861ed87d5e8610cf8fd9bfa0f19da12a74a1281d39056d2aa6a0076
+	source = sshdeck::git+https://github.com/ylkhn1/sshdeck.git#tag=v0.2.0
+	sha256sums = SKIP
 
 pkgname = sshdeck

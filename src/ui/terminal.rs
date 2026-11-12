@@ -471,9 +471,14 @@ fn install_matches(term: &vte::Terminal, on_notice: impl Fn(&str) + 'static) {
     term.add_controller(gesture);
 }
 
-/// Запускает команду в терминале. Об ошибке запуска сообщает `on_error`;
-/// о завершении процесса — сигнал `child-exited` терминала.
-pub fn spawn(term: &vte::Terminal, argv: &[String], on_error: impl FnOnce(String) + 'static) {
+/// Запускает команду в терминале. Результат запуска — pid процесса или
+/// текст ошибки — приходит в `on_spawned`; о завершении процесса сообщает
+/// сигнал `child-exited` терминала.
+pub fn spawn(
+    term: &vte::Terminal,
+    argv: &[String],
+    on_spawned: impl FnOnce(Result<glib::Pid, String>) + 'static,
+) {
     let argv: Vec<&str> = argv.iter().map(String::as_str).collect();
     term.spawn_async(
         vte::PtyFlags::DEFAULT,
@@ -484,12 +489,24 @@ pub fn spawn(term: &vte::Terminal, argv: &[String], on_error: impl FnOnce(String
         || {},
         -1,
         gio::Cancellable::NONE,
-        move |result| {
-            if let Err(err) = result {
-                on_error(err.to_string());
-            }
-        },
+        move |result| on_spawned(result.map_err(|err| err.to_string())),
     );
+}
+
+/// Посылает процессу терминала SIGHUP — как при закрытии окна терминала.
+/// Ошибки не важны: процесса может уже не быть.
+pub fn hang_up(pid: glib::Pid) {
+    let spawned = std::process::Command::new("kill")
+        .args(["-HUP", &pid.0.to_string()])
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
+    if let Ok(mut child) = spawned {
+        std::thread::spawn(move || {
+            let _ = child.wait();
+        });
+    }
 }
 
 /// Код выхода из статуса `wait(2)`; `None`, если процесс убит сигналом.

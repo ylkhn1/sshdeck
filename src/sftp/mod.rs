@@ -5,11 +5,16 @@
 //! канала. Соединение не аутентифицируется само: дочерний
 //! `ssh -S <сокет> -s <хост> sftp` идёт через мастер, поднятый терминалом.
 
+mod proto;
 mod transfer;
+#[cfg(test)]
+mod live_tests;
 
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io;
-use std::path::PathBuf;
+use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
@@ -18,8 +23,6 @@ use std::time::Duration;
 use async_channel::Sender;
 use futures_util::StreamExt;
 use futures_util::stream;
-use openssh_sftp_client::error::SftpErrorKind;
-use openssh_sftp_client::{Error as SftpError, Sftp, SftpOptions};
 use tokio::io::AsyncReadExt;
 use tokio::process::{Child, Command as ProcCommand};
 use tokio::runtime::Runtime;
@@ -27,6 +30,9 @@ use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
 
 use crate::session::Session;
+use proto::{Attrs, Client};
+
+pub use transfer::copy_name;
 
 /// Идентификатор передачи; назначается интерфейсом.
 pub type TransferId = u64;
@@ -40,6 +46,13 @@ const RETRY_DELAY_MAX: Duration = Duration::from_secs(10);
 /// Сколько символических ссылок проверять одновременно при чтении каталога.
 const LINK_STAT_CONCURRENCY: usize = 16;
 const STDERR_LIMIT: usize = 4096;
+/// Глубже этого каталоги не обходятся (при скачивании, загрузке и
+/// удалении): защита от бесконечных деревьев враждебного сервера.
+const MAX_TREE_DEPTH: usize = 256;
+/// Больше стольких элементов за одну операцию не обходим.
+const MAX_TREE_ENTRIES: usize = 1_000_000;
+/// Сколько ждать, пока ssh завершится сам, после закрытия соединения.
+const EXIT_GRACE: Duration = Duration::from_millis(500);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryKind {
@@ -50,12 +63,14 @@ pub enum EntryKind {
     Other,
 }
 
-/// Элемент удалённого каталога.
+/// Элемент удалённого каталога. Имя и путь хранятся байтами, как их
+/// прислал сервер: они не обязаны быть UTF-8. Для показа есть
+/// [`RemoteEntry::display_name`] и [`display`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RemoteEntry {
-    pub name: String,
+    pub name: OsString,
     /// Полный путь на сервере.
-    pub path: String,
+    pub path: PathBuf,
     /// Тип с учётом перехода по ссылке.
     pub kind: EntryKind,
     pub is_link: bool,
@@ -64,51 +79,111 @@ pub struct RemoteEntry {
     pub modified: Option<u64>,
 }
 
+impl RemoteEntry {
+    /// Имя для показа: недопустимые в UTF-8 байты заменяются на «�».
+    pub fn display_name(&self) -> String {
+        self.name.to_string_lossy().into_owned()
+    }
+
+    /// Скрытый файл (имя начинается с точки).
+    pub fn is_hidden(&self) -> bool {
+        self.name.as_bytes().starts_with(b".")
+    }
+}
+
+/// Что известно о версии файла на сервере: по этому видно, менялся ли он.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RemoteStamp {
+    pub size: Option<u64>,
+    pub modified: Option<u64>,
+}
+
+impl RemoteStamp {
+    fn of(attrs: &Attrs) -> Self {
+        Self {
+            size: attrs.size,
+            modified: attrs.modified().map(u64::from),
+        }
+    }
+}
+
+/// Файл, который передавался одиночной передачей, и его состояние на
+/// сервере после неё.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RemoteFile {
+    pub path: PathBuf,
+    pub stamp: RemoteStamp,
+}
+
+/// Как сохранять файл из редактора.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SaveMode {
+    /// Залить, только если файл на сервере всё ещё в этом состоянии;
+    /// иначе передача завершается [`TransferOutcome::Conflict`].
+    IfUnchanged(RemoteStamp),
+    /// Залить поверх, не проверяя.
+    Overwrite,
+    /// Сохранить рядом под свободным именем вида «имя (local copy).ext».
+    Copy,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConnState {
     /// Мастер-соединение ещё не поднято (или уже закрыто).
     Waiting { last_error: Option<String> },
     /// Мастер есть, запускается SFTP-подсистема.
     Connecting,
-    Connected { home: String },
+    Connected { home: PathBuf },
 }
 
 #[derive(Debug)]
 pub enum Command {
     /// Перейти в каталог: путь нормализуется сервером и читается.
-    Navigate { path: String },
+    Navigate { path: PathBuf },
     /// Прочитать каталог (подгрузка узла дерева или обновление).
-    List { path: String },
-    Mkdir { path: String },
-    Rename { from: String, to: String },
+    List { path: PathBuf },
+    Mkdir { path: PathBuf },
+    Rename { from: PathBuf, to: PathBuf },
     /// Удалить файлы и каталоги (каталоги — рекурсивно).
-    Delete { paths: Vec<String> },
+    Delete { paths: Vec<PathBuf> },
     /// Скачать файлы и каталоги в локальный каталог `dest_dir`.
     Download {
         id: TransferId,
-        sources: Vec<String>,
+        sources: Vec<PathBuf>,
         dest_dir: PathBuf,
     },
     /// Загрузить локальные файлы и каталоги в удалённый каталог `dest_dir`.
     Upload {
         id: TransferId,
         sources: Vec<PathBuf>,
-        dest_dir: String,
+        dest_dir: PathBuf,
     },
     /// Залить один файл по точному удалённому пути (сохранение из редактора).
     UploadFile {
         id: TransferId,
         local: PathBuf,
-        remote: String,
+        remote: PathBuf,
+        mode: SaveMode,
     },
     Cancel { id: TransferId },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TransferOutcome {
-    /// Готово; `skipped` — то, что не передавалось (ссылки на каталоги,
-    /// сокеты и т. п.).
-    Completed { skipped: Vec<String> },
+    /// Готово. `skipped` — то, что не передавалось (спецфайлы, битые и
+    /// зацикленные ссылки, слишком глубокие каталоги). `size_mismatch` —
+    /// скачанные файлы, размер которых не совпал с тем, что сообщил сервер
+    /// (файл менялся во время скачивания или сервер ведёт себя странно).
+    /// `file` — итог одиночной передачи файла: скачивания одного файла или
+    /// сохранения из редактора.
+    Completed {
+        skipped: Vec<PathBuf>,
+        size_mismatch: Vec<PathBuf>,
+        file: Option<RemoteFile>,
+    },
+    /// Файл на сервере изменился после скачивания (`None` — его удалили);
+    /// ничего не залито.
+    Conflict { current: Option<RemoteStamp> },
     Cancelled,
     Failed(String),
 }
@@ -117,19 +192,19 @@ pub enum TransferOutcome {
 pub enum Event {
     State(ConnState),
     Navigated {
-        requested: String,
+        requested: PathBuf,
         /// Нормализованный путь и содержимое.
-        result: Result<(String, Vec<RemoteEntry>), String>,
+        result: Result<(PathBuf, Vec<RemoteEntry>), String>,
     },
     Listing {
-        path: String,
+        path: PathBuf,
         result: Result<Vec<RemoteEntry>, String>,
     },
     /// Завершилась операция создания, переименования или удаления.
     OpDone {
         error: Option<String>,
         /// Каталоги, содержимое которых могло измениться.
-        refresh: Vec<String>,
+        refresh: Vec<PathBuf>,
     },
     Progress {
         id: TransferId,
@@ -189,15 +264,19 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 /// Текст ошибки вместе с цепочкой причин. Типовые ответы SFTP-сервера
 /// переводятся в короткие понятные фразы.
 pub(crate) fn error_text(err: &(dyn std::error::Error + 'static)) -> String {
-    if let Some(SftpError::SftpError(kind, message)) = err.downcast_ref::<SftpError>() {
-        return match kind {
-            SftpErrorKind::NoSuchFile => tr!("no such file or folder").to_string(),
-            SftpErrorKind::PermDenied => tr!("permission denied").to_string(),
-            SftpErrorKind::OpUnsupported => tr!("the server does not support this operation").to_string(),
-            // «Failure» — общий отказ без подробностей: каталог не пуст, имя
-            // занято, кончилось место и т. п.
-            SftpErrorKind::Failure => tr!("the server rejected the operation").to_string(),
-            _ => tr!("server error: {}", message.get().0),
+    if let Some(err) = err.downcast_ref::<proto::Error>() {
+        return match err {
+            proto::Error::Status { code, .. } => match *code {
+                proto::FX_NO_SUCH_FILE => tr!("no such file or folder").to_string(),
+                proto::FX_PERMISSION_DENIED => tr!("permission denied").to_string(),
+                proto::FX_OP_UNSUPPORTED => tr!("the server does not support this operation").to_string(),
+                // «Failure» — общий отказ без подробностей: каталог не пуст, имя
+                // занято, кончилось место и т. п.
+                proto::FX_FAILURE => tr!("the server rejected the operation").to_string(),
+                _ => tr!("server error: {}", err),
+            },
+            proto::Error::Lost => tr!("Connection lost").to_string(),
+            proto::Error::Protocol(_) => tr!("server error: {}", err),
         };
     }
     let mut text = err.to_string();
@@ -213,28 +292,78 @@ pub(crate) fn error_text(err: &(dyn std::error::Error + 'static)) -> String {
     text
 }
 
-/// Склеивает путь каталога и имя.
-pub fn join_remote(dir: &str, name: &str) -> String {
-    if dir.ends_with('/') {
-        format!("{dir}{name}")
-    } else {
-        format!("{dir}/{name}")
+/// Удалённый путь для показа: недопустимые в UTF-8 байты заменяются на «�».
+pub fn display(path: &Path) -> String {
+    path.to_string_lossy().into_owned()
+}
+
+fn trim_slashes(bytes: &[u8]) -> &[u8] {
+    let mut end = bytes.len();
+    while end > 1 && bytes[end - 1] == b'/' {
+        end -= 1;
     }
+    &bytes[..end]
+}
+
+/// Склеивает путь каталога и имя (байтами, без требований к кодировке).
+pub fn join_remote(dir: &Path, name: impl AsRef<OsStr>) -> PathBuf {
+    let mut bytes = dir.as_os_str().as_bytes().to_vec();
+    if !bytes.ends_with(b"/") {
+        bytes.push(b'/');
+    }
+    bytes.extend_from_slice(name.as_ref().as_bytes());
+    PathBuf::from(OsString::from_vec(bytes))
 }
 
 /// Родительский каталог удалённого пути (`/` для верхнего уровня).
-pub fn parent_remote(path: &str) -> String {
-    let trimmed = path.trim_end_matches('/');
-    match trimmed.rfind('/') {
-        Some(0) | None => "/".to_string(),
-        Some(idx) => trimmed[..idx].to_string(),
+pub fn parent_remote(path: &Path) -> PathBuf {
+    let trimmed = trim_slashes(path.as_os_str().as_bytes());
+    match trimmed.iter().rposition(|&b| b == b'/') {
+        Some(0) | None => PathBuf::from("/"),
+        Some(idx) => PathBuf::from(OsStr::from_bytes(&trimmed[..idx])),
     }
 }
 
-/// Последний компонент удалённого пути.
-pub fn base_name(path: &str) -> &str {
-    let trimmed = path.trim_end_matches('/');
-    trimmed.rsplit('/').next().unwrap_or(trimmed)
+/// Последний компонент удалённого пути (пустой для `/`).
+pub fn base_name(path: &Path) -> &OsStr {
+    let trimmed = trim_slashes(path.as_os_str().as_bytes());
+    let start = trimmed.iter().rposition(|&b| b == b'/').map_or(0, |idx| idx + 1);
+    OsStr::from_bytes(&trimmed[start..])
+}
+
+/// Имя, пришедшее с сервера, годится в путь: ровно один обычный компонент
+/// (не пустое, не `.`/`..`, без `/` и нулевых байтов).
+pub fn is_plain_name(name: &OsStr) -> bool {
+    if !proto::valid_name(name.as_bytes()) {
+        return false;
+    }
+    let mut components = Path::new(name).components();
+    matches!(
+        (components.next(), components.next()),
+        (Some(Component::Normal(_)), None)
+    )
+}
+
+/// Удалённый путь элемента каталога; `None` для недопустимого имени.
+pub fn remote_child(dir: &Path, name: &OsStr) -> Option<PathBuf> {
+    is_plain_name(name).then(|| join_remote(dir, name))
+}
+
+/// Локальный путь для имени с сервера; `None` для недопустимого имени.
+/// Без этой проверки абсолютное имя («/home/u/.bashrc») в `Path::join`
+/// заменило бы весь путь, а «../x» вышло бы из каталога назначения.
+pub fn local_child(dir: &Path, name: &OsStr) -> Option<PathBuf> {
+    is_plain_name(name).then(|| dir.join(name))
+}
+
+/// Лежит ли `path` внутри каталога `dir` (на любой глубине).
+pub fn is_inside(path: &Path, dir: &Path) -> bool {
+    let path = path.as_os_str().as_bytes();
+    let dir = trim_slashes(dir.as_os_str().as_bytes());
+    if dir == b"/" {
+        return path.len() > 1 && path.starts_with(b"/");
+    }
+    path.len() > dir.len() && path.starts_with(dir) && path[dir.len()] == b'/'
 }
 
 async fn run(session: Session, mut rx: mpsc::UnboundedReceiver<Command>, events: Sender<Event>) {
@@ -345,12 +474,12 @@ async fn master_alive(session: &Session) -> bool {
 }
 
 struct Connection {
-    sftp: Arc<Sftp>,
+    sftp: Client,
     child: Child,
     stderr: Arc<Mutex<String>>,
 }
 
-async fn connect(session: &Session) -> Result<(Connection, String), String> {
+async fn connect(session: &Session) -> Result<(Connection, PathBuf), String> {
     let argv = session.sftp_argv();
     let mut child = ProcCommand::new(&argv[0])
         .args(&argv[1..])
@@ -382,16 +511,18 @@ async fn connect(session: &Session) -> Result<(Connection, String), String> {
         });
     }
 
-    let opened = tokio::time::timeout(
-        CONNECT_TIMEOUT,
-        Sftp::new(stdin, stdout, SftpOptions::default()),
-    )
+    // В общий срок входят и приветствие, и запрос домашнего каталога.
+    let opened = tokio::time::timeout(CONNECT_TIMEOUT, async {
+        let sftp = Client::start(stdout, stdin).await?;
+        let home = sftp.realpath(Path::new(".")).await;
+        Ok::<_, proto::Error>((sftp, home))
+    })
     .await;
-    let sftp = match opened {
-        Ok(Ok(sftp)) => sftp,
+    let (sftp, home) = match opened {
+        Ok(Ok(opened)) => opened,
         Ok(Err(err)) => {
             // Причину обычно называет сам ssh; внутренняя ошибка протокола
-            // («unexpected end of file») полезна, только если он промолчал.
+            // («соединение закрыто») полезна, только если он промолчал.
             let reported = with_stderr(String::new(), &stderr).await;
             let detail = if reported.is_empty() {
                 error_text(&err)
@@ -405,14 +536,14 @@ async fn connect(session: &Session) -> Result<(Connection, String), String> {
         }
     };
 
-    let home = match sftp.fs().canonicalize(".").await {
-        Ok(path) => path.to_string_lossy().into_owned(),
+    let home = match home {
+        Ok(path) => path,
         Err(err) => return Err(with_stderr(error_text(&err), &stderr).await),
     };
 
     Ok((
         Connection {
-            sftp: Arc::new(sftp),
+            sftp,
             child,
             stderr,
         },
@@ -459,6 +590,8 @@ async fn serve(
         stderr,
     } = connection;
     let transfers = Arc::new(Transfers::default());
+    let closed = sftp.closed();
+    tokio::pin!(closed);
 
     let end = loop {
         tokio::select! {
@@ -467,9 +600,17 @@ async fn serve(
                 None => break ServeEnd::Closed,
             },
             status = child.wait() => {
-                let base = match status {
-                    Ok(status) => tr!("ssh exited ({})", status),
-                    Err(err) => tr!("ssh exited: {}", err),
+                break ServeEnd::Lost(with_stderr(exit_text(status), &stderr).await);
+            }
+            // Соединение сломалось, а ssh ещё жив (нарушение протокола,
+            // зависший сервер): уходим на обычный путь переподключения.
+            () = &mut closed => {
+                let base = match tokio::time::timeout(EXIT_GRACE, child.wait()).await {
+                    Ok(status) => exit_text(status),
+                    Err(_) => tr!(
+                        "The SFTP connection failed: {}",
+                        sftp.close_reason().unwrap_or_default()
+                    ),
                 };
                 break ServeEnd::Lost(with_stderr(base, &stderr).await);
             }
@@ -487,8 +628,15 @@ async fn serve(
     end
 }
 
-fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfers: &Arc<Transfers>) {
-    let sftp = Arc::clone(sftp);
+fn exit_text(status: io::Result<std::process::ExitStatus>) -> String {
+    match status {
+        Ok(status) => tr!("ssh exited ({})", status),
+        Err(err) => tr!("ssh exited: {}", err),
+    }
+}
+
+fn dispatch(command: Command, sftp: &Client, events: &Sender<Event>, transfers: &Arc<Transfers>) {
+    let sftp = sftp.clone();
     let events = events.clone();
     match command {
         Command::Navigate { path } => {
@@ -511,10 +659,10 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
         }
         Command::Mkdir { path } => {
             tokio::spawn(async move {
-                let error = sftp.fs().create_dir(&path).await.err().map(|e| {
+                let error = sftp.mkdir(&path).await.err().map(|e| {
                     tr!(
                         "Could not create folder “{}”: {}",
-                        base_name(&path),
+                        display(Path::new(base_name(&path))),
                         error_text(&e)
                     )
                 });
@@ -529,10 +677,13 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
         }
         Command::Rename { from, to } => {
             tokio::spawn(async move {
-                let error = rename(&sftp, &from, &to)
-                    .await
-                    .err()
-                    .map(|e| tr!("Could not rename “{}”: {}", base_name(&from), e));
+                let error = rename(&sftp, &from, &to).await.err().map(|e| {
+                    tr!(
+                        "Could not rename “{}”: {}",
+                        display(Path::new(base_name(&from))),
+                        e
+                    )
+                });
                 let mut refresh = vec![parent_remote(&from)];
                 let to_parent = parent_remote(&to);
                 if !refresh.contains(&to_parent) {
@@ -544,7 +695,7 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
         Command::Delete { paths } => {
             tokio::spawn(async move {
                 let mut error = None;
-                let mut refresh: Vec<String> = Vec::new();
+                let mut refresh: Vec<PathBuf> = Vec::new();
                 for path in &paths {
                     let parent = parent_remote(path);
                     if !refresh.contains(&parent) {
@@ -553,7 +704,7 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
                     if let Err(err) = remove_recursive(&sftp, path).await {
                         error = Some(tr!(
                             "Could not delete “{}”: {}",
-                            base_name(path),
+                            display(Path::new(base_name(path))),
                             error_text(&err)
                         ));
                         break;
@@ -576,11 +727,14 @@ fn dispatch(command: Command, sftp: &Arc<Sftp>, events: &Sender<Event>, transfer
         } => spawn_transfer(id, sftp, events, transfers, move |job| {
             Box::pin(transfer::upload(job, sources, dest_dir))
         }),
-        Command::UploadFile { id, local, remote } => {
-            spawn_transfer(id, sftp, events, transfers, move |job| {
-                Box::pin(transfer::upload_file(job, local, remote))
-            })
-        }
+        Command::UploadFile {
+            id,
+            local,
+            remote,
+            mode,
+        } => spawn_transfer(id, sftp, events, transfers, move |job| {
+            Box::pin(transfer::upload_file(job, local, remote, mode))
+        }),
         Command::Cancel { id } => {
             if let Some(token) = lock(&transfers.tokens).get(&id) {
                 token.cancel();
@@ -594,7 +748,7 @@ type TransferFuture<'a> =
 
 fn spawn_transfer(
     id: TransferId,
-    sftp: Arc<Sftp>,
+    sftp: Client,
     events: Sender<Event>,
     transfers: &Arc<Transfers>,
     work: impl for<'a> FnOnce(&'a mut transfer::Job) -> TransferFuture<'a> + Send + 'static,
@@ -609,118 +763,129 @@ fn spawn_transfer(
         let outcome = match result {
             Ok(()) => TransferOutcome::Completed {
                 skipped: std::mem::take(&mut job.skipped),
+                size_mismatch: std::mem::take(&mut job.size_mismatch),
+                file: job.file.take(),
             },
             Err(transfer::Abort::Cancelled) if transfers.lost.load(Ordering::SeqCst) => {
                 TransferOutcome::Failed(tr!("Connection lost").to_string())
             }
             Err(transfer::Abort::Cancelled) => TransferOutcome::Cancelled,
+            Err(transfer::Abort::Conflict(current)) => TransferOutcome::Conflict { current },
             Err(transfer::Abort::Failed(message)) => TransferOutcome::Failed(message),
         };
         emit(&events, Event::TransferDone { id, outcome });
     });
 }
 
-async fn navigate(sftp: &Sftp, path: &str) -> Result<(String, Vec<RemoteEntry>), SftpError> {
-    let canonical = sftp.fs().canonicalize(path).await?;
-    let canonical = canonical.to_string_lossy().into_owned();
+async fn navigate(sftp: &Client, path: &Path) -> Result<(PathBuf, Vec<RemoteEntry>), proto::Error> {
+    let canonical = sftp.realpath(path).await?;
     let entries = list_dir(sftp, &canonical).await?;
     Ok((canonical, entries))
 }
 
+fn kind_of(attrs: &Attrs) -> EntryKind {
+    if attrs.is_dir() {
+        EntryKind::Dir
+    } else if attrs.is_file() {
+        EntryKind::File
+    } else {
+        EntryKind::Other
+    }
+}
+
 /// Читает каталог. Для символических ссылок дополнительно выясняется, на
 /// что они указывают, чтобы ссылку на каталог можно было раскрыть.
-pub(crate) async fn list_dir(sftp: &Sftp, path: &str) -> Result<Vec<RemoteEntry>, SftpError> {
-    let dir = sftp.fs().open_dir(path).await?;
-    let read_dir = dir.read_dir();
-    tokio::pin!(read_dir);
+pub(crate) async fn list_dir(sftp: &Client, path: &Path) -> Result<Vec<RemoteEntry>, proto::Error> {
+    // Недопустимые имена уже отброшены при чтении; проверка пути — ещё
+    // один рубеж.
+    let mut entries: Vec<RemoteEntry> = sftp
+        .read_dir(path)
+        .await?
+        .into_iter()
+        .filter_map(|(name, attrs)| {
+            Some(RemoteEntry {
+                path: remote_child(path, &name)?,
+                name,
+                kind: kind_of(&attrs),
+                is_link: attrs.is_symlink(),
+                size: attrs.size,
+                modified: attrs.modified().map(u64::from),
+            })
+        })
+        .collect();
 
-    let mut entries = Vec::new();
-    while let Some(item) = read_dir.next().await {
-        let item = item?;
-        let name = item.filename().to_string_lossy().into_owned();
-        if name == "." || name == ".." {
-            continue;
-        }
-        let meta = item.metadata();
-        let file_type = item.file_type();
-        let is_link = file_type.is_some_and(|t| t.is_symlink());
-        let kind = match file_type {
-            Some(t) if t.is_dir() => EntryKind::Dir,
-            Some(t) if t.is_file() => EntryKind::File,
-            _ => EntryKind::Other,
-        };
-        entries.push(RemoteEntry {
-            path: join_remote(path, &name),
-            name,
-            kind,
-            is_link,
-            size: meta.len(),
-            modified: meta.modified().map(|t| t.as_duration().as_secs()),
-        });
-    }
-
-    let link_targets: Vec<(usize, String)> = entries
+    let link_targets: Vec<(usize, PathBuf)> = entries
         .iter()
         .enumerate()
         .filter(|(_, e)| e.is_link)
         .map(|(idx, e)| (idx, e.path.clone()))
         .collect();
     let resolved: Vec<_> = stream::iter(link_targets)
-        .map(|(idx, link)| async move { (idx, sftp.fs().metadata(&link).await) })
+        .map(|(idx, link)| async move { (idx, sftp.stat(&link).await) })
         .buffer_unordered(LINK_STAT_CONCURRENCY)
         .collect()
         .await;
-    for (idx, meta) in resolved {
+    for (idx, attrs) in resolved {
         // Ошибка здесь — битая ссылка; элемент остаётся с типом Other.
-        if let Ok(meta) = meta {
+        if let Ok(attrs) = attrs {
             let entry = &mut entries[idx];
-            entry.kind = match meta.file_type() {
-                Some(t) if t.is_dir() => EntryKind::Dir,
-                Some(t) if t.is_file() => EntryKind::File,
-                _ => EntryKind::Other,
-            };
-            entry.size = meta.len();
-            entry.modified = meta.modified().map(|t| t.as_duration().as_secs());
+            entry.kind = kind_of(&attrs);
+            entry.size = attrs.size;
+            entry.modified = attrs.modified().map(u64::from);
         }
     }
     Ok(entries)
 }
 
-/// Переименование без молчаливой замены: `posix-rename` перезаписал бы
-/// существующий файл, поэтому занятость имени проверяется заранее.
-async fn rename(sftp: &Sftp, from: &str, to: &str) -> Result<(), String> {
-    let mut fs = sftp.fs();
-    if fs.symlink_metadata(to).await.is_ok() {
-        return Err(tr!("the name “{}” is already taken", base_name(to)));
+/// Переименование без молчаливой замены: занятость имени проверяется
+/// заранее (сервер мог бы заменить существующий каталог).
+async fn rename(sftp: &Client, from: &Path, to: &Path) -> Result<(), String> {
+    if sftp.lstat(to).await.is_ok() {
+        return Err(tr!(
+            "the name “{}” is already taken",
+            display(Path::new(base_name(to)))
+        ));
     }
-    fs.rename(from, to).await.map_err(|e| error_text(&e))
+    sftp.rename(from, to).await.map_err(|e| error_text(&e))
 }
 
 /// Удаляет файл или каталог со всем содержимым. По ссылкам не переходит:
 /// удаляется сама ссылка.
-async fn remove_recursive(sftp: &Sftp, path: &str) -> Result<(), SftpError> {
-    let mut fs = sftp.fs();
-    let meta = fs.symlink_metadata(path).await?;
-    if !meta.file_type().is_some_and(|t| t.is_dir()) {
-        return fs.remove_file(path).await;
+async fn remove_recursive(sftp: &Client, path: &Path) -> Result<(), proto::Error> {
+    let attrs = sftp.lstat(path).await?;
+    if !attrs.is_dir() {
+        return sftp.remove(path).await;
     }
 
     // Обход без рекурсии: сначала собираем каталоги, затем удаляем их в
-    // обратном порядке, когда они уже пусты.
-    let mut pending = vec![path.to_string()];
+    // обратном порядке, когда они уже пусты. Глубина и число элементов
+    // ограничены: дерево на враждебном сервере может быть бесконечным.
+    let too_big = || proto::Error::Protocol("the folder tree is too large".to_string());
+    let mut pending = vec![(path.to_path_buf(), 0usize)];
     let mut dirs = Vec::new();
-    while let Some(dir) = pending.pop() {
+    let mut seen = 0usize;
+    while let Some((dir, depth)) = pending.pop() {
         for entry in list_dir(sftp, &dir).await? {
+            seen += 1;
+            if seen > MAX_TREE_ENTRIES {
+                return Err(too_big());
+            }
+            let Some(child) = remote_child(&dir, &entry.name) else {
+                continue;
+            };
             if entry.kind == EntryKind::Dir && !entry.is_link {
-                pending.push(entry.path);
+                if depth + 1 >= MAX_TREE_DEPTH {
+                    return Err(too_big());
+                }
+                pending.push((child, depth + 1));
             } else {
-                fs.remove_file(&entry.path).await?;
+                sftp.remove(&child).await?;
             }
         }
         dirs.push(dir);
     }
     for dir in dirs.iter().rev() {
-        fs.remove_dir(dir).await?;
+        sftp.rmdir(dir).await?;
     }
     Ok(())
 }
@@ -729,15 +894,64 @@ async fn remove_recursive(sftp: &Sftp, path: &str) -> Result<(), SftpError> {
 mod tests {
     use super::*;
 
+    fn p(bytes: &[u8]) -> PathBuf {
+        PathBuf::from(OsString::from_vec(bytes.to_vec()))
+    }
+
     #[test]
     fn remote_path_helpers() {
-        assert_eq!(join_remote("/", "etc"), "/etc");
-        assert_eq!(join_remote("/home/u", "f.txt"), "/home/u/f.txt");
-        assert_eq!(parent_remote("/home/u/f.txt"), "/home/u");
-        assert_eq!(parent_remote("/home/u/"), "/home");
-        assert_eq!(parent_remote("/etc"), "/");
-        assert_eq!(parent_remote("/"), "/");
-        assert_eq!(base_name("/home/u/f.txt"), "f.txt");
-        assert_eq!(base_name("/home/u/"), "u");
+        assert_eq!(join_remote(Path::new("/"), "etc"), p(b"/etc"));
+        assert_eq!(join_remote(Path::new("/home/u"), "f.txt"), p(b"/home/u/f.txt"));
+        assert_eq!(parent_remote(Path::new("/home/u/f.txt")), p(b"/home/u"));
+        assert_eq!(parent_remote(Path::new("/home/u/")), p(b"/home"));
+        assert_eq!(parent_remote(Path::new("/etc")), p(b"/"));
+        assert_eq!(parent_remote(Path::new("/")), p(b"/"));
+        assert_eq!(base_name(Path::new("/home/u/f.txt")), "f.txt");
+        assert_eq!(base_name(Path::new("/home/u/")), "u");
+        assert_eq!(base_name(Path::new("/")), "");
+    }
+
+    #[test]
+    fn remote_paths_keep_raw_bytes() {
+        let dir = p(b"/srv/\xff\xfe");
+        let file = join_remote(&dir, OsStr::from_bytes(b"caf\xe9.txt"));
+        assert_eq!(file.as_os_str().as_bytes(), b"/srv/\xff\xfe/caf\xe9.txt");
+        assert_eq!(parent_remote(&file), dir);
+        assert_eq!(base_name(&file).as_bytes(), b"caf\xe9.txt");
+        assert_eq!(display(&file), "/srv/\u{fffd}\u{fffd}/caf\u{fffd}.txt");
+        let entry = RemoteEntry {
+            name: OsString::from_vec(b".\xff".to_vec()),
+            path: p(b"/srv/.\xff"),
+            kind: EntryKind::File,
+            is_link: false,
+            size: None,
+            modified: None,
+        };
+        assert!(entry.is_hidden());
+        assert_eq!(entry.display_name(), ".\u{fffd}");
+    }
+
+    #[test]
+    fn server_names_never_escape() {
+        let dir = Path::new("/home/u/dl");
+        for bad in [&b"/etc/x"[..], b"../x", b"a/b", b"", b".", b"..", b"a\0b", b"/", b"x/"] {
+            let name = OsStr::from_bytes(bad);
+            assert!(!is_plain_name(name), "{bad:?}");
+            assert_eq!(local_child(dir, name), None, "{bad:?}");
+            assert_eq!(remote_child(dir, name), None, "{bad:?}");
+        }
+        let name = OsStr::from_bytes(b"\xff.txt");
+        assert_eq!(local_child(dir, name), Some(dir.join(name)));
+        assert_eq!(remote_child(dir, OsStr::new("..x")), Some(p(b"/home/u/dl/..x")));
+    }
+
+    #[test]
+    fn inside_check() {
+        assert!(is_inside(Path::new("/a/b"), Path::new("/a")));
+        assert!(is_inside(Path::new("/a/b/c"), Path::new("/a/")));
+        assert!(!is_inside(Path::new("/ab"), Path::new("/a")));
+        assert!(!is_inside(Path::new("/a"), Path::new("/a")));
+        assert!(is_inside(Path::new("/a"), Path::new("/")));
+        assert!(!is_inside(Path::new("/"), Path::new("/")));
     }
 }

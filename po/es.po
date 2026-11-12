@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-# --- core ---
+# --- base ---
 
 msgid "System default"
 msgstr "Predeterminado del sistema"
@@ -18,8 +18,6 @@ msgstr "Idioma (Language)"
 
 msgid "The new language will be used after sshdeck is restarted."
 msgstr "El nuevo idioma se aplicará al reiniciar sshdeck."
-
-# --- db ---
 
 msgid " · via {}"
 msgstr " · a través de {}"
@@ -505,8 +503,6 @@ msgstr "La extensión {} no acepta solicitudes: {}"
 msgid "Extension {} did not respond"
 msgstr "La extensión {} no respondió"
 
-# --- dbtab ---
-
 msgid "Loading…"
 msgstr "Cargando…"
 
@@ -835,8 +831,6 @@ msgstr "{} ms"
 
 msgid "{} s"
 msgstr "{} s"
-
-# --- files ---
 
 msgid "XDG_RUNTIME_DIR is not set"
 msgstr "la variable XDG_RUNTIME_DIR no está definida"
@@ -1220,9 +1214,6 @@ msgstr "Preparando…"
 msgid "{} of {}"
 msgstr "{} de {}"
 
-msgid "{} — skipped (links to folders and special files): {}"
-msgstr "{}: se omitieron (enlaces a carpetas y archivos especiales): {}"
-
 msgid "Could not create a temporary folder: {}"
 msgstr "No se pudo crear una carpeta temporal: {}"
 
@@ -1258,8 +1249,6 @@ msgstr "Guardando en el servidor: {}"
 
 msgid "Saved to the server: {}"
 msgstr "Guardado en el servidor: {}"
-
-# --- shell ---
 
 msgid "Checking availability…"
 msgstr "Comprobando disponibilidad…"
@@ -1386,9 +1375,6 @@ msgstr "Carpeta «{}» quitada; las conexiones se conservaron"
 
 msgid "Delete Folder and Connections?"
 msgstr "¿Eliminar la carpeta con sus conexiones?"
-
-msgid "Folder “{}” and the saved connections in it ({}) will be removed from the list. Nothing changes on the servers."
-msgstr "La carpeta «{}» y las conexiones guardadas en ella ({}) desaparecerán de la lista. En los servidores no cambia nada."
 
 msgctxt "connection or command"
 msgid "Name"
@@ -1628,3 +1614,305 @@ msgstr "{}: Include está anidado a demasiada profundidad"
 
 msgid "{}: could not read: {}"
 msgstr "{}: no se pudo leer: {}"
+
+# --- files ---
+
+msgid "There is no free name for a copy of “{}”"
+msgstr "No hay un nombre libre para una copia de «{}»"
+
+msgid "“{}” cannot be opened in the terminal: the path is not valid UTF-8"
+msgstr "No se puede ir a «{}» en la terminal: la ruta no es UTF-8 válido"
+
+msgid "{} — skipped (special files, broken links and links that loop or repeat folders): {}"
+msgstr "{}: se omitieron (archivos especiales, enlaces rotos y enlaces que forman un bucle o repiten carpetas): {}"
+
+msgid "Saved as “{}”; further saves go to this copy"
+msgstr "Guardado como «{}»; los siguientes guardados irán a esta copia"
+
+msgid "File Changed on the Server"
+msgstr "El archivo cambió en el servidor"
+
+msgid "“{}” was changed on the server after you opened it. Your saved changes have not been uploaded yet."
+msgstr "«{}» se modificó en el servidor después de que lo abrieras. Tus cambios guardados aún no se han subido."
+
+msgid "Overwrite"
+msgstr "Sobrescribir"
+
+msgid "File Deleted on the Server"
+msgstr "El archivo se eliminó del servidor"
+
+msgid "“{}” was deleted on the server after you opened it. Your saved changes have not been uploaded yet."
+msgstr "«{}» se eliminó del servidor después de que lo abrieras. Tus cambios guardados aún no se han subido."
+
+msgid "Upload Again"
+msgstr "Volver a subir"
+
+msgid "Server version: modified {}, {}."
+msgstr "Versión del servidor: modificada {}, {}."
+
+msgid "“Save as Copy” puts your version next to it as “{}”."
+msgstr "«Guardar como copia» deja tu versión al lado con el nombre «{}»."
+
+msgid "Don’t Upload"
+msgstr "No subir"
+
+msgid "Save as Copy"
+msgstr "Guardar como copia"
+
+msgid "Not uploaded: {}"
+msgstr "No se subió: {}"
+
+msgid "The SFTP connection failed: {}"
+msgstr "Falló la conexión SFTP: {}"
+
+msgid "Too many items to transfer (more than {})"
+msgstr "Demasiados elementos para transferir (más de {})"
+
+msgid "Scanning: {} item found"
+msgid_plural "Scanning: {} items found"
+msgstr[0] "Explorando: {} elemento encontrado"
+msgstr[1] "Explorando: {} elementos encontrados"
+
+msgid "{} — the size differs from what the server reported (the file may have changed during the download): {}"
+msgstr "{}: el tamaño no coincide con el que indicó el servidor (puede que el archivo cambiara durante la descarga): {}"
+
+# --- folders ---
+
+msgid "Move Up"
+msgstr "Subir"
+
+msgid "Move Down"
+msgstr "Bajar"
+
+msgid "Move to Folder…"
+msgstr "Mover a carpeta…"
+
+msgid "Move to Folder"
+msgstr "Mover a carpeta"
+
+msgid "Where to move “{}”? Pick a folder or type a path: subfolders are separated by “/”, missing folders are created. An empty path means the top level."
+msgstr "¿Adónde mover «{}»? Elige una carpeta o escribe una ruta: las subcarpetas se separan con «/» y las que falten se crearán. Una ruta vacía significa el nivel superior."
+
+msgid "Folder path"
+msgstr "Ruta de la carpeta"
+
+msgid "Top Level (No Folder)"
+msgstr "Nivel superior (sin carpeta)"
+
+msgid "Move"
+msgstr "Mover"
+
+msgid "A folder cannot be moved into itself."
+msgstr "Una carpeta no se puede mover dentro de sí misma."
+
+msgid "Subfolders are separated by “/”, for example Work/Servers. To use “/” inside a folder name, write “\\/”."
+msgstr "Las subcarpetas se separan con «/», por ejemplo Trabajo/Servidores. Para usar «/» dentro del nombre de una carpeta, escribe «\\/»."
+
+msgid "Folder “{1}” and {0} saved connection in it will be removed from the list. Nothing changes on the servers."
+msgid_plural "Folder “{1}” and {0} saved connections in it will be removed from the list. Nothing changes on the servers."
+msgstr[0] "La carpeta «{1}» y {0} conexión guardada en ella desaparecerán de la lista. En los servidores no cambia nada."
+msgstr[1] "La carpeta «{1}» y las {0} conexiones guardadas en ella desaparecerán de la lista. En los servidores no cambia nada."
+
+msgid "Folder “{1}”, its subfolders and {0} saved connection in them will be removed from the list. Nothing changes on the servers."
+msgid_plural "Folder “{1}”, its subfolders and {0} saved connections in them will be removed from the list. Nothing changes on the servers."
+msgstr[0] "La carpeta «{1}», sus subcarpetas y {0} conexión guardada en ellas desaparecerán de la lista. En los servidores no cambia nada."
+msgstr[1] "La carpeta «{1}», sus subcarpetas y las {0} conexiones guardadas en ellas desaparecerán de la lista. En los servidores no cambia nada."
+
+# --- ssh ---
+
+msgid "ssh -G did not answer in time"
+msgstr "ssh -G no respondió a tiempo"
+
+msgid "ssh -G failed: {}"
+msgstr "Error de ssh -G: {}"
+
+msgid "Your key {} will be used: it is set by IdentityFile for this host."
+msgstr "Se usará tu clave {}: es la indicada en IdentityFile para este host."
+
+msgid "The key {} set by IdentityFile for this host does not exist yet: it will be created (ed25519, no passphrase)."
+msgstr "La clave {} indicada en IdentityFile para este host todavía no existe: se creará (ed25519, sin frase de contraseña)."
+
+msgid "Key Installed, but Login Still Fails"
+msgstr "La clave está instalada, pero el inicio de sesión sigue fallando"
+
+msgid "Key {} is in ~/.ssh/authorized_keys on {}, but a test login with it still failed ({}). The server’s sshd may read keys from a different file (AuthorizedKeysFile in /etc/ssh/sshd_config) or ignore ~/.ssh because its permissions are too open."
+msgstr "La clave {} está en ~/.ssh/authorized_keys en {}, pero un inicio de sesión de prueba con ella falló ({}). Puede que el sshd del servidor lea las claves de otro archivo (AuthorizedKeysFile en /etc/ssh/sshd_config) o ignore ~/.ssh porque sus permisos son demasiado amplios."
+
+msgid "Following cd Updated"
+msgstr "Seguimiento de cd actualizado"
+
+msgid "The old sshdeck-cwd snippet was replaced with a new version that also handles folders with spaces and non-ASCII names. It takes effect after you log in again: close the tab and reconnect."
+msgstr "El fragmento sshdeck-cwd antiguo se sustituyó por una versión nueva que también admite carpetas con espacios y caracteres no ASCII en el nombre. Funcionará después de volver a iniciar sesión: cierra la pestaña y vuelve a conectarte."
+
+msgid "The terminal is now on {}; the file panel stays on {}"
+msgstr "El terminal está ahora en {}; el panel de archivos se queda en {}"
+
+# --- tunnels ---
+
+msgid "Local"
+msgstr "Local"
+
+msgid "Remote"
+msgstr "Remoto"
+
+msgid "Dynamic (SOCKS)"
+msgstr "Dinámico (SOCKS)"
+
+msgid "Enter the port to listen on (1–65535)"
+msgstr "Indica el puerto en el que escuchar (1–65535)"
+
+msgid "Enter the destination host, for example localhost"
+msgstr "Indica el host de destino, por ejemplo localhost"
+
+msgid "Enter the destination port (1–65535)"
+msgstr "Indica el puerto de destino (1–65535)"
+
+msgid "“{}” is not a valid forward: use -L [address:]port:host:port, -R [address:]port:host:port or -D [address:]port"
+msgstr "«{}» no es un reenvío válido: usa -L [dirección:]puerto:host:puerto, -R [dirección:]puerto:host:puerto o -D [dirección:]puerto"
+
+msgid "“{}” is not a valid host name or address"
+msgstr "«{}» no es un nombre de host ni una dirección válidos"
+
+msgid "“*” can only be used as the address to listen on"
+msgstr "«*» solo se puede usar como dirección en la que escuchar"
+
+msgid "Write the IPv6 address “{}” in square brackets: [{}]"
+msgstr "Escribe la dirección IPv6 «{}» entre corchetes: [{}]"
+
+msgid "“{}” is listed twice"
+msgstr "«{}» aparece dos veces"
+
+msgid "“{}” and “{}” use the same port"
+msgstr "«{}» y «{}» usan el mismo puerto"
+
+msgid "This forward is already in the list"
+msgstr "Este reenvío ya está en la lista"
+
+msgid "Port {} is already used by another forward in this tab: {}"
+msgstr "El puerto {} ya lo usa otro reenvío de esta pestaña: {}"
+
+msgid "ssh did not explain the error"
+msgstr "ssh no explicó el error"
+
+msgid "the port is already in use"
+msgstr "el puerto ya está en uso"
+
+msgid "ports below 1024 can only be opened by the administrator"
+msgstr "solo el administrador puede abrir puertos por debajo de 1024"
+
+msgid "{}: {}"
+msgstr "{}: {}"
+
+msgid "The forward was interrupted by an internal error"
+msgstr "Un error interno interrumpió el reenvío"
+
+msgid "Port forwarding"
+msgstr "Reenvío de puertos"
+
+msgid "Waiting…"
+msgstr "Esperando…"
+
+msgid "Waiting for login"
+msgstr "Esperando el inicio de sesión"
+
+msgid "Setting up…"
+msgstr "Configurando…"
+
+msgid "Active"
+msgstr "Activo"
+
+msgid "Failed: {}"
+msgstr "Error: {}"
+
+msgid "A port on this computer leads to a host and port reachable from the server."
+msgstr "Un puerto de este equipo lleva a un host y puerto accesibles desde el servidor."
+
+msgid "Port on this computer"
+msgstr "Puerto en este equipo"
+
+msgid "Host as seen from the server"
+msgstr "Host (visto desde el servidor)"
+
+msgid "A port on the server leads to a host and port reachable from this computer."
+msgstr "Un puerto del servidor lleva a un host y puerto accesibles desde este equipo."
+
+msgid "Port on the server"
+msgstr "Puerto en el servidor"
+
+msgid "Host as seen from this computer"
+msgstr "Host (visto desde este equipo)"
+
+msgid "A SOCKS proxy on this computer: programs that use it reach the network through the server."
+msgstr "Un proxy SOCKS en este equipo: los programas que lo usan salen a la red a través del servidor."
+
+msgid "SOCKS port on this computer"
+msgstr "Puerto SOCKS en este equipo"
+
+msgid "Forwards"
+msgstr "Reenvíos"
+
+msgid "Forwards go through this tab’s SSH connection and are shared with other tabs to {}. They stop when the connection closes and are set up again after you reconnect."
+msgstr "Los reenvíos pasan por la conexión SSH de esta pestaña y se comparten con las demás pestañas de {}. Se detienen cuando se cierra la conexión y se vuelven a configurar al reconectar."
+
+msgid "New Forward"
+msgstr "Nuevo reenvío"
+
+msgid "Listen address (optional)"
+msgstr "Dirección en la que escuchar (opcional)"
+
+msgid "Empty: only connections from the same machine (localhost). * means all interfaces. Write IPv6 addresses in square brackets, for example [::1]."
+msgstr "Vacío: solo conexiones desde la misma máquina (localhost). * significa todas las interfaces. Escribe las direcciones IPv6 entre corchetes, por ejemplo [::1]."
+
+msgid "Destination port"
+msgstr "Puerto de destino"
+
+msgid "Save with Connection"
+msgstr "Guardar en la conexión"
+
+msgid "Set up automatically whenever “{}” connects"
+msgstr "Configurar automáticamente cada vez que se conecte «{}»"
+
+msgid "Add Forward"
+msgstr "Añadir reenvío"
+
+msgid "Port Forwarding"
+msgstr "Reenvío de puertos"
+
+msgid "No forwards yet"
+msgstr "Todavía no hay reenvíos"
+
+msgid "Add one below, for example to open a web app or a database from the server on this computer."
+msgstr "Añade uno abajo, por ejemplo para abrir en este equipo una aplicación web o una base de datos del servidor."
+
+msgid "Copy {}"
+msgstr "Copiar {}"
+
+msgid "Open in Browser"
+msgstr "Abrir en el navegador"
+
+msgid "Could not open the browser: {}"
+msgstr "No se pudo abrir el navegador: {}"
+
+msgid "Try Again"
+msgstr "Reintentar"
+
+msgid "Saved with “{}”: set up automatically when it connects"
+msgstr "Guardado en «{}»: se configura automáticamente al conectar"
+
+msgid "Save with “{}”"
+msgstr "Guardar en «{}»"
+
+msgid "Port Forwarding for This Tab…"
+msgstr "Reenvío de puertos de esta pestaña…"
+
+msgid "The window is closing"
+msgstr "La ventana se está cerrando"
+
+msgid "Port forwards (optional)"
+msgstr "Reenvío de puertos (opcional)"
+
+msgid "Set up automatically after login, as in ssh: -L 8080:localhost:80 (a port here leads to a host seen from the server), -R 9000:localhost:3000 (a port on the server leads here), -D 1080 (SOCKS proxy). Separate several with commas."
+msgstr "Se configuran automáticamente tras iniciar sesión y se escriben como en ssh: -L 8080:localhost:80 (un puerto de aquí lleva a un host visto desde el servidor), -R 9000:localhost:3000 (un puerto del servidor lleva aquí), -D 1080 (proxy SOCKS). Separa varios con comas."
+
+msgid "The saved connection “{}” was renamed or deleted, so the forwards were not saved in it"
+msgstr "La conexión guardada «{}» se renombró o eliminó, así que los reenvíos no se guardaron en ella"

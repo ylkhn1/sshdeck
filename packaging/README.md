@@ -17,12 +17,11 @@
    ```sh
    gh release create vX.Y.Z dist/*.deb dist/*.rpm --title "sshdeck X.Y.Z" --notes-file dist/RELEASE_NOTES.md
    ```
-4. Update the AUR package:
+4. Update the AUR package (it builds from the git tag `v$pkgver`, so there is no checksum to refresh):
    ```sh
    cd packaging/aur
-   # set pkgver=X.Y.Z, pkgrel=1, then refresh the checksum and metadata:
-   updpkgsums
+   # set pkgver=X.Y.Z and pkgrel=1, then:
    makepkg --printsrcinfo > .SRCINFO
-   makepkg -f        # test build (add -d if cargo comes from ~/.cargo, not pacman)
+   makepkg -f        # test build after the tag is pushed (add -d if cargo comes from ~/.cargo, not pacman)
    ```
    Then copy `PKGBUILD` and `.SRCINFO` into your clone of `ssh://aur@aur.archlinux.org/sshdeck.git`, commit, and push.

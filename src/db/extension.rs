@@ -185,15 +185,37 @@ pub fn scan_info_for_test(text: &str, path: &Path) -> ExtensionInfo {
     parse_info(text, path).expect("extension description")
 }
 
+/// Запуск только что записанного файла может на мгновение упасть с
+/// ETXTBSY («Text file busy»): если другой поток в это время делает fork,
+/// дочерний процесс ненадолго наследует дескриптор записи. Повторяем
+/// несколько раз с короткой паузой.
+fn spawn_retrying_busy<T>(
+    mut spawn: impl FnMut() -> std::io::Result<T>,
+) -> std::io::Result<T> {
+    const ETXTBSY: i32 = 26;
+    let mut attempt = 0;
+    loop {
+        match spawn() {
+            Err(err) if err.raw_os_error() == Some(ETXTBSY) && attempt < 20 => {
+                attempt += 1;
+                std::thread::sleep(Duration::from_millis(25));
+            }
+            result => return result,
+        }
+    }
+}
+
 /// Запускает `--sshdeck-info` с ограничением по времени.
 fn query_info(path: &Path) -> Result<ExtensionInfo, String> {
-    let mut child = std::process::Command::new(path)
-        .arg("--sshdeck-info")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|err| err.to_string())?;
+    let mut child = spawn_retrying_busy(|| {
+        std::process::Command::new(path)
+            .arg("--sshdeck-info")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+    })
+    .map_err(|err| err.to_string())?;
     let mut stdout = child.stdout.take().ok_or(tr!("no output"))?;
     let reader = std::thread::spawn(move || {
         let mut text = String::new();

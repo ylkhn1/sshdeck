@@ -157,8 +157,12 @@ async fn ready(socket: &Path, port: Option<u16>) -> bool {
     }
 }
 
+/// Команда мастеру (`-O forward` / `-O cancel`). Конфиг подменяется на
+/// `/dev/null`: иначе ssh добавит к запросу все LocalForward/RemoteForward/
+/// DynamicForward хоста из ~/.ssh/config, и `cancel` снимет заодно и их.
+/// Для команды мастеру нужен только сокет, настройки хоста не нужны.
 fn control_argv(control: &Path, op: &str, forward: &str, target: &str) -> Vec<String> {
-    let mut argv = base_argv();
+    let mut argv = vec![SSH_BIN.to_string(), "-F".to_string(), "/dev/null".to_string()];
     argv.extend([
         "-S".to_string(),
         control.to_string_lossy().replace('%', "%%"),
@@ -361,6 +365,8 @@ mod tests {
     fn shared_tunnel_commands() {
         let argv = control_argv(Path::new("/run/a%b.sock"), "cancel", "/s:db:1", "h");
         assert!(argv.contains(&"/run/a%%b.sock".to_string()));
+        // Пробросы из ~/.ssh/config не должны попасть в cancel.
+        assert_eq!(&argv[1..3], ["-F", "/dev/null"]);
         assert_eq!(
             &argv[argv.len() - 6..],
             ["-O", "cancel", "-L", "/s:db:1", "--", "h"]

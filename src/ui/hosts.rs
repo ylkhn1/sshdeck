@@ -1,5 +1,11 @@
 //! Боковая панель: быстрое подключение по адресу, сохранённые подключения
-//! (с названиями и папками), базы данных и хосты из ssh-конфига.
+//! (с названиями и вложенными папками), базы данных и хосты из ssh-конфига.
+//!
+//! Порядок сохранённых подключений задаёт пользователь: строки и папки
+//! перетаскиваются мышью (перед строкой, после неё или внутрь папки), а
+//! в контекстном меню есть «Выше», «Ниже» и «Переместить в папку…».
+
+mod arrange;
 
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
@@ -12,7 +18,11 @@ use gtk::{gdk, gio, glib, pango};
 use super::databases::{Databases, describe as describe_db, profile_badge};
 use super::{Notifier, collapsing_revealer, dialogs, reveal};
 use crate::db::DbProfile;
-use crate::connections::{self, Connection, Connections, FOLDER_COLORS};
+use crate::forward::{self, Forward};
+use crate::connections::{
+    self, Connection, Connections, FOLDER_COLORS, FolderPath, Loc, Node, Target, join_path, split_path,
+};
+use arrange::{DropRow, FolderChoice, Mark, display_path};
 use crate::probe::{self, Status};
 use crate::session;
 use crate::ssh_config::{self, HostEntry};
@@ -36,15 +46,19 @@ const STATUS_CLASSES: [&str; 4] = ["checking", "online", "offline", "unknown"];
 
 /// Открывает вкладку: адрес, необязательное название и команда после входа. Возвращает `false`,
 /// если адрес не подошёл.
-type OpenHandler = Box<dyn Fn(&str, Option<&str>, &str) -> bool>;
+/// Открыть вкладку: адрес и сохранённое подключение, если вкладка
+/// открывается из него.
+type OpenHandler = Box<dyn Fn(&str, Option<&Connection>) -> bool>;
 
 #[derive(Clone)]
 enum RowKind {
     /// Заголовок раздела или подсказка: не выбирается.
     Static,
-    Folder(String),
-    /// Индекс в списке сохранённых подключений.
-    Connection(usize),
+    /// Папка: место в дереве и полный путь.
+    Folder(Loc, FolderPath),
+    /// Сохранённое подключение: место в дереве и путь папки, в которой
+    /// оно лежит.
+    Connection(Loc, FolderPath),
     /// Индекс в списке хостов из ssh-конфига.
     Host(usize),
     /// Индекс в списке баз данных.
@@ -61,6 +75,43 @@ struct Row {
     revealer: Option<gtk::Revealer>,
     /// Значок «в сети / недоступен» у подключения и хоста.
     status: Option<StatusView>,
+    /// Заголовок, на который можно бросить подключение или папку: в начало
+    /// или в конец корня.
+    root_drop: Option<RootDrop>,
+}
+
+#[derive(Clone, Copy)]
+enum RootDrop {
+    Start,
+    End,
+}
+
+/// Перетаскиваемый элемент: подключение или папка (её место в дереве).
+struct DragItem(Loc);
+
+/// Элемент, о котором помнит открытый диалог. После любых изменений
+/// строки перестраиваются, поэтому место проверяется заново.
+#[derive(Clone)]
+enum Subject {
+    Connection(Loc, Connection),
+    Folder(FolderPath),
+}
+
+impl Subject {
+    /// Текущее место элемента.
+    fn locate(&self, list: &Connections) -> Option<Loc> {
+        match self {
+            Self::Connection(loc, connection) => {
+                if list.connection(loc) == Some(connection) {
+                    Some(loc.clone())
+                } else {
+                    list.find_connection(connection)
+                }
+            }
+            Self::Folder(path) if path.is_empty() => None,
+            Self::Folder(path) => list.folder_loc(path),
+        }
+    }
 }
 
 /// Отображение доступности сервера в строке списка.
@@ -114,7 +165,13 @@ struct Inner {
     connections: RefCell<Connections>,
     hosts: RefCell<Vec<HostEntry>>,
     rows: RefCell<Vec<Row>>,
-    collapsed: RefCell<HashSet<String>>,
+    /// Пути свёрнутых папок.
+    collapsed: RefCell<HashSet<FolderPath>>,
+    actions: gio::SimpleActionGroup,
+    /// Что сейчас перетаскивается (место в дереве).
+    dragging: RefCell<Option<Loc>>,
+    /// Строка с отметкой места вставки.
+    drop_mark: RefCell<Option<gtk::ListBoxRow>>,
     /// Строка, для которой открыто контекстное меню.
     menu_row: Cell<Option<usize>>,
     /// Последний результат проверки по адресу.
@@ -202,6 +259,7 @@ impl HostsSidebar {
         root.add_top_bar(&gtk::WindowHandle::builder().child(&header).build());
         root.set_content(Some(&content));
 
+        arrange::install_css();
         let menu = gtk::PopoverMenu::from_model(gio::MenuModel::NONE);
         menu.set_parent(&scroll);
         menu.set_has_arrow(false);
@@ -225,6 +283,9 @@ impl HostsSidebar {
             hosts: RefCell::new(Vec::new()),
             rows: RefCell::new(Vec::new()),
             collapsed: RefCell::new(HashSet::new()),
+            actions: gio::SimpleActionGroup::new(),
+            dragging: RefCell::new(None),
+            drop_mark: RefCell::new(None),
             menu_row: Cell::new(None),
             statuses: RefCell::new(HashMap::new()),
             checking: RefCell::new(HashSet::new()),
@@ -262,9 +323,21 @@ impl HostsSidebar {
     /// Задаёт способ открыть вкладку; без него панель ничего не открывает.
     pub fn set_open_handler(
         &self,
-        handler: impl Fn(&str, Option<&str>, &str) -> bool + 'static,
+        handler: impl Fn(&str, Option<&Connection>) -> bool + 'static,
     ) {
         *self.inner.open.borrow_mut() = Some(Box::new(handler));
+    }
+
+    /// Меняет пробросы портов сохранённого подключения (из диалога
+    /// пробросов вкладки) и сохраняет файл. Подключение ищется таким, каким
+    /// его видела вкладка, а если его с тех пор правили — по названию и
+    /// адресу. Возвращает подключение в новом виде.
+    pub fn update_saved_forwards(
+        &self,
+        original: &Connection,
+        edit: &dyn Fn(&mut Vec<Forward>),
+    ) -> Result<Connection, String> {
+        self.inner.update_saved_forwards(original, edit)
     }
 
     /// Перечитывает сохранённые подключения и ssh-конфиг.
@@ -281,7 +354,7 @@ impl Inner {
             let weak = weak.clone();
             let open = move || {
                 if let Some(this) = weak.upgrade()
-                    && this.open(&this.entry.text(), None, "")
+                    && this.open(&this.entry.text(), None)
                 {
                     this.entry.set_text("");
                 }
@@ -322,8 +395,9 @@ impl Inner {
             });
             self.list.add_controller(gesture);
         }
+        self.connect_drop();
 
-        let actions = gio::SimpleActionGroup::new();
+        let actions = &self.actions;
         let add = |name: &str, handler: fn(&Rc<Inner>)| {
             let weak = weak.clone();
             let action = gio::SimpleAction::new(name, None);
@@ -337,7 +411,7 @@ impl Inner {
         add("reload", |this| this.reload());
         add("new", |this| {
             let address = this.entry.text();
-            this.edit_dialog("", &address, "", "", None);
+            this.edit_dialog("", &address, "", "", &[], None);
         });
         add("connect", |this| {
             if let Some(kind) = this.menu_kind() {
@@ -345,16 +419,20 @@ impl Inner {
             }
         });
         add("edit", |this| {
-            if let Some(c) = this.menu_connection() {
-                this.edit_dialog(&c.name, &c.address, &c.folder, &c.startup, Some(c.clone()));
+            if let Some((loc, folder, c)) = this.menu_connection() {
+                let folder = join_path(&folder);
+                this.edit_dialog(&c.name, &c.address, &folder, &c.startup, &c.forwards, Some((loc, c.clone())));
             }
         });
         add("duplicate", |this| {
-            if let Some(c) = this.menu_connection() {
+            if let Some((_, folder, c)) = this.menu_connection() {
                 let name = tr!("{} (copy)", c.name);
-                this.edit_dialog(&name, &c.address, &c.folder, &c.startup, None);
+                this.edit_dialog(&name, &c.address, &join_path(&folder), &c.startup, &c.forwards, None);
             }
         });
+        add("move-up", |this| this.move_by(-1));
+        add("move-down", |this| this.move_by(1));
+        add("move-to", |this| this.move_dialog());
         add("delete", |this| this.delete_connection());
         add("save-host", |this| {
             let alias = match this.menu_kind() {
@@ -364,12 +442,12 @@ impl Inner {
                 _ => None,
             };
             if let Some(alias) = alias {
-                this.edit_dialog(&alias, &alias, "", "", None);
+                this.edit_dialog(&alias, &alias, "", "", &[], None);
             }
         });
         add("new-in-folder", |this| {
-            if let Some(folder) = this.menu_folder() {
-                this.edit_dialog("", "", &folder, "", None);
+            if let Some((_, folder)) = this.menu_folder() {
+                this.edit_dialog("", "", &join_path(&folder), "", &[], None);
             }
         });
         add("db-new", |this| this.databases.create());
@@ -404,14 +482,48 @@ impl Inner {
             });
             actions.add_action(&action);
         }
-        self.root.insert_action_group("hosts", Some(&actions));
+        self.root.insert_action_group("hosts", Some(actions));
     }
 
-    fn open(&self, target: &str, title: Option<&str>, startup: &str) -> bool {
+    fn open(&self, target: &str, saved: Option<&Connection>) -> bool {
         match self.open.borrow().as_ref() {
-            Some(open) => open(target, title, startup),
+            Some(open) => open(target, saved),
             None => false,
         }
+    }
+
+    fn update_saved_forwards(
+        &self,
+        original: &Connection,
+        edit: &dyn Fn(&mut Vec<Forward>),
+    ) -> Result<Connection, String> {
+        let updated = {
+            let mut list = self.connections.borrow_mut();
+            let loc = list.find_connection(original).or_else(|| {
+                list.walk()
+                    .into_iter()
+                    .find(|item| {
+                        matches!(item.node, Node::Connection(c)
+                            if c.name == original.name && c.address == original.address)
+                    })
+                    .map(|item| item.loc)
+            });
+            let current = loc.as_ref().and_then(|loc| list.connection(loc).cloned());
+            let (Some(loc), Some(current)) = (loc, current) else {
+                return Err(tr!(
+                    "The saved connection “{}” was renamed or deleted, so the forwards were not saved in it",
+                    original.name
+                ));
+            };
+            let mut forwards = current.forwards.clone();
+            edit(&mut forwards);
+            let updated = current.with_forwards(forwards);
+            let folder = list.parent_path(&loc);
+            list.replace(&loc, updated.clone(), &folder);
+            updated
+        };
+        self.commit();
+        Ok(updated)
     }
 
     // ----- данные
@@ -506,22 +618,44 @@ impl Inner {
         }
     }
 
-    fn store(&self, connection: Connection, original: Option<Connection>) {
-        self.collapsed.borrow_mut().remove(&connection.folder);
-        {
+    /// Сохраняет подключение из диалога: правка на месте или новое в конце
+    /// папки `folder`.
+    fn store(&self, connection: Connection, folder: FolderPath, original: Option<(Loc, Connection)>) {
+        self.expand_to(&folder);
+        let loc = {
             let mut list = self.connections.borrow_mut();
-            // Запись ищется по содержимому: индекс мог устареть.
-            let position = original
-                .as_ref()
-                .and_then(|original| list.items().iter().position(|c| c == original));
+            let position = original.and_then(|(loc, original)| {
+                Subject::Connection(loc, original).locate(&list)
+            });
             match position {
-                Some(index) => {
-                    list.replace(index, connection);
-                }
-                None => list.add(connection),
+                Some(index) => list.replace(&index, connection, &folder),
+                None => Some(list.add(connection, &folder)),
             }
-        }
+        };
         self.commit();
+        if let Some(loc) = loc {
+            self.select_loc(&loc);
+        }
+    }
+
+    /// Раскрывает папку `path` и всех её родителей.
+    fn expand_to(&self, path: &[String]) {
+        let mut collapsed = self.collapsed.borrow_mut();
+        for depth in 1..=path.len() {
+            collapsed.remove(&path[..depth]);
+        }
+    }
+
+    /// Выделяет строку подключения или папки после перестройки списка.
+    fn select_loc(&self, loc: &[usize]) {
+        let rows = self.rows.borrow();
+        let row = rows.iter().find(|row| match &row.kind {
+            RowKind::Connection(at, _) | RowKind::Folder(at, _) => at.as_slice() == loc,
+            _ => false,
+        });
+        if let Some(row) = row {
+            self.list.select_row(Some(&row.widget));
+        }
     }
 
     // ----- список
@@ -533,37 +667,38 @@ impl Inner {
         let mut rows = Vec::new();
         {
             let connections = self.connections.borrow();
-            rows.push(static_row(heading_label(tr!("Saved"))));
-            if connections.items().is_empty() {
+            let mut saved = static_row(heading_label(tr!("Saved")));
+            saved.root_drop = Some(RootDrop::Start);
+            rows.push(saved);
+            if connections.is_empty() {
                 rows.push(static_row(hint_label(tr!(
                     "Nothing here yet. Press “+” at the top to save a connection \
                      with a name and folder."
                 ))));
             }
-            let mut current_folder = "";
-            for (index, item) in connections.items().iter().enumerate() {
-                if item.folder != current_folder {
-                    current_folder = &item.folder;
-                    let count = connections
-                        .items()
-                        .iter()
-                        .filter(|c| c.folder == item.folder)
-                        .count();
-                    rows.push(self.folder_row(
-                        &item.folder,
-                        count,
-                        connections.folder_color(&item.folder),
-                    ));
+            for item in connections.walk() {
+                let depth = item.depth();
+                match item.node {
+                    Node::Folder(folder) => {
+                        let mut path = item.parent.clone();
+                        path.push(folder.name.clone());
+                        rows.push(self.folder_row(
+                            item.loc.clone(),
+                            path,
+                            folder.count(),
+                            folder.color.as_deref(),
+                        ));
+                    }
+                    Node::Connection(c) => {
+                        let (widget, revealer, status) =
+                            entry_row(&c.name, &c.address, &c.address, depth);
+                        self.attach_drag(&widget, &item.loc);
+                        let mut row = Row::new(RowKind::Connection(item.loc.clone(), item.parent.clone()), widget);
+                        row.revealer = Some(revealer);
+                        row.status = Some(status);
+                        rows.push(row);
+                    }
                 }
-                let (widget, revealer, status) =
-                    entry_row(&item.name, &item.address, &item.address, !item.folder.is_empty());
-                rows.push(Row {
-                    kind: RowKind::Connection(index),
-                    widget,
-                    arrow: None,
-                    revealer: Some(revealer),
-                    status: Some(status),
-                });
             }
 
             let profiles = self.databases.profiles();
@@ -576,13 +711,9 @@ impl Inner {
             }
             for (index, profile) in profiles.iter().enumerate() {
                 let (widget, revealer) = database_row(profile);
-                rows.push(Row {
-                    kind: RowKind::Database(index),
-                    widget,
-                    arrow: None,
-                    revealer: Some(revealer),
-                    status: None,
-                });
+                let mut row = Row::new(RowKind::Database(index), widget);
+                row.revealer = Some(revealer);
+                rows.push(row);
             }
             *self.db_profiles.borrow_mut() = profiles;
 
@@ -592,14 +723,11 @@ impl Inner {
             }
             for (index, host) in hosts.iter().enumerate() {
                 let (widget, revealer, status) =
-                    entry_row(&host.alias, &host.detail(), &host.alias, false);
-                rows.push(Row {
-                    kind: RowKind::Host(index),
-                    widget,
-                    arrow: None,
-                    revealer: Some(revealer),
-                    status: Some(status),
-                });
+                    entry_row(&host.alias, &host.detail(), &host.alias, 0);
+                let mut row = Row::new(RowKind::Host(index), widget);
+                row.revealer = Some(revealer);
+                row.status = Some(status);
+                rows.push(row);
             }
         }
         for row in &rows {
@@ -625,29 +753,30 @@ impl Inner {
         let content = gtk::Box::new(gtk::Orientation::Horizontal, 0);
         content.append(&label);
         content.append(&add);
-        Row {
-            kind: RowKind::Static,
-            widget: gtk::ListBoxRow::builder()
-                .child(&content)
-                .selectable(false)
-                .activatable(false)
-                .build(),
-            arrow: None,
-            revealer: None,
-            status: None,
-        }
+        let widget = gtk::ListBoxRow::builder()
+            .child(&content)
+            .selectable(false)
+            .activatable(false)
+            .build();
+        let mut row = Row::new(RowKind::Static, widget);
+        // Сюда бросают то, что должно оказаться в конце сохранённых.
+        row.root_drop = Some(RootDrop::End);
+        row
     }
 
-    fn folder_row(&self, folder: &str, count: usize, color: Option<&str>) -> Row {
+    fn folder_row(&self, loc: Loc, path: FolderPath, count: usize, color: Option<&str>) -> Row {
+        let depth = path.len().saturating_sub(1);
+        let folder = path.last().cloned().unwrap_or_default();
         let arrow = gtk::Image::from_icon_name(ICON_FOLDER_ARROW);
         arrow.add_css_class("sshdeck-folder-arrow");
         let content = gtk::Box::new(gtk::Orientation::Horizontal, 8);
         content.set_margin_top(ROW_MARGIN);
         content.set_margin_bottom(ROW_MARGIN);
+        content.set_margin_start(depth as i32 * arrange::INDENT);
         content.append(&arrow);
         let icon = gtk::Image::from_icon_name("folder-symbolic");
         let name_label = gtk::Label::builder()
-            .label(folder)
+            .label(&folder)
             .xalign(0.0)
             .hexpand(true)
             .ellipsize(pango::EllipsizeMode::End)
@@ -666,48 +795,56 @@ impl Inner {
                 .css_classes(["caption", "dim-label"])
                 .build(),
         );
+        // Вложенная папка прячется вместе с родительской, поэтому строка
+        // папки тоже сворачивается плавно.
+        let revealer = collapsing_revealer(gtk::RevealerTransitionType::SlideDown, &content);
+        revealer.set_reveal_child(true);
+        let tooltip = if depth > 0 {
+            format!("{}\n{}", display_path(&path), tr!("Click to collapse or expand the folder"))
+        } else {
+            tr!("Click to collapse or expand the folder").to_string()
+        };
         let widget = gtk::ListBoxRow::builder()
-            .child(&content)
-            .tooltip_text(tr!("Click to collapse or expand the folder"))
+            .child(&revealer)
+            .tooltip_text(tooltip)
             .build();
 
         let gesture = gtk::GestureClick::builder()
             .button(gdk::BUTTON_PRIMARY)
             .build();
         let weak = self.me.clone();
-        let name = folder.to_string();
+        let toggled = path.clone();
         gesture.connect_released(move |_, n_press, _, _| {
             // Второй щелчок двойного нажатия приходит как активация строки.
             if n_press == 1
                 && let Some(this) = weak.upgrade()
             {
-                this.toggle_folder(&name);
+                this.toggle_folder(&toggled);
             }
         });
         widget.add_controller(gesture);
+        self.attach_drag(&widget, &loc);
 
-        Row {
-            kind: RowKind::Folder(folder.to_string()),
-            widget,
-            arrow: Some(arrow),
-            revealer: None,
-            status: None,
-        }
+        let mut row = Row::new(RowKind::Folder(loc, path), widget);
+        row.arrow = Some(arrow);
+        row.revealer = Some(revealer);
+        row
     }
 
-    fn toggle_folder(&self, folder: &str) {
+    fn toggle_folder(&self, folder: &[String]) {
         {
             let mut collapsed = self.collapsed.borrow_mut();
             if !collapsed.remove(folder) {
-                collapsed.insert(folder.to_string());
+                collapsed.insert(folder.to_vec());
             }
         }
         self.apply_collapsed(true);
     }
 
-    /// Показывает и прячет строки: свёрнутые папки и поиск по тексту,
-    /// набранному в поле адреса. С `animate` строки сворачиваются плавно
-    /// (щелчок по папке); фильтр при наборе текста срабатывает сразу.
+    /// Показывает и прячет строки: свёрнутые папки (со всем поддеревом) и
+    /// поиск по тексту, набранному в поле адреса. С `animate` строки
+    /// сворачиваются плавно (щелчок по папке); фильтр при наборе текста
+    /// срабатывает сразу.
     fn apply_collapsed(&self, animate: bool) {
         let needle = self.entry.text().trim().to_lowercase();
         let matches = |title: &str, detail: &str| {
@@ -715,33 +852,56 @@ impl Inner {
                 || title.to_lowercase().contains(&needle)
                 || detail.to_lowercase().contains(&needle)
         };
+        // Совпадение с именем любой папки на пути показывает всё её
+        // содержимое.
+        let path_matches = |path: &[String]| path.iter().any(|name| matches(name, ""));
         let collapsed = self.collapsed.borrow();
+        // Строка спрятана, если свёрнута одна из папок, в которых она лежит.
+        let folded = |parent: &[String]| (1..=parent.len()).any(|depth| collapsed.contains(&parent[..depth]));
         let connections = self.connections.borrow();
         let hosts = self.hosts.borrow();
         let profiles = self.db_profiles.borrow();
-        for row in self.rows.borrow().iter() {
+        let rows = self.rows.borrow();
+        // При поиске: папки, в которых лежат найденные подключения.
+        let found: Vec<&FolderPath> = if needle.is_empty() {
+            Vec::new()
+        } else {
+            rows.iter()
+                .filter_map(|row| match &row.kind {
+                    RowKind::Connection(loc, parent) => connections
+                        .connection(loc)
+                        .filter(|c| matches(&c.name, &c.address) || path_matches(parent))
+                        .map(|_| parent),
+                    _ => None,
+                })
+                .collect()
+        };
+        for row in rows.iter() {
             match &row.kind {
-                RowKind::Folder(folder) => {
+                RowKind::Folder(_, path) => {
                     if let Some(arrow) = &row.arrow {
-                        if collapsed.contains(folder) {
+                        if collapsed.contains(path) {
                             arrow.add_css_class("collapsed");
                         } else {
                             arrow.remove_css_class("collapsed");
                         }
                     }
-                    // При поиске папка видна, только если в ней есть находки.
-                    let any = connections
-                        .items()
-                        .iter()
-                        .any(|c| &c.folder == folder && matches(&c.name, &c.address));
-                    row.widget.set_visible(any || matches(folder, ""));
+                    let visible = if needle.is_empty() {
+                        !folded(&path[..path.len().saturating_sub(1)])
+                    } else {
+                        // Папка видна, если совпало её имя (или имя
+                        // родителя) или в ней есть находки: так у найденного
+                        // подключения виден весь путь папок.
+                        path_matches(path) || found.iter().any(|parent| parent.starts_with(path))
+                    };
+                    row.set_shown(visible, animate);
                 }
-                RowKind::Connection(index) => {
-                    let visible = connections.get(*index).is_some_and(|c| {
+                RowKind::Connection(loc, parent) => {
+                    let visible = connections.connection(loc).is_some_and(|c| {
                         if needle.is_empty() {
-                            !collapsed.contains(&c.folder)
+                            !folded(parent)
                         } else {
-                            matches(&c.name, &c.address) || matches(&c.folder, "")
+                            matches(&c.name, &c.address) || path_matches(parent)
                         }
                     });
                     row.set_shown(visible, animate);
@@ -775,16 +935,16 @@ impl Inner {
     /// сворачивается.
     fn activate(&self, kind: &RowKind) {
         match kind {
-            RowKind::Connection(index) => {
-                let connection = self.connections.borrow().get(*index).cloned();
+            RowKind::Connection(loc, _) => {
+                let connection = self.connections.borrow().connection(loc).cloned();
                 if let Some(c) = connection {
-                    self.open(&c.address, Some(&c.name), &c.startup);
+                    self.open(&c.address, Some(&c));
                 }
             }
             RowKind::Host(index) => {
                 let alias = self.hosts.borrow().get(*index).map(|h| h.alias.clone());
                 if let Some(alias) = alias {
-                    self.open(&alias, None, "");
+                    self.open(&alias, None);
                 }
             }
             RowKind::Database(index) => {
@@ -793,9 +953,147 @@ impl Inner {
                     self.databases.connect(&profile);
                 }
             }
-            RowKind::Folder(folder) => self.toggle_folder(folder),
+            RowKind::Folder(_, folder) => self.toggle_folder(folder),
             RowKind::Static => {}
         }
+    }
+
+    // ----- перетаскивание
+
+    /// Строку подключения или папки можно перетащить в другое место списка.
+    fn attach_drag(&self, widget: &gtk::ListBoxRow, loc: &[usize]) {
+        let source = gtk::DragSource::builder()
+            .actions(gdk::DragAction::MOVE)
+            .build();
+        let weak = self.me.clone();
+        let loc = loc.to_vec();
+        source.connect_prepare(move |source, x, y| {
+            let this = weak.upgrade()?;
+            *this.dragging.borrow_mut() = Some(loc.clone());
+            if let Some(widget) = source.widget() {
+                let icon = gtk::WidgetPaintable::new(Some(&widget));
+                source.set_icon(Some(&icon), x as i32, y as i32);
+            }
+            let value = glib::BoxedAnyObject::new(DragItem(loc.clone()));
+            Some(gdk::ContentProvider::for_value(&value.to_value()))
+        });
+        let weak = self.me.clone();
+        source.connect_drag_end(move |_, _, _| {
+            if let Some(this) = weak.upgrade() {
+                this.dragging.borrow_mut().take();
+                this.clear_drop_mark();
+            }
+        });
+        widget.add_controller(source);
+    }
+
+    /// Список принимает только свои строки: значение — объект процесса,
+    /// из другого приложения его не перетащить.
+    fn connect_drop(self: &Rc<Self>) {
+        let drop = gtk::DropTarget::new(glib::BoxedAnyObject::static_type(), gdk::DragAction::MOVE);
+        let weak = Rc::downgrade(self);
+        drop.connect_motion(move |_, _, y| {
+            let Some(this) = weak.upgrade() else {
+                return gdk::DragAction::empty();
+            };
+            let source = this.dragging.borrow().clone();
+            let spot = source.and_then(|source| this.drop_spot(&source, y));
+            this.clear_drop_mark();
+            let Some((row, _, mark)) = spot else {
+                return gdk::DragAction::empty();
+            };
+            match mark {
+                Mark::Above => row.add_css_class(arrange::DROP_BEFORE_CLASS),
+                Mark::Below => row.add_css_class(arrange::DROP_AFTER_CLASS),
+                Mark::Inside => this.list.drag_highlight_row(&row),
+            }
+            *this.drop_mark.borrow_mut() = Some(row);
+            gdk::DragAction::MOVE
+        });
+        let weak = Rc::downgrade(self);
+        drop.connect_leave(move |_| {
+            if let Some(this) = weak.upgrade() {
+                this.clear_drop_mark();
+            }
+        });
+        let weak = Rc::downgrade(self);
+        drop.connect_drop(move |_, value, _, y| {
+            let Some(this) = weak.upgrade() else { return false };
+            this.clear_drop_mark();
+            let Some(source) = value
+                .get::<glib::BoxedAnyObject>()
+                .ok()
+                .map(|object| object.borrow::<DragItem>().0.clone())
+            else {
+                return false;
+            };
+            let Some((_, target, _)) = this.drop_spot(&source, y) else {
+                return false;
+            };
+            // Список перестраивается уже после того, как GTK закончит
+            // перетаскивание: строка-источник ещё нужна ему до drag-end.
+            let weak = Rc::downgrade(&this);
+            glib::idle_add_local_once(move || {
+                if let Some(this) = weak.upgrade() {
+                    this.move_node(&source, |list| list.move_to(&source, &target));
+                }
+            });
+            true
+        });
+        self.list.add_controller(drop);
+    }
+
+    /// Строка под указателем и что будет, если отпустить элемент `source`.
+    fn drop_spot(&self, source: &[usize], y: f64) -> Option<(gtk::ListBoxRow, Target, Mark)> {
+        let widget = self.list.row_at_y(y as i32)?;
+        let bounds = widget.compute_bounds(&self.list)?;
+        let fraction = if bounds.height() > 0.0 {
+            (y - f64::from(bounds.y())) / f64::from(bounds.height())
+        } else {
+            0.5
+        };
+        let rows = self.rows.borrow();
+        let row = rows.iter().find(|row| row.widget == widget)?;
+        let collapsed = self.collapsed.borrow();
+        let spot = match (&row.kind, row.root_drop) {
+            (RowKind::Connection(loc, _), _) => DropRow::Connection(loc),
+            (RowKind::Folder(loc, path), _) => DropRow::Folder {
+                loc,
+                collapsed: collapsed.contains(path),
+            },
+            (_, Some(RootDrop::Start)) => DropRow::Start,
+            (_, Some(RootDrop::End)) => DropRow::End,
+            _ => return None,
+        };
+        let root_len = self.connections.borrow().walk().iter().filter(|item| item.depth() == 0).count();
+        let (target, mark) = arrange::drop_target(source, spot, fraction, root_len)?;
+        Some((widget, target, mark))
+    }
+
+    fn clear_drop_mark(&self) {
+        if let Some(row) = self.drop_mark.borrow_mut().take() {
+            row.remove_css_class(arrange::DROP_BEFORE_CLASS);
+            row.remove_css_class(arrange::DROP_AFTER_CLASS);
+        }
+        self.list.drag_unhighlight_row();
+    }
+
+    /// Переносит элемент `loc` (`apply` меняет список и возвращает новое
+    /// место): свёрнутые папки из поддерева остаются свёрнутыми, папка, куда
+    /// попал элемент, раскрывается, а сам он выделяется.
+    fn move_node(&self, loc: &[usize], apply: impl FnOnce(&mut Connections) -> Option<Loc>) {
+        let new = {
+            let mut list = self.connections.borrow_mut();
+            let old_path = list.folder_path(loc);
+            let Some(new) = apply(&mut list) else { return };
+            if let (Some(old), Some(path)) = (old_path, list.folder_path(&new)) {
+                arrange::rebase_paths(&mut self.collapsed.borrow_mut(), &old, &path);
+            }
+            self.expand_to(&list.parent_path(&new));
+            new
+        };
+        self.commit();
+        self.select_loc(&new);
     }
 
     // ----- контекстное меню
@@ -822,20 +1120,34 @@ impl Inner {
             }
             menu.append_section(None, &section);
         };
+        let arrange_section = || {
+            section(&[
+                (tr!("Move Up"), "hosts.move-up"),
+                (tr!("Move Down"), "hosts.move-down"),
+                (tr!("Move to Folder…"), "hosts.move-to"),
+            ]);
+        };
+        if let RowKind::Connection(loc, _) | RowKind::Folder(loc, _) = &kind {
+            let list = self.connections.borrow();
+            self.set_action_enabled("move-up", list.can_move_by(loc, -1));
+            self.set_action_enabled("move-down", list.can_move_by(loc, 1));
+        }
         match kind {
-            RowKind::Connection(_) => {
+            RowKind::Connection(..) => {
                 section(&[
                     (tr!("Connect"), "hosts.connect"),
                     (tr!("Edit…"), "hosts.edit"),
                     (tr!("Duplicate…"), "hosts.duplicate"),
                 ]);
+                arrange_section();
                 section(&[(tr!("Delete…"), "hosts.delete")]);
             }
-            RowKind::Folder(_) => {
+            RowKind::Folder(..) => {
                 section(&[
                     (tr!("New Connection in Folder…"), "hosts.new-in-folder"),
                     (tr!("Rename Folder…"), "hosts.rename-folder"),
                 ]);
+                arrange_section();
                 let colors = gio::Menu::new();
                 for (id, label) in FOLDER_COLORS {
                     colors.append(
@@ -882,14 +1194,28 @@ impl Inner {
         self.menu.popup();
     }
 
+    fn set_action_enabled(&self, name: &str, enabled: bool) {
+        if let Some(action) = self
+            .actions
+            .lookup_action(name)
+            .and_downcast::<gio::SimpleAction>()
+        {
+            action.set_enabled(enabled);
+        }
+    }
+
     fn menu_kind(&self) -> Option<RowKind> {
         let index = self.menu_row.get()?;
         self.rows.borrow().get(index).map(|row| row.kind.clone())
     }
 
-    fn menu_connection(&self) -> Option<Connection> {
+    /// Подключение под меню: место, путь его папки и само подключение.
+    fn menu_connection(&self) -> Option<(Loc, FolderPath, Connection)> {
         match self.menu_kind()? {
-            RowKind::Connection(index) => self.connections.borrow().get(index).cloned(),
+            RowKind::Connection(loc, folder) => {
+                let connection = self.connections.borrow().connection(&loc).cloned()?;
+                Some((loc, folder, connection))
+            }
             _ => None,
         }
     }
@@ -901,17 +1227,26 @@ impl Inner {
         }
     }
 
-    fn menu_folder(&self) -> Option<String> {
+    /// Папка под меню: место и полный путь.
+    fn menu_folder(&self) -> Option<(Loc, FolderPath)> {
         match self.menu_kind()? {
-            RowKind::Folder(folder) => Some(folder),
+            RowKind::Folder(loc, path) => Some((loc, path)),
             _ => None,
         }
+    }
+
+    /// Подключение или папка под меню.
+    fn menu_subject(&self) -> Option<Subject> {
+        if let Some((loc, _, connection)) = self.menu_connection() {
+            return Some(Subject::Connection(loc, connection));
+        }
+        self.menu_folder().map(|(_, path)| Subject::Folder(path))
     }
 
     // ----- действия
 
     fn delete_connection(self: &Rc<Self>) {
-        let Some(connection) = self.menu_connection() else {
+        let Some((loc, _, connection)) = self.menu_connection() else {
             return;
         };
         let weak = Rc::downgrade(self);
@@ -929,8 +1264,8 @@ impl Inner {
                 let Some(this) = weak.upgrade() else { return };
                 {
                     let mut list = this.connections.borrow_mut();
-                    if let Some(index) = list.items().iter().position(|c| c == &connection) {
-                        list.remove(index);
+                    if let Some(loc) = Subject::Connection(loc, connection).locate(&list) {
+                        list.remove(&loc);
                     }
                 }
                 this.commit();
@@ -938,101 +1273,246 @@ impl Inner {
         );
     }
 
-    fn rename_folder(self: &Rc<Self>) {
-        let Some(folder) = self.menu_folder() else {
+    /// «Выше» / «Ниже»: элемент меняется местами с соседом в своей папке.
+    fn move_by(&self, delta: isize) {
+        let Some(loc) = self.menu_subject().and_then(|s| s.locate(&self.connections.borrow())) else {
             return;
         };
+        self.move_node(&loc, |list| list.move_by(&loc, delta));
+    }
+
+    /// «Переместить в папку…»: выбор из существующих папок или новый путь.
+    fn move_dialog(self: &Rc<Self>) {
+        let Some(subject) = self.menu_subject() else {
+            return;
+        };
+        let (current, own_path, choices) = {
+            let list = self.connections.borrow();
+            let Some(loc) = subject.locate(&list) else { return };
+            let own_path = list.folder_path(&loc);
+            // Папку нельзя перенести в неё саму, поэтому её поддерево в
+            // списке не показывается.
+            let choices: Vec<FolderChoice> = list
+                .folders()
+                .into_iter()
+                .filter(|path| !own_path.as_ref().is_some_and(|own| path.starts_with(own)))
+                .map(|path| {
+                    let color = list
+                        .folder_loc(&path)
+                        .and_then(|loc| list.folder_color(&loc).map(str::to_string));
+                    FolderChoice { path, color }
+                })
+                .collect();
+            (join_path(&list.parent_path(&loc)), own_path, choices)
+        };
+
+        let path_row = adw::EntryRow::builder()
+            .title(tr!("Folder path"))
+            .text(&current)
+            .activates_default(true)
+            .tooltip_text(folder_path_hint())
+            .build();
+        let fields = gtk::ListBox::builder()
+            .selection_mode(gtk::SelectionMode::None)
+            .css_classes(["boxed-list"])
+            .build();
+        fields.append(&path_row);
+        let weak_row = path_row.downgrade();
+        let picker = arrange::folder_picker(&choices, Some(tr!("Top Level (No Folder)")), move |path| {
+            if let Some(row) = weak_row.upgrade() {
+                row.set_text(&path);
+                // Фокус — обратно в поле, чтобы путь можно было дописать.
+                row.grab_focus();
+                row.set_position(-1);
+            }
+        });
+        let scroll = gtk::ScrolledWindow::builder()
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .propagate_natural_height(true)
+            .max_content_height(260)
+            .child(&picker)
+            .build();
+        let content = gtk::Box::new(gtk::Orientation::Vertical, 12);
+        content.set_width_request(380);
+        content.append(&fields);
+        content.append(&scroll);
+
+        let name = match &subject {
+            Subject::Connection(_, c) => c.name.clone(),
+            Subject::Folder(path) => display_path(path),
+        };
+        let dialog = adw::AlertDialog::new(
+            Some(tr!("Move to Folder")),
+            Some(&tr!(
+                "Where to move “{}”? Pick a folder or type a path: subfolders are separated by \
+                 “/”, missing folders are created. An empty path means the top level.",
+                name
+            )),
+        );
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Move"))]);
+        dialog.set_close_response(CANCEL);
+        dialog.set_default_response(Some(ACCEPT));
+        dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);
+        dialog.set_extra_child(Some(&content));
+        dialog.set_focus(Some(&path_row));
+
+        // Папку нельзя перенести в неё саму или во вложенную в неё.
+        let check = {
+            let own_path = own_path.clone();
+            move |dialog: &adw::AlertDialog, row: &adw::EntryRow| {
+                let inside = own_path
+                    .as_ref()
+                    .is_some_and(|own| split_path(&row.text()).starts_with(own));
+                dialog.set_response_enabled(ACCEPT, !inside);
+                if inside {
+                    row.add_css_class("error");
+                    row.set_tooltip_text(Some(tr!("A folder cannot be moved into itself.")));
+                } else {
+                    row.remove_css_class("error");
+                    row.set_tooltip_text(Some(&folder_path_hint()));
+                }
+            }
+        };
+        check(&dialog, &path_row);
+        let weak_dialog = dialog.downgrade();
+        path_row.connect_changed(move |row| {
+            if let Some(dialog) = weak_dialog.upgrade() {
+                check(&dialog, row);
+            }
+        });
+
+        let weak = Rc::downgrade(self);
+        dialog.choose(Some(&self.root), gio::Cancellable::NONE, move |response| {
+            if response != ACCEPT {
+                return;
+            }
+            let Some(this) = weak.upgrade() else { return };
+            let Some(loc) = subject.locate(&this.connections.borrow()) else { return };
+            let folder = split_path(&path_row.text());
+            this.move_node(&loc, |list| list.move_into(&loc, &folder));
+        });
+    }
+
+    fn rename_folder(self: &Rc<Self>) {
+        let Some((_, path)) = self.menu_folder() else {
+            return;
+        };
+        let current = path.last().cloned().unwrap_or_default();
         let weak = Rc::downgrade(self);
         dialogs::prompt_text(
             &self.root,
             tr!("Rename Folder"),
             tr!("If a folder with this name already exists, the connections will be merged into it."),
-            &folder.clone(),
+            &current.clone(),
             tr!("Rename"),
             move |name| {
                 let Some(this) = weak.upgrade() else { return };
                 let name = connections::clean(&name);
-                if name.is_empty() || name == folder {
+                if name.is_empty() || name == current {
                     return;
                 }
-                this.connections.borrow_mut().move_folder(&folder, &name);
-                {
-                    let mut collapsed = this.collapsed.borrow_mut();
-                    if collapsed.remove(&folder) {
-                        collapsed.insert(name);
-                    }
-                }
-                this.commit();
+                let Some(loc) = Subject::Folder(path.clone()).locate(&this.connections.borrow()) else {
+                    return;
+                };
+                // Вложенные папки переезжают вместе с переименованной; их
+                // свёрнутость сохраняется в move_node.
+                this.move_node(&loc, |list| list.rename_folder(&loc, &name));
             },
         );
     }
 
     fn set_folder_color(&self, color: &str) {
-        let Some(folder) = self.menu_folder() else {
+        let Some((loc, _)) = self.menu_folder() else {
             return;
         };
         self.connections
             .borrow_mut()
-            .set_folder_color(&folder, Some(color).filter(|color| !color.is_empty()));
+            .set_folder_color(&loc, Some(color).filter(|color| !color.is_empty()));
         self.commit();
     }
 
+    /// Убирает папку: подключения и вложенные папки поднимаются на уровень
+    /// выше.
     fn dissolve_folder(&self) {
-        let Some(folder) = self.menu_folder() else {
+        let Some((loc, path)) = self.menu_folder() else {
             return;
         };
-        self.connections.borrow_mut().move_folder(&folder, "");
-        self.collapsed.borrow_mut().remove(&folder);
+        if !self.connections.borrow_mut().dissolve_folder(&loc) {
+            return;
+        }
+        {
+            let mut collapsed = self.collapsed.borrow_mut();
+            collapsed.remove(&path);
+            arrange::rebase_paths(&mut collapsed, &path, &path[..path.len() - 1]);
+        }
         self.commit();
         self.notifier
-            .info(&tr!("Folder “{}” removed, connections kept", folder));
+            .info(&tr!("Folder “{}” removed, connections kept", display_path(&path)));
     }
 
     fn delete_folder(self: &Rc<Self>) {
-        let Some(folder) = self.menu_folder() else {
+        let Some((loc, path)) = self.menu_folder() else {
             return;
         };
-        let count = self
-            .connections
-            .borrow()
-            .items()
-            .iter()
-            .filter(|c| c.folder == folder)
-            .count();
+        let (count, nested) = {
+            let list = self.connections.borrow();
+            let Some(folder) = list.folder(&loc) else { return };
+            let nested = folder.children.iter().any(|node| matches!(node, Node::Folder(_)));
+            (folder.count(), nested)
+        };
+        let name = display_path(&path);
+        let body = if nested {
+            trn!(
+                "Folder “{1}”, its subfolders and {0} saved connection in them will be removed \
+                 from the list. Nothing changes on the servers.",
+                "Folder “{1}”, its subfolders and {0} saved connections in them will be removed \
+                 from the list. Nothing changes on the servers.",
+                count,
+                count,
+                name
+            )
+        } else {
+            trn!(
+                "Folder “{1}” and {0} saved connection in it will be removed from the list. \
+                 Nothing changes on the servers.",
+                "Folder “{1}” and {0} saved connections in it will be removed from the list. \
+                 Nothing changes on the servers.",
+                count,
+                count,
+                name
+            )
+        };
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             &self.root,
             tr!("Delete Folder and Connections?"),
-            &tr!(
-                "Folder “{}” and the saved connections in it ({}) will be removed from \
-                 the list. Nothing changes on the servers.",
-                folder,
-                count
-            ),
+            &body,
             tr!("Delete"),
             true,
             move || {
                 let Some(this) = weak.upgrade() else { return };
                 {
                     let mut list = this.connections.borrow_mut();
-                    while let Some(index) = list.items().iter().position(|c| c.folder == folder) {
-                        list.remove(index);
+                    if let Some(loc) = Subject::Folder(path.clone()).locate(&list) {
+                        list.delete_folder(&loc);
                     }
                 }
-                this.collapsed.borrow_mut().remove(&folder);
+                arrange::forget_paths(&mut this.collapsed.borrow_mut(), &path);
                 this.commit();
             },
         );
     }
 
     /// Диалог создания (`original == None`) или изменения подключения.
+    /// `folder` — путь папки в том виде, в каком его вводят в поле.
     fn edit_dialog(
         self: &Rc<Self>,
         name: &str,
         address: &str,
         folder: &str,
         startup: &str,
-        original: Option<Connection>,
+        forwards: &[Forward],
+        original: Option<(Loc, Connection)>,
     ) {
         let name_row = adw::EntryRow::builder()
             .title(trc!("connection or command", "Name"))
@@ -1048,35 +1528,50 @@ impl Inner {
             .title(tr!("Folder (optional)"))
             .text(folder)
             .activates_default(true)
+            .tooltip_text(folder_path_hint())
             .build();
 
-        let folders = self.connections.borrow().folders();
-        if !folders.is_empty() {
-            let choices = gtk::Box::new(gtk::Orientation::Vertical, 2);
-            let popover = gtk::Popover::builder().child(&choices).build();
-            for existing in folders {
-                let label = gtk::Label::builder()
-                    .label(&existing)
-                    .xalign(0.0)
-                    .ellipsize(pango::EllipsizeMode::End)
-                    .max_width_chars(30)
-                    .build();
-                let button = gtk::Button::builder()
-                    .child(&label)
-                    .css_classes(["flat"])
-                    .build();
-                let row = folder_row.downgrade();
-                let popover = popover.downgrade();
-                button.connect_clicked(move |_| {
-                    if let Some(row) = row.upgrade() {
-                        row.set_text(&existing);
+        let choices: Vec<FolderChoice> = {
+            let list = self.connections.borrow();
+            list.walk()
+                .into_iter()
+                .filter_map(|item| match item.node {
+                    Node::Folder(f) => {
+                        let mut path = item.parent;
+                        path.push(f.name.clone());
+                        Some(FolderChoice {
+                            path,
+                            color: f.color.clone(),
+                        })
                     }
-                    if let Some(popover) = popover.upgrade() {
-                        popover.popdown();
-                    }
-                });
-                choices.append(&button);
-            }
+                    Node::Connection(_) => None,
+                })
+                .collect()
+        };
+        if !choices.is_empty() {
+            let popover = gtk::Popover::new();
+            let row = folder_row.downgrade();
+            let weak_popover = popover.downgrade();
+            let picker = arrange::folder_picker(&choices, None, move |path| {
+                if let Some(popover) = weak_popover.upgrade() {
+                    popover.popdown();
+                }
+                if let Some(row) = row.upgrade() {
+                    row.set_text(&path);
+                    // Фокус — обратно в поле, чтобы путь можно было дописать.
+                    row.grab_focus();
+                    row.set_position(-1);
+                }
+            });
+            popover.set_child(Some(
+                &gtk::ScrolledWindow::builder()
+                    .hscrollbar_policy(gtk::PolicyType::Never)
+                    .propagate_natural_height(true)
+                    .propagate_natural_width(true)
+                    .max_content_height(320)
+                    .child(&picker)
+                    .build(),
+            ));
             folder_row.add_suffix(
                 &gtk::MenuButton::builder()
                     .icon_name("folder-symbolic")
@@ -1102,6 +1597,13 @@ impl Inner {
             .activates_default(true)
             .build();
         fields.append(&startup_row);
+        let forwards_row = adw::EntryRow::builder()
+            .title(tr!("Port forwards (optional)"))
+            .text(forward::format_list(forwards))
+            .activates_default(true)
+            .tooltip_text(forwards_hint())
+            .build();
+        fields.append(&forwards_row);
 
         let heading = if original.is_some() {
             tr!("Edit Connection")
@@ -1123,13 +1625,18 @@ impl Inner {
             &name_row
         }));
 
-        sync_validity(&dialog, &address_row);
-        let weak_dialog = dialog.downgrade();
-        address_row.connect_changed(move |row| {
-            if let Some(dialog) = weak_dialog.upgrade() {
-                sync_validity(&dialog, row);
-            }
-        });
+        sync_validity(&dialog, &address_row, &forwards_row);
+        for row in [&address_row, &forwards_row] {
+            let (weak_dialog, address, forwards) =
+                (dialog.downgrade(), address_row.downgrade(), forwards_row.downgrade());
+            row.connect_changed(move |_| {
+                if let (Some(dialog), Some(address), Some(forwards)) =
+                    (weak_dialog.upgrade(), address.upgrade(), forwards.upgrade())
+                {
+                    sync_validity(&dialog, &address, &forwards);
+                }
+            });
+        }
 
         let weak = Rc::downgrade(self);
         dialog.choose(Some(&self.root), gio::Cancellable::NONE, move |response| {
@@ -1137,31 +1644,61 @@ impl Inner {
                 return;
             }
             let Some(this) = weak.upgrade() else { return };
-            let connection = Connection::new(&name_row.text(), &address_row.text(), &folder_row.text())
-                .with_startup(&startup_row.text());
+            let Ok(forwards) = forward::parse_list(&forwards_row.text()) else { return };
+            let connection = Connection::new(&name_row.text(), &address_row.text())
+                .with_startup(&startup_row.text())
+                .with_forwards(forwards);
             if session::validate_target(&connection.address).is_ok() {
-                this.store(connection, original);
+                this.store(connection, split_path(&folder_row.text()), original);
             }
         });
     }
 }
 
-/// «Сохранить» доступно только с адресом, который примет ssh; причина
-/// отказа показывается подсказкой у поля.
-fn sync_validity(dialog: &adw::AlertDialog, address_row: &adw::EntryRow) {
-    let text = address_row.text();
-    let result = session::validate_target(&text);
-    dialog.set_response_enabled(ACCEPT, result.is_ok());
+/// Подсказка к полю пути папки.
+fn folder_path_hint() -> String {
+    tr!(
+        "Subfolders are separated by “/”, for example Work/Servers. \
+         To use “/” inside a folder name, write “\\/”."
+    )
+    .to_string()
+}
+
+/// Подсказка к полю пробросов портов.
+fn forwards_hint() -> String {
+    tr!(
+        "Set up automatically after login, as in ssh: -L 8080:localhost:80 (a port here \
+         leads to a host seen from the server), -R 9000:localhost:3000 (a port on the server \
+         leads here), -D 1080 (SOCKS proxy). Separate several with commas."
+    )
+    .to_string()
+}
+
+/// «Сохранить» доступно только с адресом, который примет ssh, и с
+/// правильно записанными пробросами; причина отказа показывается
+/// подсказкой у поля.
+fn sync_validity(dialog: &adw::AlertDialog, address_row: &adw::EntryRow, forwards_row: &adw::EntryRow) {
+    let address_ok = mark_field(address_row, session::validate_target(&address_row.text()).map(drop), None);
+    let hint = forwards_hint();
+    let forwards_ok = mark_field(forwards_row, forward::parse_list(&forwards_row.text()).map(drop), Some(&hint));
+    dialog.set_response_enabled(ACCEPT, address_ok && forwards_ok);
+}
+
+/// Подсвечивает поле с ошибкой (если в нём что-то введено) и показывает
+/// её подсказкой; без ошибки возвращает обычную подсказку `hint`.
+fn mark_field(row: &adw::EntryRow, result: Result<(), String>, hint: Option<&str>) -> bool {
+    let ok = result.is_ok();
     match result {
-        Err(message) if !text.trim().is_empty() => {
-            address_row.add_css_class("error");
-            address_row.set_tooltip_text(Some(&message));
+        Err(message) if !row.text().trim().is_empty() => {
+            row.add_css_class("error");
+            row.set_tooltip_text(Some(&message));
         }
         _ => {
-            address_row.remove_css_class("error");
-            address_row.set_tooltip_text(None);
+            row.remove_css_class("error");
+            row.set_tooltip_text(hint);
         }
     }
+    ok
 }
 
 /// Заголовок раздела: мелкие прописные буквы (в CSS GTK нет
@@ -1185,21 +1722,29 @@ fn hint_label(text: &str) -> gtk::Label {
 }
 
 fn static_row(label: gtk::Label) -> Row {
-    Row {
-        kind: RowKind::Static,
-        widget: gtk::ListBoxRow::builder()
+    Row::new(
+        RowKind::Static,
+        gtk::ListBoxRow::builder()
             .child(&label)
             .selectable(false)
             .activatable(false)
             .can_focus(false)
             .build(),
-        arrow: None,
-        revealer: None,
-        status: None,
-    }
+    )
 }
 
 impl Row {
+    fn new(kind: RowKind, widget: gtk::ListBoxRow) -> Self {
+        Self {
+            kind,
+            widget,
+            arrow: None,
+            revealer: None,
+            status: None,
+            root_drop: None,
+        }
+    }
+
     fn set_shown(&self, shown: bool, animate: bool) {
         match &self.revealer {
             Some(revealer) => reveal(revealer, &self.widget, shown, animate),
@@ -1210,12 +1755,13 @@ impl Row {
 
 /// Строка подключения или хоста: значок с точкой доступности, название и
 /// адрес мелким шрифтом. Содержимое лежит в `Revealer`, чтобы строку можно
-/// было плавно свернуть. `address` — то, что получит ssh.
+/// было плавно свернуть. `address` — то, что получит ssh, `depth` —
+/// уровень вложенности в папки.
 fn entry_row(
     title: &str,
     detail: &str,
     address: &str,
-    indented: bool,
+    depth: usize,
 ) -> (gtk::ListBoxRow, gtk::Revealer, StatusView) {
     let labels = gtk::Box::new(gtk::Orientation::Vertical, 0);
     labels.set_valign(gtk::Align::Center);
@@ -1239,9 +1785,7 @@ fn entry_row(
     let content = gtk::Box::new(gtk::Orientation::Horizontal, 10);
     content.set_margin_top(ROW_MARGIN);
     content.set_margin_bottom(ROW_MARGIN);
-    if indented {
-        content.set_margin_start(20);
-    }
+    content.set_margin_start(depth as i32 * arrange::INDENT);
     let dot = gtk::Box::builder()
         .halign(gtk::Align::End)
         .valign(gtk::Align::End)

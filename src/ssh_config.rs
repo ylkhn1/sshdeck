@@ -4,10 +4,17 @@
 //! системный `ssh`, который читает конфиг сам. Здесь извлекаются только
 //! псевдонимы из строк `Host` (без масок и отрицаний) с учётом `Include`,
 //! плюс `HostName`/`User`/`Port` для подписи в списке.
+//!
+//! Когда нужны настройки хоста в точности такими, какими их применит `ssh`
+//! (общий мастер вкладок, выбор ключа для входа без пароля), используется
+//! [`resolve`]: он спрашивает сам `ssh` через `ssh -G`.
 
 use std::collections::HashMap;
 use std::fs;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::time::{Duration, Instant};
 
 /// OpenSSH ограничивает вложенность `Include` шестнадцатью уровнями.
 const MAX_INCLUDE_DEPTH: usize = 16;
@@ -280,6 +287,101 @@ fn wildcard_match(pattern: &str, name: &str) -> bool {
     p[pi..].iter().all(|&c| c == '*')
 }
 
+// ------------------------------------------------- итоговые настройки хоста
+
+/// Сколько ждать `ssh -G`. Обычно он отвечает за миллисекунды, но
+/// `Match exec` в конфиге может запускать произвольные команды.
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(3);
+
+/// Итоговые настройки хоста так, как их видит сам `ssh` (`ssh -G`): `Match`,
+/// `Include` и значения по умолчанию уже учтены. Ключи — в нижнем регистре;
+/// многозначные параметры (например, `identityfile`) повторяются в том
+/// порядке, в котором их перебирает ssh.
+///
+/// Токены (`%d`, `%h`…) и `~` в значениях `ssh -G` не раскрывает — это
+/// делает тот, кому значение нужно (см. `keysetup`).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Resolved {
+    options: Vec<(String, String)>,
+}
+
+impl Resolved {
+    /// Разбирает вывод `ssh -G`: строки `ключ значение`.
+    pub fn parse(text: &str) -> Self {
+        let options = text
+            .lines()
+            .filter_map(|line| {
+                let line = line.trim_end_matches('\r');
+                let (key, value) = line.split_once(' ')?;
+                (!key.is_empty()).then(|| (key.to_ascii_lowercase(), value.to_string()))
+            })
+            .collect();
+        Self { options }
+    }
+
+    /// Первое значение параметра.
+    pub fn get(&self, key: &str) -> Option<&str> {
+        self.options
+            .iter()
+            .find(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+    }
+
+    /// Все значения многозначного параметра по порядку.
+    pub fn all(&self, key: &str) -> Vec<&str> {
+        self.options
+            .iter()
+            .filter(|(k, _)| k == key)
+            .map(|(_, v)| v.as_str())
+            .collect()
+    }
+}
+
+/// Спрашивает у системного `ssh` итоговые настройки адреса:
+/// `ssh [-F config] -G -- target`. Блокирующая; ничего не подключает.
+pub fn resolve(target: &str, config: Option<&Path>) -> Result<Resolved, String> {
+    let mut command = Command::new(crate::session::SSH_BIN);
+    if let Some(config) = config {
+        command.arg("-F").arg(config);
+    }
+    let mut child = command
+        .args(["-G", "--", target])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|err| tr!("Could not start ssh: {}", err))?;
+    // Вывод `ssh -G` — несколько килобайт, он целиком помещается в буфер
+    // канала, поэтому можно сначала дождаться процесса, а потом читать.
+    let deadline = Instant::now() + RESOLVE_TIMEOUT;
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if Instant::now() < deadline => {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            Ok(None) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(tr!("ssh -G did not answer in time").to_string());
+            }
+            Err(err) => return Err(format!("ssh: {err}")),
+        }
+    };
+    let mut stdout = String::new();
+    let mut stderr = String::new();
+    if let Some(mut out) = child.stdout.take() {
+        let _ = out.read_to_string(&mut stdout);
+    }
+    if let Some(mut err) = child.stderr.take() {
+        let _ = err.read_to_string(&mut stderr);
+    }
+    if !status.success() {
+        return Err(tr!("ssh -G failed: {}", stderr.trim()));
+    }
+    Ok(Resolved::parse(&stdout))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -491,5 +593,44 @@ mod tests {
         assert!(!wildcard_match("*", ".hidden"));
         assert!(wildcard_match(".*", ".hidden"));
         assert!(wildcard_match("*", ""));
+    }
+
+    #[test]
+    fn resolved_output_is_parsed() {
+        let resolved = Resolved::parse(
+            "user deploy\nhostname 127.0.0.1\nport 2242\n\
+             identityfile ~/.ssh/my key\nidentityfile %d/.ssh/k_%h\nIdentitiesOnly yes\n",
+        );
+        assert_eq!(resolved.get("user"), Some("deploy"));
+        assert_eq!(resolved.get("port"), Some("2242"));
+        assert_eq!(resolved.get("identitiesonly"), Some("yes"));
+        assert_eq!(resolved.get("proxyjump"), None);
+        assert_eq!(
+            resolved.all("identityfile"),
+            ["~/.ssh/my key", "%d/.ssh/k_%h"]
+        );
+    }
+
+    #[test]
+    fn resolve_asks_ssh_itself() {
+        if !Path::new(crate::session::SSH_BIN).exists() {
+            return;
+        }
+        let dir = TempDir::new().expect("tempdir");
+        let config = dir.path().join("config");
+        fs::write(
+            &config,
+            "Host box\n  HostName 192.0.2.7\n  User admin\n  Port 2200\n  IdentityFile ~/.ssh/box_key\n",
+        )
+        .expect("write config");
+        let resolved = resolve("box", Some(&config)).expect("ssh -G");
+        assert_eq!(resolved.get("hostname"), Some("192.0.2.7"));
+        assert_eq!(resolved.get("user"), Some("admin"));
+        assert_eq!(resolved.get("port"), Some("2200"));
+        assert_eq!(resolved.all("identityfile"), ["~/.ssh/box_key"]);
+        // Адрес в виде URI ssh тоже понимает.
+        let uri = resolve("ssh://u@h.example:2222", Some(&config)).expect("ssh -G");
+        assert_eq!(uri.get("user"), Some("u"));
+        assert_eq!(uri.get("port"), Some("2222"));
     }
 }

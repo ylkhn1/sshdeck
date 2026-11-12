@@ -6,6 +6,7 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::rc::{Rc, Weak};
@@ -22,8 +23,8 @@ use super::{
 };
 use crate::session::{self, Session};
 use crate::sftp::{
-    self, Command, ConnState, EntryKind, Event, RemoteEntry, SftpWorker, TransferId,
-    TransferOutcome,
+    self, Command, ConnState, EntryKind, Event, RemoteEntry, RemoteStamp, SaveMode, SftpWorker,
+    TransferId, TransferOutcome,
 };
 
 /// Файлы крупнее этого открываются в редакторе только после подтверждения.
@@ -73,19 +74,24 @@ struct Inner {
     on_connected: RefCell<Option<Box<dyn Fn()>>>,
     /// Просит терминал вкладки перейти в каталог.
     on_terminal_cd: RefCell<Option<CdHandler>>,
+    /// Строка, подсвеченная как цель перетаскивания.
+    drop_row: RefCell<Option<glib::WeakRef<gtk::Widget>>>,
     state: RefCell<State>,
 }
 
 #[derive(Default)]
 struct State {
-    home: String,
+    home: PathBuf,
     /// Каталог, показанный в корне дерева.
-    cwd: String,
+    cwd: PathBuf,
     /// Последнее состояние соединения, о котором сообщила SFTP-задача.
     last_conn: Option<ConnState>,
     show_hidden: bool,
     /// Загруженные каталоги: корень и раскрытые узлы.
-    dirs: HashMap<String, DirNode>,
+    dirs: HashMap<PathBuf, DirNode>,
+    /// Загрузки в каталоги, содержимое которых ещё не прочитано: ждут
+    /// списка, чтобы спросить о замене существующих файлов.
+    pending_uploads: Vec<(PathBuf, Vec<PathBuf>)>,
     transfers: HashMap<TransferId, TransferRow>,
     edits: Vec<Rc<EditWatch>>,
     scratch_seq: u32,
@@ -97,6 +103,8 @@ struct DirNode {
     store: glib::WeakRef<gio::ListStore>,
     /// Содержимое как пришло с сервера (без фильтра скрытых).
     entries: Vec<RemoteEntry>,
+    /// Содержимое уже пришло (пустой список ещё не значит пустой каталог).
+    loaded: bool,
 }
 
 struct TransferRow {
@@ -104,13 +112,17 @@ struct TransferRow {
     bar: gtk::ProgressBar,
     title: String,
     /// Удалённый каталог, который нужно перечитать после успеха.
-    refresh: Option<String>,
+    refresh: Option<PathBuf>,
     on_done: Option<DoneCallback>,
 }
 
 /// Файл, открытый в локальном редакторе.
 struct EditWatch {
-    remote: String,
+    /// Куда сохранять; меняется, если правку сохранили копией рядом.
+    remote: RefCell<PathBuf>,
+    /// Состояние файла на сервере после скачивания или последней заливки:
+    /// с ним сверяемся перед сохранением.
+    remote_stamp: Cell<Option<RemoteStamp>>,
     local: PathBuf,
     /// Держит наблюдение за каталогом с копией.
     monitor: Option<gio::FileMonitor>,
@@ -155,14 +167,16 @@ impl FilePanel {
     }
 
     /// Терминал сообщил свой текущий каталог: панель переходит туда же,
-    /// если слежение включено и соединение установлено.
-    pub fn follow_dir(&self, path: &str) {
+    /// если слежение включено и соединение установлено. Путь может быть
+    /// и не в UTF-8 (`Path` из байтов).
+    pub fn follow_dir(&self, path: impl AsRef<Path>) {
+        let path = path.as_ref();
         let inner = &self.inner;
         let ready = {
             let state = inner.state.borrow();
             matches!(state.last_conn, Some(ConnState::Connected { .. })) && state.cwd != path
         };
-        if ready && inner.follow.get() && path.starts_with('/') {
+        if ready && inner.follow.get() && path.has_root() {
             inner.navigate(path);
         }
     }
@@ -464,10 +478,37 @@ impl Inner {
             scroll.add_controller(gesture);
         });
         connect(weak, |weak| {
-            // Приём файлов, перетащенных из файлового менеджера.
+            // Приём файлов, перетащенных из файлового менеджера: на строку
+            // каталога — в этот каталог, иначе — в текущий.
             let drop = gtk::DropTarget::new(gdk::FileList::static_type(), gdk::DragAction::COPY);
-            drop.connect_drop(move |target, value, _, _| {
-                // Перетаскивание из самой панели сюда же — не загрузка.
+            {
+                let weak = weak.clone();
+                drop.connect_motion(move |target, x, y| {
+                    let Some(inner) = weak.upgrade() else {
+                        return gdk::DragAction::empty();
+                    };
+                    // Перетаскивание из самой панели сюда же — не загрузка.
+                    if target.current_drop().and_then(|d| d.drag()).is_some() {
+                        inner.highlight_drop_target(None, false);
+                        return gdk::DragAction::empty();
+                    }
+                    let row = inner
+                        .drop_row_at(x, y)
+                        .filter(|(_, entry)| entry.kind == EntryKind::Dir)
+                        .map(|(row, _)| row);
+                    inner.highlight_drop_target(row.as_ref(), true);
+                    gdk::DragAction::COPY
+                });
+            }
+            {
+                let weak = weak.clone();
+                drop.connect_leave(move |_| {
+                    if let Some(inner) = weak.upgrade() {
+                        inner.highlight_drop_target(None, false);
+                    }
+                });
+            }
+            drop.connect_drop(move |target, value, x, y| {
                 if target.current_drop().and_then(|d| d.drag()).is_some() {
                     return false;
                 }
@@ -475,11 +516,16 @@ impl Inner {
                 else {
                     return false;
                 };
+                inner.highlight_drop_target(None, false);
                 let paths: Vec<PathBuf> = list.files().iter().filter_map(|f| f.path()).collect();
                 if paths.is_empty() {
                     return false;
                 }
-                inner.upload_paths(paths);
+                let dest = inner
+                    .drop_row_at(x, y)
+                    .filter(|(_, entry)| entry.kind == EntryKind::Dir)
+                    .map(|(_, entry)| entry.path);
+                inner.upload_paths(paths, dest);
                 true
             });
             stack.add_controller(drop);
@@ -505,6 +551,7 @@ impl Inner {
             follow: Cell::new(true),
             on_connected: RefCell::new(None),
             on_terminal_cd: RefCell::new(None),
+            drop_row: RefCell::new(None),
             state: RefCell::new(State::default()),
         }
     }
@@ -513,6 +560,25 @@ impl Inner {
 /// Передаёт обработчику собственную копию слабой ссылки на панель.
 fn connect(weak: &Weak<Inner>, wire: impl FnOnce(Weak<Inner>)) {
     wire(weak.clone());
+}
+
+/// Ищет развёртку строки (`TreeExpander`) в самом виджете или его потомках
+/// не глубже `depth` уровней.
+fn find_expander(widget: &gtk::Widget, depth: u32) -> Option<gtk::TreeExpander> {
+    if let Some(expander) = widget.downcast_ref::<gtk::TreeExpander>() {
+        return Some(expander.clone());
+    }
+    if depth == 0 {
+        return None;
+    }
+    let mut child = widget.first_child();
+    while let Some(current) = child {
+        if let Some(expander) = find_expander(&current, depth - 1) {
+            return Some(expander);
+        }
+        child = current.next_sibling();
+    }
+    None
 }
 
 fn icon_button(icon: &str, tooltip: &str) -> gtk::Button {
@@ -593,7 +659,7 @@ fn name_column(weak: &Weak<Inner>) -> gtk::ColumnViewColumn {
             icon.set_icon_name(Some(icon_for(&entry)));
         }
         if let Some(label) = content.last_child().and_downcast::<gtk::Label>() {
-            label.set_text(&entry.name);
+            label.set_text(&entry.display_name());
             label.set_tooltip_text(match (entry.is_link, entry.kind) {
                 (true, EntryKind::Other) => Some(tr!("Broken symbolic link")),
                 (true, _) => Some(tr!("Symbolic link")),
@@ -690,11 +756,12 @@ fn attach_drag_source(widget: &impl IsA<gtk::Widget>, item: &gtk::ListItem, weak
     widget.add_controller(source);
 }
 
-fn sort_key(entry: &RemoteEntry) -> (bool, String, &str) {
+fn sort_key(entry: &RemoteEntry) -> (bool, String, &[u8]) {
+    use std::os::unix::ffi::OsStrExt;
     (
         entry.kind != EntryKind::Dir,
-        entry.name.to_lowercase(),
-        &entry.name,
+        entry.display_name().to_lowercase(),
+        entry.name.as_bytes(),
     )
 }
 
@@ -749,16 +816,10 @@ fn sync_store(store: &gio::ListStore, entries: &[RemoteEntry]) {
 /// Оставляет только верхние элементы: если выбран каталог и что-то внутри
 /// него, вложенное отбрасывается.
 fn top_level(entries: Vec<RemoteEntry>) -> Vec<RemoteEntry> {
-    let paths: Vec<String> = entries.iter().map(|e| e.path.clone()).collect();
+    let paths: Vec<PathBuf> = entries.iter().map(|e| e.path.clone()).collect();
     entries
         .into_iter()
-        .filter(|entry| {
-            !paths.iter().any(|other| {
-                entry.path.len() > other.len()
-                    && entry.path.starts_with(other.as_str())
-                    && entry.path.as_bytes()[other.len()] == b'/'
-            })
-        })
+        .filter(|entry| !paths.iter().any(|other| sftp::is_inside(&entry.path, other)))
         .collect()
 }
 
@@ -781,6 +842,11 @@ fn summarize(names: &[String]) -> String {
 fn file_stamp(path: &Path) -> Option<Stamp> {
     let meta = std::fs::metadata(path).ok()?;
     Some((meta.modified().ok(), meta.len()))
+}
+
+/// Имя первой копии для подсказки в диалоге (сервер выберет свободное).
+fn edit_copy_name(remote: &Path) -> OsString {
+    sftp::copy_name(sftp::base_name(remote), 1)
 }
 
 fn dialog_dismissed(err: &glib::Error) -> bool {
@@ -817,17 +883,31 @@ impl Inner {
             Event::Navigated { requested, result } => match result {
                 Ok((path, entries)) => self.show_dir(path, entries),
                 Err(err) => {
-                    self.notifier
-                        .error(&tr!("Could not open “{}”: {}", requested, err));
+                    self.notifier.error(&tr!(
+                        "Could not open “{}”: {}",
+                        sftp::display(&requested),
+                        err
+                    ));
                     let cwd = self.state.borrow().cwd.clone();
-                    self.path_entry.set_text(&cwd);
+                    self.path_entry.set_text(&sftp::display(&cwd));
                 }
             },
             Event::Listing { path, result } => match result {
-                Ok(entries) => self.on_listing(&path, entries),
-                Err(err) => self
-                    .notifier
-                    .error(&tr!("Could not read “{}”: {}", path, err)),
+                Ok(entries) => {
+                    self.start_pending_uploads(&path, &entries);
+                    self.on_listing(&path, entries);
+                }
+                Err(err) => {
+                    self.state
+                        .borrow_mut()
+                        .pending_uploads
+                        .retain(|(dir, _)| *dir != path);
+                    self.notifier.error(&tr!(
+                        "Could not read “{}”: {}",
+                        sftp::display(&path),
+                        err
+                    ));
+                }
             },
             Event::OpDone { error, refresh } => {
                 if let Some(error) = error {
@@ -903,30 +983,32 @@ impl Inner {
 
     // --- навигация и содержимое
 
-    fn navigate(&self, path: &str) {
+    fn navigate(&self, path: &Path) {
         self.send(Command::Navigate {
-            path: path.to_string(),
+            path: path.to_path_buf(),
         });
     }
 
     /// Превращает введённый путь в абсолютный: `~`, относительные пути.
-    fn resolve_input(&self, input: &str) -> String {
+    fn resolve_input(&self, input: &str) -> PathBuf {
         let state = self.state.borrow();
         let input = input.trim();
-        if input.is_empty() {
+        // Поле показывает путь с заменёнными недопустимыми байтами; если его
+        // не правили, берётся настоящий путь.
+        if input.is_empty() || input == sftp::display(&state.cwd) {
             state.cwd.clone()
         } else if input == "~" {
             state.home.clone()
         } else if let Some(rest) = input.strip_prefix("~/") {
             sftp::join_remote(&state.home, rest)
         } else if input.starts_with('/') {
-            input.to_string()
+            PathBuf::from(input)
         } else {
             sftp::join_remote(&state.cwd, input)
         }
     }
 
-    fn show_dir(&self, path: String, entries: Vec<RemoteEntry>) {
+    fn show_dir(&self, path: PathBuf, entries: Vec<RemoteEntry>) {
         {
             let mut state = self.state.borrow_mut();
             state.cwd = path.clone();
@@ -936,34 +1018,39 @@ impl Inner {
                 DirNode {
                     store: self.root_store.downgrade(),
                     entries,
+                    loaded: true,
                 },
             );
         }
         self.root_store.remove_all();
-        self.path_entry.set_text(&path);
+        self.path_entry.set_text(&sftp::display(&path));
         self.fill(&path, &self.root_store);
     }
 
     /// Узел дерева раскрыт: запоминаем его модель и запрашиваем содержимое.
-    fn load_dir(&self, path: &str, store: &gio::ListStore) {
+    fn load_dir(&self, path: &Path, store: &gio::ListStore) {
         self.state.borrow_mut().dirs.insert(
-            path.to_string(),
+            path.to_path_buf(),
             DirNode {
                 store: store.downgrade(),
                 entries: Vec::new(),
+                loaded: false,
             },
         );
         self.send(Command::List {
-            path: path.to_string(),
+            path: path.to_path_buf(),
         });
     }
 
-    fn on_listing(&self, path: &str, entries: Vec<RemoteEntry>) {
+    fn on_listing(&self, path: &Path, entries: Vec<RemoteEntry>) {
         let store = {
             let mut state = self.state.borrow_mut();
             let store = state.dirs.get(path).and_then(|node| node.store.upgrade());
             match (&store, state.dirs.get_mut(path)) {
-                (Some(_), Some(node)) => node.entries = entries,
+                (Some(_), Some(node)) => {
+                    node.entries = entries;
+                    node.loaded = true;
+                }
                 // Узел уже свёрнут: ответ не нужен.
                 _ => {
                     state.dirs.remove(path);
@@ -976,7 +1063,7 @@ impl Inner {
         }
     }
 
-    fn fill(&self, path: &str, store: &gio::ListStore) {
+    fn fill(&self, path: &Path, store: &gio::ListStore) {
         let visible = {
             let state = self.state.borrow();
             let Some(node) = state.dirs.get(path) else {
@@ -985,7 +1072,7 @@ impl Inner {
             let mut visible: Vec<RemoteEntry> = node
                 .entries
                 .iter()
-                .filter(|entry| state.show_hidden || !entry.name.starts_with('.'))
+                .filter(|entry| state.show_hidden || !entry.is_hidden())
                 .cloned()
                 .collect();
             visible.sort_by(|a, b| sort_key(a).cmp(&sort_key(b)));
@@ -995,7 +1082,7 @@ impl Inner {
     }
 
     /// Живые (показанные) каталоги; заодно забывает свёрнутые.
-    fn live_dirs(&self) -> Vec<(String, gio::ListStore)> {
+    fn live_dirs(&self) -> Vec<(PathBuf, gio::ListStore)> {
         let mut state = self.state.borrow_mut();
         state.dirs.retain(|_, node| node.store.upgrade().is_some());
         state
@@ -1017,7 +1104,7 @@ impl Inner {
         }
     }
 
-    fn refresh_dir(&self, path: &str) {
+    fn refresh_dir(&self, path: &Path) {
         let shown = self
             .state
             .borrow()
@@ -1026,8 +1113,73 @@ impl Inner {
             .is_some_and(|node| node.store.upgrade().is_some());
         if shown {
             self.send(Command::List {
-                path: path.to_string(),
+                path: path.to_path_buf(),
             });
+        }
+    }
+
+    // --- перетаскивание внутрь
+
+    /// Строка под точкой (координаты стека) и её элемент.
+    ///
+    /// У ColumnView нет вызова «строка в точке», поэтому берётся виджет под
+    /// указателем и поднимаемся к предкам, пока среди ближайших потомков не
+    /// найдётся развёртка строки: у неё есть ссылка на элемент модели.
+    /// Строка таблицы — предок развёртки с CSS-именем `row`.
+    fn drop_row_at(&self, x: f64, y: f64) -> Option<(gtk::Widget, RemoteEntry)> {
+        let point = self
+            .stack
+            .compute_point(&self.view, &graphene::Point::new(x as f32, y as f32))?;
+        let mut widget =
+            self.view
+                .pick(f64::from(point.x()), f64::from(point.y()), gtk::PickFlags::DEFAULT)?;
+        let view: &gtk::Widget = self.view.upcast_ref();
+        let expander = loop {
+            if widget == *view {
+                return None;
+            }
+            // Строка → ячейка → развёртка: два уровня. Глубже искать нельзя,
+            // иначе со списка целиком нашлась бы первая строка.
+            if let Some(expander) = find_expander(&widget, 2) {
+                break expander;
+            }
+            widget = widget.parent()?;
+        };
+        let entry = expander
+            .list_row()?
+            .item()
+            .and_downcast::<glib::BoxedAnyObject>()?
+            .borrow::<RemoteEntry>()
+            .clone();
+        let mut row: gtk::Widget = expander.clone().upcast();
+        for _ in 0..3 {
+            if row.css_name() == "row" {
+                break;
+            }
+            match row.parent() {
+                Some(parent) if parent != *view => row = parent,
+                _ => break,
+            }
+        }
+        Some((row, entry))
+    }
+
+    /// Подсвечивает цель перетаскивания: строку каталога, куда упадут
+    /// файлы, или (`panel`, без строки) всю панель — тогда загрузка пойдёт
+    /// в текущий каталог.
+    fn highlight_drop_target(&self, row: Option<&gtk::Widget>, panel: bool) {
+        let previous = self.drop_row.borrow_mut().take().and_then(|weak| weak.upgrade());
+        if let Some(previous) = previous {
+            previous.unset_state_flags(gtk::StateFlags::DROP_ACTIVE);
+        }
+        if let Some(row) = row {
+            row.set_state_flags(gtk::StateFlags::DROP_ACTIVE, false);
+            *self.drop_row.borrow_mut() = Some(row.downgrade());
+        }
+        if panel && row.is_none() {
+            self.stack.set_state_flags(gtk::StateFlags::DROP_ACTIVE, false);
+        } else {
+            self.stack.unset_state_flags(gtk::StateFlags::DROP_ACTIVE);
         }
     }
 
@@ -1074,9 +1226,10 @@ impl Inner {
         match entry.kind {
             EntryKind::Dir => self.navigate(&entry.path),
             EntryKind::File => self.open_for_edit(entry),
-            EntryKind::Other => self
-                .notifier
-                .info(&tr!("“{}” cannot be opened: it is neither a file nor a folder", entry.name)),
+            EntryKind::Other => self.notifier.info(&tr!(
+                "“{}” cannot be opened: it is neither a file nor a folder",
+                entry.display_name()
+            )),
         }
     }
 
@@ -1095,8 +1248,17 @@ impl Inner {
             Some(entry) => sftp::parent_remote(&entry.path),
             None => self.state.borrow().cwd.clone(),
         };
+        // Терминалу путь передаётся текстом; байты не из UTF-8 в команду
+        // не набрать.
+        let Some(dir) = dir.to_str() else {
+            self.notifier.error(&tr!(
+                "“{}” cannot be opened in the terminal: the path is not valid UTF-8",
+                sftp::display(&dir)
+            ));
+            return;
+        };
         if let Some(handler) = self.on_terminal_cd.borrow().as_ref() {
-            handler(&dir);
+            handler(dir);
         }
     }
 
@@ -1104,8 +1266,9 @@ impl Inner {
         let path = self
             .target_path()
             .map_or_else(|| self.state.borrow().cwd.clone(), |entry| entry.path);
-        self.root.clipboard().set_text(&path);
-        self.notifier.info(&tr!("Copied: {}", path));
+        let text = sftp::display(&path);
+        self.root.clipboard().set_text(&text);
+        self.notifier.info(&tr!("Copied: {}", text));
     }
 
     fn open_selected(self: &Rc<Self>) {
@@ -1121,7 +1284,7 @@ impl Inner {
         dialogs::prompt_text(
             &self.root,
             tr!("New Folder"),
-            &tr!("Name of the new folder in {}", cwd),
+            &tr!("Name of the new folder in {}", sftp::display(&cwd)),
             "",
             tr!("Create"),
             move |name| {
@@ -1144,7 +1307,8 @@ impl Inner {
             return;
         };
         let entry = entry.clone();
-        let current_name = entry.name.clone();
+        let current_name = entry.display_name();
+        let current_name_shown = current_name.clone();
         let weak = Rc::downgrade(self);
         dialogs::prompt_text(
             &self.root,
@@ -1158,7 +1322,7 @@ impl Inner {
                     inner.notifier.error(tr!("The name cannot contain “/”"));
                     return;
                 }
-                if name == entry.name {
+                if name == current_name_shown {
                     return;
                 }
                 let to = sftp::join_remote(&sftp::parent_remote(&entry.path), &name);
@@ -1176,7 +1340,7 @@ impl Inner {
             self.notifier.info(tr!("Select what to delete"));
             return;
         }
-        let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
+        let names: Vec<String> = entries.iter().map(RemoteEntry::display_name).collect();
         let has_dirs = entries
             .iter()
             .any(|e| e.kind == EntryKind::Dir && !e.is_link);
@@ -1196,7 +1360,7 @@ impl Inner {
         }
         detail.push('\n');
         detail.push_str(tr!("This action cannot be undone."));
-        let paths: Vec<String> = entries.into_iter().map(|e| e.path).collect();
+        let paths: Vec<PathBuf> = entries.into_iter().map(|e| e.path).collect();
         let weak = Rc::downgrade(self);
         dialogs::confirm(
             &self.root,
@@ -1247,10 +1411,10 @@ impl Inner {
         let conflicts: Vec<String> = entries
             .iter()
             .filter(|entry| dest.join(&entry.name).exists())
-            .map(|entry| entry.name.clone())
+            .map(RemoteEntry::display_name)
             .collect();
-        let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
-        let sources: Vec<String> = entries.into_iter().map(|e| e.path).collect();
+        let names: Vec<String> = entries.iter().map(RemoteEntry::display_name).collect();
+        let sources: Vec<PathBuf> = entries.into_iter().map(|e| e.path).collect();
         let weak = Rc::downgrade(self);
         let start = move || {
             if let Some(inner) = weak.upgrade() {
@@ -1292,7 +1456,7 @@ impl Inner {
             dialog.select_folder(window.as_ref(), gio::Cancellable::NONE, move |result| {
                 let Some(inner) = weak.upgrade() else { return };
                 match result {
-                    Ok(file) => inner.upload_paths(file.path().into_iter().collect()),
+                    Ok(file) => inner.upload_paths(file.path().into_iter().collect(), None),
                     Err(err) if dialog_dismissed(&err) => {}
                     Err(err) => inner.notifier.error(&err.to_string()),
                 }
@@ -1311,7 +1475,7 @@ impl Inner {
                             .filter_map(|i| files.item(i).and_downcast::<gio::File>())
                             .filter_map(|file| file.path())
                             .collect();
-                        inner.upload_paths(paths);
+                        inner.upload_paths(paths, None);
                     }
                     Err(err) if dialog_dismissed(&err) => {}
                     Err(err) => inner.notifier.error(&err.to_string()),
@@ -1320,38 +1484,74 @@ impl Inner {
         }
     }
 
-    /// Загружает локальные файлы и каталоги в текущий удалённый каталог.
-    fn upload_paths(self: &Rc<Self>, paths: Vec<PathBuf>) {
+    /// Загружает локальные файлы и каталоги в удалённый каталог `dest`
+    /// (по умолчанию — в текущий). Если содержимое каталога ещё не
+    /// известно, сначала читает его, чтобы спросить о замене.
+    fn upload_paths(self: &Rc<Self>, paths: Vec<PathBuf>, dest: Option<PathBuf>) {
         if paths.is_empty() {
             return;
         }
-        let (cwd, existing) = {
-            let state = self.state.borrow();
-            if state.cwd.is_empty() {
+        let existing = {
+            let mut state = self.state.borrow_mut();
+            if state.cwd.as_os_str().is_empty() {
                 drop(state);
                 self.notifier.error(tr!("No SFTP connection"));
                 return;
             }
-            let existing: Vec<String> = state
+            let dest = dest.unwrap_or_else(|| state.cwd.clone());
+            let known = state
                 .dirs
-                .get(&state.cwd)
-                .map(|node| node.entries.iter().map(|e| e.name.clone()).collect())
-                .unwrap_or_default();
-            (state.cwd.clone(), existing)
+                .get(&dest)
+                .filter(|node| node.loaded)
+                .map(|node| node.entries.iter().map(|e| e.name.clone()).collect::<Vec<_>>());
+            match known {
+                Some(names) => (dest, names),
+                None => {
+                    state.pending_uploads.push((dest.clone(), paths));
+                    drop(state);
+                    self.send(Command::List { path: dest });
+                    return;
+                }
+            }
         };
+        self.confirm_upload(paths, existing.0, &existing.1);
+    }
+
+    /// Пришло содержимое каталога: запускает ждавшие его загрузки.
+    fn start_pending_uploads(self: &Rc<Self>, path: &Path, entries: &[RemoteEntry]) {
+        let waiting: Vec<Vec<PathBuf>> = {
+            let mut state = self.state.borrow_mut();
+            let (ready, rest) = std::mem::take(&mut state.pending_uploads)
+                .into_iter()
+                .partition(|(dir, _)| dir == path);
+            state.pending_uploads = rest;
+            ready.into_iter().map(|(_, paths)| paths).collect()
+        };
+        if waiting.is_empty() {
+            return;
+        }
+        let existing: Vec<OsString> = entries.iter().map(|e| e.name.clone()).collect();
+        for paths in waiting {
+            self.confirm_upload(paths, path.to_path_buf(), &existing);
+        }
+    }
+
+    /// Спрашивает о замене совпадающих имён и запускает загрузку.
+    fn confirm_upload(self: &Rc<Self>, paths: Vec<PathBuf>, dest: PathBuf, existing: &[OsString]) {
+        let conflicts: Vec<String> = paths
+            .iter()
+            .filter_map(|p| p.file_name())
+            .filter(|name| existing.iter().any(|e| e.as_os_str() == *name))
+            .map(|name| name.to_string_lossy().into_owned())
+            .collect();
         let names: Vec<String> = paths
             .iter()
             .filter_map(|p| p.file_name())
             .map(|n| n.to_string_lossy().into_owned())
             .collect();
-        let conflicts: Vec<String> = names
-            .iter()
-            .filter(|name| existing.contains(name))
-            .cloned()
-            .collect();
 
         let weak = Rc::downgrade(self);
-        let dest = cwd.clone();
+        let target = dest.clone();
         let start = move || {
             if let Some(inner) = weak.upgrade() {
                 inner.start_transfer(
@@ -1359,9 +1559,9 @@ impl Inner {
                     |id| Command::Upload {
                         id,
                         sources: paths,
-                        dest_dir: dest.clone(),
+                        dest_dir: target.clone(),
                     },
-                    Some(dest.clone()),
+                    Some(target.clone()),
                     None,
                 );
             }
@@ -1372,7 +1572,7 @@ impl Inner {
             dialogs::confirm(
                 &self.root,
                 tr!("Replace Existing Files on the Server?"),
-                &tr!("{} already contains: {}", cwd, summarize(&conflicts)),
+                &tr!("{} already contains: {}", sftp::display(&dest), summarize(&conflicts)),
                 tr!("Replace"),
                 true,
                 start,
@@ -1385,7 +1585,7 @@ impl Inner {
         self: &Rc<Self>,
         title: &str,
         make_command: impl FnOnce(TransferId) -> Command,
-        refresh: Option<String>,
+        refresh: Option<PathBuf>,
         on_done: Option<DoneCallback>,
     ) {
         let id = NEXT_TRANSFER.fetch_add(1, Ordering::Relaxed);
@@ -1476,23 +1676,40 @@ impl Inner {
             self.transfers_box.remove(&row.widget);
         }
         match &outcome {
-            TransferOutcome::Completed { skipped } => {
+            TransferOutcome::Completed {
+                skipped,
+                size_mismatch,
+                ..
+            } => {
                 if let Some(dir) = &row.refresh {
                     self.refresh_dir(dir);
+                }
+                if !size_mismatch.is_empty() {
+                    let names: Vec<String> = size_mismatch
+                        .iter()
+                        .map(|path| sftp::display(Path::new(sftp::base_name(path))))
+                        .collect();
+                    self.notifier.error(&tr!(
+                        "{} — the size differs from what the server reported (the file may have changed during the download): {}",
+                        row.title,
+                        summarize(&names)
+                    ));
                 }
                 if !skipped.is_empty() {
                     let names: Vec<String> = skipped
                         .iter()
-                        .map(|path| sftp::base_name(path).to_string())
+                        .map(|path| sftp::display(Path::new(sftp::base_name(path))))
                         .collect();
                     self.notifier.info(&tr!(
-                        "{} — skipped (links to folders and special files): {}",
+                        "{} — skipped (special files, broken links and links that loop or repeat folders): {}",
                         row.title,
                         summarize(&names)
                     ));
                 }
             }
-            TransferOutcome::Cancelled => {}
+            // Конфликт бывает только при сохранении из редактора; его
+            // разбирает обработчик завершения.
+            TransferOutcome::Cancelled | TransferOutcome::Conflict { .. } => {}
             TransferOutcome::Failed(error) => {
                 self.notifier.error(&format!("{}: {error}", row.title));
             }
@@ -1533,8 +1750,9 @@ impl Inner {
                     .upgrade()
                     .ok_or_else(|| tr!("the tab is closed").to_string())?;
                 let dir = inner.new_scratch_dir("drag")?;
-                let names: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
-                let sources: Vec<String> = entries.into_iter().map(|e| e.path).collect();
+                let names: Vec<String> = entries.iter().map(RemoteEntry::display_name).collect();
+                let raw_names: Vec<OsString> = entries.iter().map(|e| e.name.clone()).collect();
+                let sources: Vec<PathBuf> = entries.into_iter().map(|e| e.path).collect();
                 let (tx, rx) = async_channel::bounded(1);
                 inner.start_transfer(
                     &tr!("Dragging {}", summarize(&names)),
@@ -1551,9 +1769,11 @@ impl Inner {
                 drop(inner);
                 match rx.recv().await {
                     Ok(TransferOutcome::Completed { .. }) => {
-                        Ok(names.iter().map(|name| dir.join(name)).collect())
+                        Ok(raw_names.iter().map(|name| dir.join(name)).collect())
                     }
-                    Ok(TransferOutcome::Cancelled) => Err(tr!("the transfer was cancelled").to_string()),
+                    Ok(TransferOutcome::Cancelled | TransferOutcome::Conflict { .. }) => {
+                        Err(tr!("the transfer was cancelled").to_string())
+                    }
                     Ok(TransferOutcome::Failed(error)) => Err(error),
                     Err(_) => Err(tr!("the transfer was interrupted").to_string()),
                 }
@@ -1572,7 +1792,7 @@ impl Inner {
             .borrow()
             .edits
             .iter()
-            .find(|watch| watch.remote == entry.path)
+            .find(|watch| *watch.remote.borrow() == entry.path)
             .map(|watch| watch.local.clone());
         if let Some(local) = existing {
             self.open_local(&local);
@@ -1584,7 +1804,7 @@ impl Inner {
             let size = format_size(entry.size.unwrap_or(0));
             dialogs::confirm(
                 &self.root,
-                &tr!("Open “{}”?", entry.name),
+                &tr!("Open “{}”?", entry.display_name()),
                 &tr!(
                     "The file is large ({}); it will be downloaded in full to a temporary folder.",
                     size
@@ -1614,7 +1834,7 @@ impl Inner {
         let remote = entry.path.clone();
         let weak = Rc::downgrade(self);
         self.start_transfer(
-            &tr!("Opening {}", entry.name),
+            &tr!("Opening {}", entry.display_name()),
             |id| Command::Download {
                 id,
                 sources: vec![entry.path],
@@ -1622,15 +1842,16 @@ impl Inner {
             },
             None,
             Some(Box::new(move |outcome| {
-                if let (Some(inner), TransferOutcome::Completed { .. }) = (weak.upgrade(), outcome)
+                if let (Some(inner), TransferOutcome::Completed { file, .. }) = (weak.upgrade(), outcome)
                 {
-                    inner.watch_and_open(remote, local);
+                    let stamp = file.as_ref().map(|file| file.stamp);
+                    inner.watch_and_open(remote, local, stamp);
                 }
             })),
         );
     }
 
-    fn watch_and_open(self: &Rc<Self>, remote: String, local: PathBuf) {
+    fn watch_and_open(self: &Rc<Self>, remote: PathBuf, local: PathBuf, stamp: Option<RemoteStamp>) {
         // Наблюдаем за каталогом, а не за файлом: многие редакторы сохраняют
         // через временный файл и переименование.
         let monitor = local.parent().and_then(|dir| {
@@ -1646,7 +1867,8 @@ impl Inner {
                 .ok()
         });
         let watch = Rc::new(EditWatch {
-            remote,
+            remote: RefCell::new(remote),
+            remote_stamp: Cell::new(stamp),
             stamp: Cell::new(file_stamp(&local)),
             local,
             monitor,
@@ -1695,33 +1917,146 @@ impl Inner {
             return;
         }
         watch.stamp.set(Some(stamp));
-        watch.uploading.set(true);
+        // Перед заливкой сверяемся с тем, что скачали: если файл на сервере
+        // успели изменить, спросим, что делать.
+        let mode = match watch.remote_stamp.get() {
+            Some(remote) => SaveMode::IfUnchanged(remote),
+            None => SaveMode::Overwrite,
+        };
+        self.save_edit(watch, mode);
+    }
 
-        let name = sftp::base_name(&watch.remote).to_string();
+    /// Заливает правку на сервер; пока идёт заливка (или открыт вопрос о
+    /// конфликте), новые сохранения только помечают файл изменённым.
+    fn save_edit(self: &Rc<Self>, watch: &Rc<EditWatch>, mode: SaveMode) {
+        watch.uploading.set(true);
+        let remote = watch.remote.borrow().clone();
+        let name = sftp::display(Path::new(sftp::base_name(&remote)));
         let weak = Rc::downgrade(self);
         let weak_watch = Rc::downgrade(watch);
-        let (local, remote) = (watch.local.clone(), watch.remote.clone());
+        let local = watch.local.clone();
+        let target = remote.clone();
         self.start_transfer(
             &tr!("Saving {} to the server", name),
-            |id| Command::UploadFile { id, local, remote },
-            Some(sftp::parent_remote(&watch.remote)),
+            |id| Command::UploadFile {
+                id,
+                local,
+                remote: target,
+                mode,
+            },
+            Some(sftp::parent_remote(&remote)),
             Some(Box::new(move |outcome| {
                 let (Some(inner), Some(watch)) = (weak.upgrade(), weak_watch.upgrade()) else {
                     return;
                 };
-                watch.uploading.set(false);
                 match outcome {
-                    TransferOutcome::Completed { .. } => inner
-                        .notifier
-                        .info(&tr!("Saved to the server: {}", sftp::base_name(&watch.remote))),
+                    TransferOutcome::Completed { file, .. } => {
+                        if let Some(file) = file {
+                            watch.remote_stamp.set(Some(file.stamp));
+                            if file.path != remote {
+                                // Сохранили копией: дальше правка уходит в копию.
+                                let copy = sftp::display(Path::new(sftp::base_name(&file.path)));
+                                *watch.remote.borrow_mut() = file.path.clone();
+                                inner.notifier.info(&tr!(
+                                    "Saved as “{}”; further saves go to this copy",
+                                    copy
+                                ));
+                            } else {
+                                inner.notifier.info(&tr!("Saved to the server: {}", name));
+                            }
+                        }
+                    }
+                    TransferOutcome::Conflict { current } => {
+                        // Решение примет пользователь; до тех пор заливка
+                        // считается идущей.
+                        inner.ask_edit_conflict(&watch, *current);
+                        return;
+                    }
                     // Не удалось: при следующем сохранении попробуем снова.
                     _ => watch.stamp.set(None),
                 }
+                watch.uploading.set(false);
                 if watch.dirty.replace(false) {
                     inner.upload_if_changed(&watch);
                 }
             })),
         );
+    }
+
+    /// Файл на сервере изменился после скачивания: перезаписать, сохранить
+    /// копией рядом или не заливать.
+    fn ask_edit_conflict(self: &Rc<Self>, watch: &Rc<EditWatch>, current: Option<RemoteStamp>) {
+        const OVERWRITE: &str = "overwrite";
+        const COPY: &str = "copy";
+        const KEEP: &str = "keep";
+        let remote = watch.remote.borrow().clone();
+        let name = sftp::display(Path::new(sftp::base_name(&remote)));
+        let copy_name = sftp::display(Path::new(&edit_copy_name(&remote)));
+        let (heading, mut body, overwrite_label) = match current {
+            Some(_) => (
+                tr!("File Changed on the Server"),
+                tr!(
+                    "“{}” was changed on the server after you opened it. Your saved changes have not been uploaded yet.",
+                    name
+                ),
+                tr!("Overwrite"),
+            ),
+            None => (
+                tr!("File Deleted on the Server"),
+                tr!(
+                    "“{}” was deleted on the server after you opened it. Your saved changes have not been uploaded yet.",
+                    name
+                ),
+                tr!("Upload Again"),
+            ),
+        };
+        if let Some(RemoteStamp {
+            modified: Some(modified),
+            size,
+        }) = current
+        {
+            body.push_str("\n\n");
+            body.push_str(&tr!(
+                "Server version: modified {}, {}.",
+                format_mtime(modified),
+                format_size(size.unwrap_or(0))
+            ));
+        }
+        body.push_str("\n\n");
+        body.push_str(&tr!("“Save as Copy” puts your version next to it as “{}”.", copy_name));
+
+        let dialog = adw::AlertDialog::new(Some(heading), Some(&body));
+        dialog.add_responses(&[
+            (KEEP, tr!("Don’t Upload")),
+            (COPY, tr!("Save as Copy")),
+            (OVERWRITE, overwrite_label),
+        ]);
+        dialog.set_close_response(KEEP);
+        dialog.set_default_response(Some(COPY));
+        dialog.set_response_appearance(COPY, adw::ResponseAppearance::Suggested);
+        if current.is_some() {
+            dialog.set_response_appearance(OVERWRITE, adw::ResponseAppearance::Destructive);
+        }
+        let weak = Rc::downgrade(self);
+        let weak_watch = Rc::downgrade(watch);
+        dialog.choose(Some(&self.root), gio::Cancellable::NONE, move |response| {
+            let (Some(inner), Some(watch)) = (weak.upgrade(), weak_watch.upgrade()) else {
+                return;
+            };
+            match response.as_str() {
+                OVERWRITE => inner.save_edit(&watch, SaveMode::Overwrite),
+                COPY => inner.save_edit(&watch, SaveMode::Copy),
+                _ => {
+                    // Правка остаётся в редакторе; при следующем сохранении
+                    // спросим снова.
+                    watch.uploading.set(false);
+                    inner.notifier.info(&tr!("Not uploaded: {}", name));
+                    if watch.dirty.replace(false) {
+                        inner.upload_if_changed(&watch);
+                    }
+                }
+            }
+        });
     }
 
     fn open_local(&self, path: &Path) {

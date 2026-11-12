@@ -1,6 +1,6 @@
 # Maintainer: ylkhn1 <ylkhn1@users.noreply.github.com>
 pkgname=sshdeck
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Lightweight native SSH client: SFTP file tree, terminal and database client in one window"
 arch=('x86_64' 'aarch64')
@@ -20,31 +20,33 @@ depends=(
   'openssh'
   'xdg-utils'
 )
-makedepends=('cargo')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('94de3bda3861ed87d5e8610cf8fd9bfa0f19da12a74a1281d39056d2aa6a0076')
+makedepends=('cargo' 'git')
+# Исходники — по тегу из git: целостность проверяет git по хешам коммитов,
+# поэтому контрольную сумму после нового тега пересчитывать не нужно.
+source=("$pkgname::git+$url.git#tag=v$pkgver")
+sha256sums=('SKIP')
 
 prepare() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname"
   export RUSTUP_TOOLCHAIN=stable
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
 build() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
   cargo build --frozen --release
 }
 
 check() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname"
   export RUSTUP_TOOLCHAIN=stable
   cargo test --frozen --release
 }
 
 package() {
-  cd "$pkgname-$pkgver"
+  cd "$pkgname"
   install -Dm755 target/release/sshdeck "$pkgdir/usr/bin/sshdeck"
   install -Dm644 data/dev.sshdeck.App.desktop "$pkgdir/usr/share/applications/dev.sshdeck.App.desktop"
   install -Dm644 data/dev.sshdeck.App.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/dev.sshdeck.App.svg"

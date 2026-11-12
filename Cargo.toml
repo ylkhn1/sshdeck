@@ -1,6 +1,6 @@
 [package]
 name = "sshdeck"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
 description = "Lightweight native SSH client for Linux: SFTP file tree, terminal and database client in one window"
 license = "MIT"
@@ -14,7 +14,6 @@ adw = { package = "libadwaita", version = "0.9", features = ["v1_6"] }
 vte = { package = "vte4", version = "0.10", features = ["v0_72"] }
 tokio = { version = "1", features = ["rt-multi-thread", "process", "io-util", "fs", "sync", "time", "macros", "net"] }
 tokio-util = "0.7"
-openssh-sftp-client = "0.15"
 async-channel = "2"
 futures-util = "0.3"
 tokio-postgres = "0.7"

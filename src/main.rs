@@ -9,6 +9,7 @@ mod i18n;
 
 mod connections;
 mod db;
+mod forward;
 mod keysetup;
 mod probe;
 mod remote;

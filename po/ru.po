@@ -8,7 +8,7 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
 
-# --- core ---
+# --- base ---
 
 msgid "System default"
 msgstr "Как в системе"
@@ -18,8 +18,6 @@ msgstr "Язык (Language)"
 
 msgid "The new language will be used after sshdeck is restarted."
 msgstr "Новый язык включится после перезапуска sshdeck."
-
-# --- db ---
 
 msgid " · via {}"
 msgstr " · через {}"
@@ -507,8 +505,6 @@ msgstr "Расширение {} не принимает запросы: {}"
 msgid "Extension {} did not respond"
 msgstr "Расширение {} не ответило"
 
-# --- dbtab ---
-
 msgid "Loading…"
 msgstr "Загрузка…"
 
@@ -850,8 +846,6 @@ msgstr "{} мс"
 
 msgid "{} s"
 msgstr "{} с"
-
-# --- files ---
 
 msgid "XDG_RUNTIME_DIR is not set"
 msgstr "переменная XDG_RUNTIME_DIR не задана"
@@ -1237,9 +1231,6 @@ msgstr "Подготовка…"
 msgid "{} of {}"
 msgstr "{} из {}"
 
-msgid "{} — skipped (links to folders and special files): {}"
-msgstr "{} — пропущено (ссылки на каталоги и спецфайлы): {}"
-
 msgid "Could not create a temporary folder: {}"
 msgstr "Не удалось создать временный каталог: {}"
 
@@ -1275,8 +1266,6 @@ msgstr "Сохранение на сервер: {}"
 
 msgid "Saved to the server: {}"
 msgstr "Сохранено на сервер: {}"
-
-# --- shell ---
 
 msgid "Checking availability…"
 msgstr "Проверяю доступность…"
@@ -1403,9 +1392,6 @@ msgstr "Папка «{}» убрана, подключения сохранен�
 
 msgid "Delete Folder and Connections?"
 msgstr "Удалить папку с подключениями?"
-
-msgid "Folder “{}” and the saved connections in it ({}) will be removed from the list. Nothing changes on the servers."
-msgstr "Папка «{}» и сохранённые в ней подключения ({}) исчезнут из списка. На серверах ничего не меняется."
 
 msgctxt "connection or command"
 msgid "Name"
@@ -1645,3 +1631,308 @@ msgstr "{}: слишком глубокая вложенность Include"
 
 msgid "{}: could not read: {}"
 msgstr "{}: не удалось прочитать: {}"
+
+# --- files ---
+
+msgid "There is no free name for a copy of “{}”"
+msgstr "Не удалось подобрать свободное имя для копии «{}»"
+
+msgid "“{}” cannot be opened in the terminal: the path is not valid UTF-8"
+msgstr "Не удаётся перейти в «{}» в терминале: путь не в кодировке UTF-8"
+
+msgid "{} — skipped (special files, broken links and links that loop or repeat folders): {}"
+msgstr "{} — пропущено (спецфайлы, битые ссылки и ссылки, которые ведут по кругу или повторяют каталоги): {}"
+
+msgid "Saved as “{}”; further saves go to this copy"
+msgstr "Сохранено как «{}»; дальнейшие сохранения пойдут в эту копию"
+
+msgid "File Changed on the Server"
+msgstr "Файл изменён на сервере"
+
+msgid "“{}” was changed on the server after you opened it. Your saved changes have not been uploaded yet."
+msgstr "«{}» изменили на сервере после того, как вы его открыли. Ваши сохранённые правки ещё не загружены."
+
+msgid "Overwrite"
+msgstr "Перезаписать"
+
+msgid "File Deleted on the Server"
+msgstr "Файл удалён на сервере"
+
+msgid "“{}” was deleted on the server after you opened it. Your saved changes have not been uploaded yet."
+msgstr "«{}» удалили на сервере после того, как вы его открыли. Ваши сохранённые правки ещё не загружены."
+
+msgid "Upload Again"
+msgstr "Загрузить заново"
+
+msgid "Server version: modified {}, {}."
+msgstr "Версия на сервере: изменена {}, {}."
+
+msgid "“Save as Copy” puts your version next to it as “{}”."
+msgstr "«Сохранить копию» положит вашу версию рядом под именем «{}»."
+
+msgid "Don’t Upload"
+msgstr "Не загружать"
+
+msgid "Save as Copy"
+msgstr "Сохранить копию"
+
+msgid "Not uploaded: {}"
+msgstr "Не загружено: {}"
+
+msgid "The SFTP connection failed: {}"
+msgstr "SFTP-соединение прервано: {}"
+
+msgid "Too many items to transfer (more than {})"
+msgstr "Слишком много элементов для передачи (больше {})"
+
+msgid "Scanning: {} item found"
+msgid_plural "Scanning: {} items found"
+msgstr[0] "Обход: найден {} элемент"
+msgstr[1] "Обход: найдено {} элемента"
+msgstr[2] "Обход: найдено {} элементов"
+
+msgid "{} — the size differs from what the server reported (the file may have changed during the download): {}"
+msgstr "{} — размер не совпал с тем, что сообщил сервер (файл мог измениться во время скачивания): {}"
+
+# --- folders ---
+
+msgid "Move Up"
+msgstr "Переместить выше"
+
+msgid "Move Down"
+msgstr "Переместить ниже"
+
+msgid "Move to Folder…"
+msgstr "Переместить в папку…"
+
+msgid "Move to Folder"
+msgstr "Переместить в папку"
+
+msgid "Where to move “{}”? Pick a folder or type a path: subfolders are separated by “/”, missing folders are created. An empty path means the top level."
+msgstr "Куда переместить «{}»? Выберите папку или введите путь: вложенные папки разделяются «/», недостающие будут созданы. Пустой путь — верхний уровень."
+
+msgid "Folder path"
+msgstr "Путь папки"
+
+msgid "Top Level (No Folder)"
+msgstr "Верхний уровень (без папки)"
+
+msgid "Move"
+msgstr "Переместить"
+
+msgid "A folder cannot be moved into itself."
+msgstr "Папку нельзя переместить в неё саму."
+
+msgid "Subfolders are separated by “/”, for example Work/Servers. To use “/” inside a folder name, write “\\/”."
+msgstr "Вложенные папки разделяются «/», например Работа/Серверы. Чтобы «/» было частью имени папки, напишите «\\/»."
+
+msgid "Folder “{1}” and {0} saved connection in it will be removed from the list. Nothing changes on the servers."
+msgid_plural "Folder “{1}” and {0} saved connections in it will be removed from the list. Nothing changes on the servers."
+msgstr[0] "Папка «{1}» и {0} сохранённое подключение в ней исчезнут из списка. На серверах ничего не меняется."
+msgstr[1] "Папка «{1}» и {0} сохранённых подключения в ней исчезнут из списка. На серверах ничего не меняется."
+msgstr[2] "Папка «{1}» и {0} сохранённых подключений в ней исчезнут из списка. На серверах ничего не меняется."
+
+msgid "Folder “{1}”, its subfolders and {0} saved connection in them will be removed from the list. Nothing changes on the servers."
+msgid_plural "Folder “{1}”, its subfolders and {0} saved connections in them will be removed from the list. Nothing changes on the servers."
+msgstr[0] "Папка «{1}», вложенные в неё папки и {0} сохранённое подключение в них исчезнут из списка. На серверах ничего не меняется."
+msgstr[1] "Папка «{1}», вложенные в неё папки и {0} сохранённых подключения в них исчезнут из списка. На серверах ничего не меняется."
+msgstr[2] "Папка «{1}», вложенные в неё папки и {0} сохранённых подключений в них исчезнут из списка. На серверах ничего не меняется."
+
+# --- ssh ---
+
+msgid "ssh -G did not answer in time"
+msgstr "ssh -G не ответил вовремя"
+
+msgid "ssh -G failed: {}"
+msgstr "Ошибка ssh -G: {}"
+
+msgid "Your key {} will be used: it is set by IdentityFile for this host."
+msgstr "Будет использован ваш ключ {}: он указан в IdentityFile для этого хоста."
+
+msgid "The key {} set by IdentityFile for this host does not exist yet: it will be created (ed25519, no passphrase)."
+msgstr "Ключа {}, указанного в IdentityFile для этого хоста, пока нет: он будет создан (ed25519, без парольной фразы)."
+
+msgid "Key Installed, but Login Still Fails"
+msgstr "Ключ установлен, но войти с ним не удалось"
+
+msgid "Key {} is in ~/.ssh/authorized_keys on {}, but a test login with it still failed ({}). The server’s sshd may read keys from a different file (AuthorizedKeysFile in /etc/ssh/sshd_config) or ignore ~/.ssh because its permissions are too open."
+msgstr "Ключ {} есть в ~/.ssh/authorized_keys на {}, но пробный вход с ним не удался ({}). Возможно, sshd на сервере читает ключи из другого файла (AuthorizedKeysFile в /etc/ssh/sshd_config) или не доверяет ~/.ssh из-за слишком широких прав доступа."
+
+msgid "Following cd Updated"
+msgstr "Слежение обновлено"
+
+msgid "The old sshdeck-cwd snippet was replaced with a new version that also handles folders with spaces and non-ASCII names. It takes effect after you log in again: close the tab and reconnect."
+msgstr "Старый фрагмент sshdeck-cwd заменён новой версией, которая правильно работает с папками, в именах которых есть пробелы или нелатинские буквы. Он заработает после нового входа: закройте вкладку и подключитесь снова."
+
+msgid "The terminal is now on {}; the file panel stays on {}"
+msgstr "Терминал сейчас на {}, панель файлов остаётся на {}"
+
+# --- tunnels ---
+
+msgid "Local"
+msgstr "Локальный"
+
+msgid "Remote"
+msgstr "Удалённый"
+
+msgid "Dynamic (SOCKS)"
+msgstr "Динамический (SOCKS)"
+
+msgid "Enter the port to listen on (1–65535)"
+msgstr "Укажите порт, который нужно слушать (1–65535)"
+
+msgid "Enter the destination host, for example localhost"
+msgstr "Укажите хост назначения, например localhost"
+
+msgid "Enter the destination port (1–65535)"
+msgstr "Укажите порт назначения (1–65535)"
+
+msgid "“{}” is not a valid forward: use -L [address:]port:host:port, -R [address:]port:host:port or -D [address:]port"
+msgstr "«{}» — неправильная запись проброса: используйте -L [адрес:]порт:хост:порт, -R [адрес:]порт:хост:порт или -D [адрес:]порт"
+
+msgid "“{}” is not a valid host name or address"
+msgstr "«{}» — неправильное имя хоста или адрес"
+
+msgid "“*” can only be used as the address to listen on"
+msgstr "«*» можно указать только как адрес, на котором слушать порт"
+
+msgid "Write the IPv6 address “{}” in square brackets: [{}]"
+msgstr "Запишите адрес IPv6 «{}» в квадратных скобках: [{}]"
+
+msgid "“{}” is listed twice"
+msgstr "«{}» указан дважды"
+
+msgid "“{}” and “{}” use the same port"
+msgstr "«{}» и «{}» занимают один и тот же порт"
+
+msgid "This forward is already in the list"
+msgstr "Такой проброс уже есть в списке"
+
+msgid "Port {} is already used by another forward in this tab: {}"
+msgstr "Порт {} уже занят другим пробросом этой вкладки: {}"
+
+msgid "ssh did not explain the error"
+msgstr "ssh не сообщил причину ошибки"
+
+msgid "the port is already in use"
+msgstr "порт уже занят"
+
+msgid "ports below 1024 can only be opened by the administrator"
+msgstr "порты ниже 1024 может открывать только администратор"
+
+msgid "{}: {}"
+msgstr "{}: {}"
+
+msgid "The forward was interrupted by an internal error"
+msgstr "Проброс прерван внутренней ошибкой"
+
+msgid "Port forwarding"
+msgstr "Проброс портов"
+
+msgid "Waiting…"
+msgstr "Ожидание…"
+
+msgid "Waiting for login"
+msgstr "Ждёт входа на сервер"
+
+msgid "Setting up…"
+msgstr "Настраивается…"
+
+msgid "Active"
+msgstr "Работает"
+
+msgid "Failed: {}"
+msgstr "Ошибка: {}"
+
+msgid "A port on this computer leads to a host and port reachable from the server."
+msgstr "Порт на этом компьютере ведёт к хосту и порту, доступным с сервера."
+
+msgid "Port on this computer"
+msgstr "Порт на этом компьютере"
+
+msgid "Host as seen from the server"
+msgstr "Хост (как его видит сервер)"
+
+msgid "A port on the server leads to a host and port reachable from this computer."
+msgstr "Порт на сервере ведёт к хосту и порту, доступным с этого компьютера."
+
+msgid "Port on the server"
+msgstr "Порт на сервере"
+
+msgid "Host as seen from this computer"
+msgstr "Хост (как его видит этот компьютер)"
+
+msgid "A SOCKS proxy on this computer: programs that use it reach the network through the server."
+msgstr "SOCKS-прокси на этом компьютере: программы, которые им пользуются, выходят в сеть через сервер."
+
+msgid "SOCKS port on this computer"
+msgstr "Порт SOCKS на этом компьютере"
+
+msgid "Forwards"
+msgstr "Пробросы"
+
+msgid "Forwards go through this tab’s SSH connection and are shared with other tabs to {}. They stop when the connection closes and are set up again after you reconnect."
+msgstr "Пробросы идут через SSH-соединение этой вкладки и общие для всех вкладок с {}. Они пропадают, когда соединение закрывается, и настраиваются снова после переподключения."
+
+msgid "New Forward"
+msgstr "Новый проброс"
+
+msgid "Listen address (optional)"
+msgstr "Адрес, на котором слушать (необязательно)"
+
+msgid "Empty: only connections from the same machine (localhost). * means all interfaces. Write IPv6 addresses in square brackets, for example [::1]."
+msgstr "Пусто — только подключения с той же машины (localhost). * — все интерфейсы. Адреса IPv6 пишутся в квадратных скобках, например [::1]."
+
+msgid "Destination port"
+msgstr "Порт назначения"
+
+msgid "Save with Connection"
+msgstr "Сохранить в подключении"
+
+msgid "Set up automatically whenever “{}” connects"
+msgstr "Настраивать автоматически при каждом подключении к «{}»"
+
+msgid "Add Forward"
+msgstr "Добавить проброс"
+
+msgid "Port Forwarding"
+msgstr "Проброс портов"
+
+msgid "No forwards yet"
+msgstr "Пробросов пока нет"
+
+msgid "Add one below, for example to open a web app or a database from the server on this computer."
+msgstr "Добавьте проброс ниже — например, чтобы открыть веб-приложение или базу данных с сервера на этом компьютере."
+
+msgid "Copy {}"
+msgstr "Скопировать {}"
+
+msgid "Open in Browser"
+msgstr "Открыть в браузере"
+
+msgid "Could not open the browser: {}"
+msgstr "Не удалось открыть браузер: {}"
+
+msgid "Try Again"
+msgstr "Повторить"
+
+msgid "Saved with “{}”: set up automatically when it connects"
+msgstr "Сохранён в «{}»: настраивается автоматически при подключении"
+
+msgid "Save with “{}”"
+msgstr "Сохранить в «{}»"
+
+msgid "Port Forwarding for This Tab…"
+msgstr "Проброс портов для этой вкладки…"
+
+msgid "The window is closing"
+msgstr "Окно закрывается"
+
+msgid "Port forwards (optional)"
+msgstr "Проброс портов (необязательно)"
+
+msgid "Set up automatically after login, as in ssh: -L 8080:localhost:80 (a port here leads to a host seen from the server), -R 9000:localhost:3000 (a port on the server leads here), -D 1080 (SOCKS proxy). Separate several with commas."
+msgstr "Настраиваются автоматически после входа, записываются как в ssh: -L 8080:localhost:80 (порт здесь ведёт к хосту, видимому с сервера), -R 9000:localhost:3000 (порт на сервере ведёт сюда), -D 1080 (SOCKS-прокси). Несколько пробросов разделяются запятыми."
+
+msgid "The saved connection “{}” was renamed or deleted, so the forwards were not saved in it"
+msgstr "Сохранённое подключение «{}» переименовано или удалено, поэтому пробросы в нём не сохранены"

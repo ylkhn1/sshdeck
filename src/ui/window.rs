@@ -9,11 +9,13 @@ use gtk::{gdk, gio, glib, pango};
 
 use super::databases::{Databases, describe};
 use super::dbtab::{ControlLookup, DbTab};
+use super::forwards;
 use super::hosts::HostsSidebar;
 use super::snippets::SnippetsButton;
 use super::terminal;
 use super::tab::SessionTab;
 use super::{ANIMATION_MS, Notifier, collapsing_revealer, dialogs, reveal};
+use crate::connections::Connection;
 use crate::db::DbProfile;
 use crate::session;
 use crate::settings::Settings;
@@ -287,7 +289,7 @@ pub fn build(app: &adw::Application, initial_targets: &[String]) {
     let window = AppWindow::new(app);
     window.window.present();
     for target in initial_targets {
-        window.open_tab(target, None, "");
+        window.open_tab(target, None);
     }
 }
 
@@ -481,6 +483,10 @@ impl AppWindow {
             Some(tr!("File Panel Follows cd on This Server…")),
             Some("win.cwd-tracking"),
         );
+        server_section.append(
+            Some(tr!("Port Forwarding for This Tab…")),
+            Some("win.port-forwarding"),
+        );
         menu.append_section(None, &server_section);
         let look_section = gio::Menu::new();
         let theme_menu = gio::Menu::new();
@@ -616,9 +622,9 @@ impl AppWindow {
         // наоборот.
         {
             let weak = Rc::downgrade(&this);
-            this.sidebar.set_open_handler(move |target, title, startup| {
+            this.sidebar.set_open_handler(move |target, saved| {
                 weak.upgrade()
-                    .is_some_and(|this| this.open_tab(target, title, startup))
+                    .is_some_and(|this| this.open_tab(target, saved))
             });
         }
         {
@@ -796,6 +802,37 @@ impl AppWindow {
         }
         {
             let weak = Rc::downgrade(&this);
+            let action = gio::SimpleAction::new("port-forwarding", None);
+            action.connect_activate(move |_, _| {
+                let Some(this) = weak.upgrade() else { return };
+                match this.current_tab() {
+                    Some(tab) => tab.show_forwards(),
+                    None => this
+                        .notifier
+                        .info(tr!("Open a tab and log in to a server first")),
+                }
+            });
+            this.window.add_action(&action);
+        }
+        {
+            // Значок пробросов на ярлыке вкладки открывает их диалог.
+            let weak = Rc::downgrade(&this);
+            this.tab_view.connect_indicator_activated(move |_, page| {
+                let Some(this) = weak.upgrade() else { return };
+                let child = page.child();
+                let tab = this
+                    .tabs
+                    .borrow()
+                    .iter()
+                    .find(|tab| tab.widget().upcast_ref::<gtk::Widget>() == &child)
+                    .cloned();
+                if let Some(tab) = tab {
+                    tab.show_forwards();
+                }
+            });
+        }
+        {
+            let weak = Rc::downgrade(&this);
             let action = gio::SimpleAction::new("key-login", None);
             action.connect_activate(move |_, _| {
                 let Some(this) = weak.upgrade() else { return };
@@ -856,9 +893,12 @@ impl AppWindow {
         self.window.set_title(Some(&title));
     }
 
-    /// Открывает вкладку; `false`, если адрес не прошёл проверку. `title` —
-    /// название сохранённого подключения; без него на вкладке виден адрес.
-    fn open_tab(self: &Rc<Self>, target: &str, title: Option<&str>, startup: &str) -> bool {
+    /// Открывает вкладку; `false`, если адрес не прошёл проверку. `saved` —
+    /// сохранённое подключение: его название на вкладке (без него виден
+    /// адрес), команда после входа и пробросы портов.
+    fn open_tab(self: &Rc<Self>, target: &str, saved: Option<&Connection>) -> bool {
+        let title = saved.map(|c| c.name.as_str());
+        let startup = saved.map_or("", |c| c.startup.as_str());
         let target = match session::validate_target(target) {
             Ok(target) => target,
             Err(message) => {
@@ -905,9 +945,19 @@ impl AppWindow {
             &font,
             show_files,
             startup,
+            saved.cloned(),
             on_finished,
         );
         *slot.borrow_mut() = Some(Rc::downgrade(&tab));
+        if saved.is_some() {
+            let weak = Rc::downgrade(self);
+            tab.set_forwards_save_handler(Rc::new(move |original, edit| {
+                match weak.upgrade() {
+                    Some(this) => this.sidebar.update_saved_forwards(original, edit),
+                    None => Err(tr!("The window is closing").to_string()),
+                }
+            }));
+        }
 
         self.tabs.borrow_mut().push(Rc::clone(&tab));
         let page = self.tab_view.append(tab.widget());
@@ -923,6 +973,23 @@ impl AppWindow {
                 page.set_title(tab.target());
                 page.set_tooltip(&glib::markup_escape_text(tab.target()));
             }
+        }
+        {
+            // Значок на ярлыке: работающие или неудачные пробросы портов.
+            let page = page.downgrade();
+            let update = move |forwards: &forwards::TabForwards| {
+                let Some(page) = page.upgrade() else { return };
+                match forwards::indicator(forwards) {
+                    Some((icon, tooltip)) => {
+                        page.set_indicator_icon(Some(&gio::ThemedIcon::new(icon)));
+                        page.set_indicator_tooltip(&glib::markup_escape_text(&tooltip));
+                        page.set_indicator_activatable(true);
+                    }
+                    None => page.set_indicator_icon(gio::Icon::NONE),
+                }
+            };
+            update(tab.forwards());
+            tab.forwards().connect_changed(update);
         }
         self.tab_view.set_selected_page(&page);
         self.sync_tabs_state();
