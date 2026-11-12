@@ -27,30 +27,36 @@ pub struct Theme {
     pub name: &'static str,
     foreground: &'static str,
     background: &'static str,
+    /// Акцент интерфейса; `None` — синий из палитры.
+    accent: Option<&'static str>,
     palette: [&'static str; 16],
 }
 
 /// Собственная тёмная палитра sshdeck: стандартные «Как в системе» и
-/// «Тёмная» берут её, а не серые цвета Adwaita.
+/// «Тёмная» берут её, а не серые цвета Adwaita. Холодный графит и
+/// бирюзовый акцент.
 const DECK_NIGHT: Theme = Theme {
     id: "system",
     name: n_!("Match window style"),
-    foreground: "#d6dae3",
-    background: "#15171d",
+    foreground: "#dde4e7",
+    background: "#0e1215",
+    accent: Some("#2ec4b6"),
     palette: [
-        "#20232b", "#ff6b7d", "#4ade80", "#f5c45e", "#6d8dff", "#c38bff", "#3fd2e6", "#c5cad6",
-        "#4d5363", "#ff8a98", "#7ff0a6", "#ffd98a", "#94acff", "#d6adff", "#78e3f2", "#f2f4f8",
+        "#1b2126", "#ff6b7d", "#4ade80", "#f5c45e", "#6d9bff", "#c38bff", "#3fd2e6", "#c4ccd1",
+        "#4a555e", "#ff8a98", "#7ff0a6", "#ffd98a", "#94b4ff", "#d6adff", "#78e3f2", "#f2f6f8",
     ],
 };
-/// Светлая пара к [`DECK_NIGHT`].
+/// Светлая пара к [`DECK_NIGHT`]; акцент темнее, чтобы белый текст на нём
+/// читался.
 const DECK_DAY: Theme = Theme {
     id: "system",
     name: n_!("Match window style"),
-    foreground: "#1f2430",
-    background: "#fbfbfd",
+    foreground: "#182024",
+    background: "#f7f9f9",
+    accent: Some("#0d7d74"),
     palette: [
-        "#1f2430", "#d32f45", "#1a8f4a", "#a26a00", "#3e63e6", "#8a4fd8", "#0b7f8f", "#6b7280",
-        "#4b5263", "#e5484d", "#2bb062", "#c58a00", "#5b7cff", "#a774ef", "#1599ab", "#9aa1ad",
+        "#182024", "#d32f45", "#1a8f4a", "#a26a00", "#3e63e6", "#8a4fd8", "#0b7f8f", "#66737a",
+        "#46525a", "#e5484d", "#2bb062", "#c58a00", "#5b7cff", "#a774ef", "#1599ab", "#98a3a9",
     ],
 };
 
@@ -66,6 +72,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Dracula",
         foreground: "#f8f8f2",
         background: "#282a36",
+        accent: None,
         palette: [
             "#21222c", "#ff5555", "#50fa7b", "#f1fa8c", "#bd93f9", "#ff79c6", "#8be9fd",
             "#f8f8f2", "#6272a4", "#ff6e6e", "#69ff94", "#ffffa5", "#d6acff", "#ff92df",
@@ -77,6 +84,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Nord",
         foreground: "#d8dee9",
         background: "#2e3440",
+        accent: None,
         palette: [
             "#3b4252", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead", "#88c0d0",
             "#e5e9f0", "#4c566a", "#bf616a", "#a3be8c", "#ebcb8b", "#81a1c1", "#b48ead",
@@ -88,6 +96,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Gruvbox Dark",
         foreground: "#ebdbb2",
         background: "#282828",
+        accent: None,
         palette: [
             "#282828", "#cc241d", "#98971a", "#d79921", "#458588", "#b16286", "#689d6a",
             "#a89984", "#928374", "#fb4934", "#b8bb26", "#fabd2f", "#83a598", "#d3869b",
@@ -99,6 +108,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Tokyo Night",
         foreground: "#c0caf5",
         background: "#1a1b26",
+        accent: None,
         palette: [
             "#15161e", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7", "#7dcfff",
             "#a9b1d6", "#414868", "#f7768e", "#9ece6a", "#e0af68", "#7aa2f7", "#bb9af7",
@@ -110,6 +120,7 @@ pub const THEMES: [Theme; 8] = [
         name: "One Dark",
         foreground: "#abb2bf",
         background: "#282c34",
+        accent: None,
         palette: [
             "#282c34", "#e06c75", "#98c379", "#e5c07b", "#61afef", "#c678dd", "#56b6c2",
             "#abb2bf", "#5c6370", "#e06c75", "#98c379", "#e5c07b", "#61afef", "#c678dd",
@@ -121,6 +132,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Catppuccin Mocha",
         foreground: "#cdd6f4",
         background: "#1e1e2e",
+        accent: None,
         palette: [
             "#45475a", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7", "#94e2d5",
             "#bac2de", "#585b70", "#f38ba8", "#a6e3a1", "#f9e2af", "#89b4fa", "#f5c2e7",
@@ -132,6 +144,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Solarized Dark",
         foreground: "#839496",
         background: "#002b36",
+        accent: None,
         palette: SOLARIZED_PALETTE,
     },
     Theme {
@@ -139,6 +152,7 @@ pub const THEMES: [Theme; 8] = [
         name: "Solarized Light",
         foreground: "#657b83",
         background: "#fdf6e3",
+        accent: None,
         palette: SOLARIZED_PALETTE,
     },
 ];
@@ -172,16 +186,22 @@ pub fn default_look(dark: bool) -> AppLook {
 fn look_for(theme: &Theme) -> Option<AppLook> {
     let background = Rgb::parse(theme.background)?;
     let foreground = Rgb::parse(theme.foreground)?;
-    // Синий из палитры темы служит акцентом: кнопки, выделение, фокус.
-    let accent = Rgb::parse(theme.palette[4])?;
+    // Акцент темы или синий из её палитры: кнопки, выделение, фокус.
+    let accent = Rgb::parse(theme.accent.unwrap_or(theme.palette[4]))?;
     let dark = background.luminance() < 0.5;
     let black = Rgb(0, 0, 0);
 
-    // Список файлов и терминал — основной фон темы; заголовок и боковая
-    // панель чуть темнее, всплывающие поверхности чуть светлее.
-    let chrome = background.mix(black, if dark { 0.16 } else { 0.05 });
-    let sidebar = background.mix(black, if dark { 0.24 } else { 0.08 });
-    let raised = background.mix(foreground, 0.08);
+    // Список файлов и терминал — основной фон темы. Шапка, боковая панель
+    // и строка состояния — одна плоская поверхность рядом с ним: в тёмных
+    // темах чуть светлее фона, в светлых чуть темнее. Всплывающие
+    // поверхности ещё на шаг ближе к цвету текста.
+    let chrome = if dark {
+        background.mix(foreground, 0.035)
+    } else {
+        background.mix(black, 0.03)
+    };
+    let sidebar = chrome;
+    let raised = background.mix(foreground, if dark { 0.07 } else { 0.03 });
     let accent_text = if accent.luminance() > 0.45 {
         background.mix(black, if dark { 0.3 } else { 0.85 })
     } else {

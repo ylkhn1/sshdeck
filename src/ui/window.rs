@@ -24,19 +24,34 @@ use crate::settings::Settings;
 /// libadwaita (`--window-bg-color` и т. п.), которые задаёт выбранная тема,
 /// поэтому правила одинаково работают в светлом и тёмном вариантах.
 const CSS: &str = "
+/* ---------- overall look: flat surfaces, sharp corners, 1px borders */
+button:not(.circular), menubutton > button, dropdown > button, entry, spinbutton,
+searchentry, popover > contents, .card, toast {
+  border-radius: 3px;
+}
+popover > contents { box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent),
+                                 0 4px 12px rgba(0, 0, 0, 0.35); }
+popover.menu modelbutton, popover > contents > list > row { border-radius: 2px; }
+dialog.floating sheet { border-radius: 3px; }
+.boxed-list, .boxed-list-separate > row { border-radius: 4px; }
+.boxed-list > row:first-child { border-top-left-radius: 4px; border-top-right-radius: 4px; }
+.boxed-list > row:last-child { border-bottom-left-radius: 4px; border-bottom-right-radius: 4px; }
+
 /* ---------- header bars: tabs right in the window title bar */
 .sshdeck-topbar, .sshdeck-sidebar-header { min-height: 40px; padding: 0 6px; }
 .sshdeck-sidebar-header { padding-left: 14px; }
+.sshdeck-topbar, .sshdeck-sidebar-header {
+  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 12%, transparent);
+}
 .sshdeck-topbar {
   background-color: var(--headerbar-bg-color);
   color: var(--headerbar-fg-color);
-  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 8%, transparent);
 }
 .sshdeck-topbar > button, .sshdeck-topbar > menubutton > button,
 .sshdeck-sidebar-header > button {
-  min-width: 28px; min-height: 28px; padding: 0; border-radius: 7px;
+  min-width: 28px; min-height: 28px; padding: 0; border-radius: 3px;
 }
-.sshdeck-topbar > revealer > button { min-width: 28px; min-height: 28px; padding: 0; border-radius: 7px; }
+.sshdeck-topbar > revealer > button { min-width: 28px; min-height: 28px; padding: 0; border-radius: 3px; }
 .sshdeck-topbar > button.toggle:checked, .sshdeck-topbar > revealer > button.toggle:checked {
   background-color: color-mix(in srgb, currentColor 10%, transparent);
   box-shadow: none;
@@ -47,7 +62,7 @@ const CSS: &str = "
 }
 .sshdeck-topbar windowcontrols > button > image,
 .sshdeck-sidebar-header windowcontrols > button > image {
-  background: none; border-radius: 7px; padding: 5px;
+  background: none; border-radius: 3px; padding: 5px;
 }
 .sshdeck-topbar windowcontrols > button:hover > image,
 .sshdeck-sidebar-header windowcontrols > button:hover > image {
@@ -61,46 +76,56 @@ const CSS: &str = "
 .sshdeck-topbar tabbar .box { background: none; box-shadow: none; padding: 0; }
 .sshdeck-topbar tabbar tabbox { padding-top: 0; padding-bottom: 0; min-height: 40px; }
 .sshdeck-topbar tabbar tabbox > separator { opacity: 0; }
+/* flat tabs: the open one is marked by an accent underline. libadwaita rounds
+   and clips the tab's wrapper, not the tab itself */
+.sshdeck-topbar tabbar tabbox > tabboxchild { border-radius: 0; }
 .sshdeck-topbar tabbar tab {
-  min-height: 22px; margin: 5px 0; padding: 2px 3px 2px 10px; border-radius: 8px;
-  color: color-mix(in srgb, currentColor 60%, transparent);
+  min-height: 30px; margin: 0; padding: 2px 3px 2px 10px; border-radius: 0;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+  box-shadow: inset -1px 0 color-mix(in srgb, currentColor 12%, transparent);
 }
-.sshdeck-topbar tabbar tab:hover { color: var(--headerbar-fg-color); }
+.sshdeck-topbar tabbar tab:hover {
+  color: var(--headerbar-fg-color);
+  background-color: color-mix(in srgb, currentColor 5%, transparent);
+}
 .sshdeck-topbar tabbar tab:selected,
 .sshdeck-topbar tabbar tabbox.single-tab tab:selected {
   background-color: var(--view-bg-color);
   color: var(--view-fg-color);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22),
-              inset 0 0 0 1px color-mix(in srgb, var(--view-fg-color) 7%, transparent);
+  box-shadow: inset 0 -2px var(--accent-bg-color),
+              inset -1px 0 color-mix(in srgb, currentColor 12%, transparent);
 }
 .sshdeck-topbar tabbar tab:selected label { font-weight: 600; }
 
 /* ---------- sidebar */
 .sshdeck-logo {
-  min-width: 22px; min-height: 22px; margin-right: 6px; border-radius: 7px;
+  min-width: 22px; min-height: 22px; margin-right: 6px; border-radius: 3px;
   background-color: var(--accent-bg-color); color: var(--accent-fg-color);
   font-family: monospace; font-weight: 800; font-size: 0.85em;
 }
 .sshdeck-brand { font-weight: 800; font-size: 1.08em; }
-.sshdeck-address { margin: 2px 10px 6px 10px; min-height: 30px; border-radius: 8px; }
+.sshdeck-address { margin: 8px 10px 6px 10px; min-height: 30px; border-radius: 3px; }
 .sshdeck-section-title {
-  margin: 8px 4px 2px 4px; font-size: 0.7em; font-weight: 800; letter-spacing: 0.1em;
-  color: color-mix(in srgb, currentColor 48%, transparent);
+  margin: 10px 4px 3px 4px; font-size: 0.72em; font-weight: 700; letter-spacing: 0.12em;
+  color: color-mix(in srgb, currentColor 50%, transparent);
 }
 .sshdeck-note { margin: 6px 14px 10px 14px; }
 .sshdeck-hosts { background: none; }
-.sshdeck-hosts > row { margin: 0 6px 1px 6px; border-radius: 8px; }
+.sshdeck-hosts > row { margin: 0 0 1px 0; padding-left: 6px; padding-right: 6px; border-radius: 0; }
 .sshdeck-hosts > row.activatable { min-height: 32px; }
 .sshdeck-hosts > row.sshdeck-host-row { min-height: 0; padding-top: 0; padding-bottom: 0; }
 .sshdeck-host-content { min-height: 28px; }
+.sshdeck-hosts > row:hover { background-color: color-mix(in srgb, currentColor 5%, transparent); }
+/* the selected row: a tinted background and an accent bar on the left edge */
 .sshdeck-hosts > row:selected {
-  background-color: color-mix(in srgb, var(--accent-bg-color) 22%, transparent);
+  background-color: color-mix(in srgb, var(--accent-bg-color) 12%, transparent);
+  box-shadow: inset 2px 0 var(--accent-bg-color);
 }
 .sshdeck-hosts > row:selected:hover {
-  background-color: color-mix(in srgb, var(--accent-bg-color) 28%, transparent);
+  background-color: color-mix(in srgb, var(--accent-bg-color) 17%, transparent);
 }
 .sshdeck-avatar {
-  min-width: 22px; min-height: 22px; border-radius: 6px;
+  min-width: 22px; min-height: 22px; border-radius: 3px;
   font-weight: 800; font-size: 0.78em;
 }
 .sshdeck-avatar-0 { color: #5b7cff; background-color: color-mix(in srgb, #5b7cff 18%, transparent); }
@@ -120,20 +145,27 @@ const CSS: &str = "
 
 /* ---------- tab: files | terminal */
 paned.sshdeck-split > separator {
-  background-color: color-mix(in srgb, currentColor 9%, transparent);
+  background-color: color-mix(in srgb, currentColor 12%, transparent);
 }
 vte-terminal { padding: 4px 8px; }
 .sshdeck-files-toolbar { padding: 2px 2px 0 2px; }
 .sshdeck-files-toolbar > .toolbar + .toolbar { padding-top: 0; }
-.sshdeck-files-toolbar button { border-radius: 8px; }
+.sshdeck-files-toolbar button { border-radius: 3px; }
 .sshdeck-files-toolbar entry {
-  min-height: 26px; border-radius: 7px; font-family: monospace; font-size: 0.92em;
+  min-height: 26px; border-radius: 3px; font-family: monospace; font-size: 0.92em;
 }
-columnview.sshdeck-files > header > button { padding-top: 3px; padding-bottom: 3px; }
-columnview.sshdeck-files > header > button > box { font-size: 0.78em; font-weight: 700; }
+columnview.sshdeck-files > header > button {
+  padding-top: 3px; padding-bottom: 3px;
+  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 12%, transparent);
+}
+columnview.sshdeck-files > header > button > box {
+  font-size: 0.75em; font-weight: 700; letter-spacing: 0.06em;
+  color: color-mix(in srgb, currentColor 55%, transparent);
+}
 columnview.sshdeck-files > listview > row > cell { padding-top: 1px; padding-bottom: 1px; }
 columnview.sshdeck-files > listview > row:selected {
-  background-color: color-mix(in srgb, var(--accent-bg-color) 22%, transparent);
+  background-color: color-mix(in srgb, var(--accent-bg-color) 14%, transparent);
+  box-shadow: inset 2px 0 var(--accent-bg-color);
 }
 .sshdeck-transfers { padding: 0 6px 6px 6px; }
 .sshdeck-transfer { padding: 6px 6px 10px 12px; }
@@ -167,18 +199,31 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
 
 /* ---------- server status bar */
 .sshdeck-statusbar {
-  padding: 2px 8px; font-size: 0.85em;
+  padding: 3px 4px; font-size: 0.82em;
   background-color: var(--window-bg-color);
-  box-shadow: inset 0 1px color-mix(in srgb, currentColor 8%, transparent);
+  box-shadow: inset 0 1px color-mix(in srgb, currentColor 12%, transparent);
 }
 .sshdeck-stat {
-  padding: 1px 8px; border-radius: 99px;
-  background-color: color-mix(in srgb, currentColor 6%, transparent);
+  padding: 1px 10px;
+  box-shadow: inset -1px 0 color-mix(in srgb, currentColor 10%, transparent);
 }
+.sshdeck-stat:last-child { box-shadow: none; }
+.sshdeck-stat-title { letter-spacing: 0.04em; }
+/* a mini bar next to CPU, memory and disk; yellow and red past the thresholds */
+progressbar.sshdeck-meter { min-width: 34px; }
+progressbar.sshdeck-meter > trough { min-height: 3px; min-width: 34px; border-radius: 0;
+  background-color: color-mix(in srgb, currentColor 14%, transparent); }
+progressbar.sshdeck-meter > trough > progress { min-height: 3px; border-radius: 0;
+  background-color: var(--accent-bg-color); }
+progressbar.sshdeck-meter.warning > trough > progress { background-color: #e5c13b; }
+progressbar.sshdeck-meter.error > trough > progress { background-color: #e5484d; }
+/* mixing in the text color keeps the numbers readable on light themes */
+.sshdeck-stat label.warning { color: color-mix(in srgb, #d9a514 65%, currentColor); }
+.sshdeck-stat label.error { color: color-mix(in srgb, #e5484d 75%, currentColor); }
 
 /* ---------- databases */
 .sshdeck-db-badge {
-  min-width: 22px; min-height: 22px; border-radius: 6px;
+  min-width: 22px; min-height: 22px; border-radius: 3px;
   font-weight: 800; font-size: 0.7em; font-family: monospace;
 }
 .sshdeck-db-postgres { color: #4f7fd6; background-color: color-mix(in srgb, #4f7fd6 18%, transparent); }
@@ -188,8 +233,8 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
   padding: 3px 6px; min-height: 30px;
   box-shadow: inset 0 -1px color-mix(in srgb, currentColor 8%, transparent);
 }
-.sshdeck-db-toolbar button { border-radius: 7px; min-height: 26px; }
-.sshdeck-db-toolbar entry, .sshdeck-db-toolbar searchentry { min-height: 26px; border-radius: 7px; }
+.sshdeck-db-toolbar button { border-radius: 3px; min-height: 26px; }
+.sshdeck-db-toolbar entry, .sshdeck-db-toolbar searchentry { min-height: 26px; border-radius: 3px; }
 .sshdeck-db-nav > row { min-height: 0; padding-top: 2px; padding-bottom: 2px; }
 .sshdeck-db-extension { color: #9b6bd6; background-color: color-mix(in srgb, #9b6bd6 18%, transparent); }
 .sshdeck-db-active { font-weight: bold; }
@@ -234,11 +279,11 @@ columnview.sshdeck-grid.column-separators > header > button {
 }
 .sshdeck-results-header { min-height: 34px; }
 .sshdeck-pill {
-  padding: 1px 9px; border-radius: 99px; font-size: 0.8em; font-weight: 600;
+  padding: 1px 8px; border-radius: 2px; font-size: 0.8em; font-weight: 600;
   background-color: color-mix(in srgb, currentColor 8%, transparent);
   color: color-mix(in srgb, currentColor 80%, transparent);
 }
-.sshdeck-message { padding: 14px 16px; border-radius: 12px; }
+.sshdeck-message { padding: 14px 16px; border-radius: 4px; }
 .sshdeck-message.error {
   background-color: color-mix(in srgb, #e5484d 12%, transparent);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, #e5484d 30%, transparent);
@@ -253,7 +298,7 @@ columnview.sshdeck-grid.column-separators > header > button {
 .sshdeck-editor-hint {
   font-family: monospace; color: color-mix(in srgb, currentColor 32%, transparent);
 }
-.sshdeck-section-button { min-width: 22px; min-height: 22px; padding: 0; margin: 6px 6px 0 0; border-radius: 6px; }
+.sshdeck-section-button { min-width: 22px; min-height: 22px; padding: 0; margin: 6px 6px 0 0; border-radius: 3px; }
 
 .sshdeck-folder-red { color: #ed333b; }
 .sshdeck-folder-orange { color: #ff7800; }
@@ -274,10 +319,13 @@ const SCHEMES: [(&str, &str); 3] = [
     ("dark", n_!("Dark")),
 ];
 
-/// Шрифт интерфейса, если системный оказался моноширинным.
-const UI_FONT_FAMILY: &str = "Adwaita Sans, Inter, Noto Sans, Cantarell, sans-serif";
-/// Во сколько раз шрифт интерфейса мельче системного.
-const UI_FONT_SCALE: f64 = 0.9;
+/// Моноширинный шрифт всего интерфейса — часть фирменного облика.
+/// Adwaita Mono ставится вместе с libadwaita и служит запасным вариантом.
+const UI_FONT_FAMILY: &str =
+    "JetBrains Mono,JetBrainsMono Nerd Font,Adwaita Mono,DejaVu Sans Mono,monospace";
+/// Во сколько раз шрифт интерфейса мельче системного: моноширинный шрифт
+/// шире пропорционального.
+const UI_FONT_SCALE: f64 = 0.86;
 
 pub fn build(app: &adw::Application, initial_targets: &[String]) {
     install_css();
@@ -352,10 +400,9 @@ fn apply_look(provider: &gtk::CssProvider, settings: &Settings) {
     }
 }
 
-/// Шрифт интерфейса: на [`UI_FONT_SCALE`] мельче системного, чтобы списки
-/// и панели были плотнее. Если системный шрифт моноширинный (как бывает при
-/// настройке «один шрифт на всё»), кнопки и списки набираются обычным
-/// шрифтом. Терминал это не затрагивает: его шрифт задаётся отдельно.
+/// Шрифт интерфейса: моноширинный [`UI_FONT_FAMILY`] на [`UI_FONT_SCALE`]
+/// мельче системного, чтобы списки и панели были плотнее. Терминал это не
+/// затрагивает: его шрифт задаётся отдельно.
 fn tune_ui_font() {
     let Some(settings) = gtk::Settings::default() else {
         return;
@@ -364,15 +411,7 @@ fn tune_ui_font() {
         return;
     };
     let mut description = pango::FontDescription::from_string(&name);
-    if let Some(family) = description.family() {
-        let context = gtk::Label::new(None).pango_context();
-        let monospace = context.list_families().iter().any(|candidate| {
-            candidate.name().eq_ignore_ascii_case(&family) && candidate.is_monospace()
-        });
-        if monospace {
-            description.set_family(UI_FONT_FAMILY);
-        }
-    }
+    description.set_family(UI_FONT_FAMILY);
     let size = f64::from(description.size()) * UI_FONT_SCALE;
     if size > 0.0 {
         if description.is_size_absolute() {

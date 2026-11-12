@@ -22,9 +22,9 @@ pub struct StatusBar {
 
 struct Inner {
     root: gtk::ScrolledWindow,
-    cpu: gtk::Label,
-    memory: gtk::Label,
-    disk: gtk::Label,
+    cpu: Gauge,
+    memory: Gauge,
+    disk: Gauge,
     network: gtk::Label,
     load: gtk::Label,
     uptime: gtk::Label,
@@ -36,7 +36,9 @@ impl StatusBar {
     pub fn new() -> Self {
         let row = gtk::Box::new(gtk::Orientation::Horizontal, 6);
         row.add_css_class("sshdeck-statusbar");
-        let item = |title: &str, tooltip: &str| {
+        // Ячейка «название — [полоска] — значение»; возвращает значение и
+        // полоску, если она нужна.
+        let cell = |title: &str, tooltip: &str, with_bar: bool| {
             let value = gtk::Label::builder()
                 .label("—")
                 .css_classes(["numeric"])
@@ -47,16 +49,32 @@ impl StatusBar {
             cell.append(
                 &gtk::Label::builder()
                     .label(title)
-                    .css_classes(["dim-label"])
+                    .css_classes(["dim-label", "sshdeck-stat-title"])
                     .build(),
             );
+            let bar = with_bar.then(|| {
+                let bar = gtk::ProgressBar::builder()
+                    .css_classes(["sshdeck-meter"])
+                    .valign(gtk::Align::Center)
+                    .build();
+                cell.append(&bar);
+                bar
+            });
             cell.append(&value);
             row.append(&cell);
-            value
+            (value, bar)
         };
-        let cpu = item("CPU", tr!("Server CPU usage"));
-        let memory = item(tr!("RAM"), tr!("Memory in use out of the server’s total memory"));
-        let disk = item(tr!("Disk /"), tr!("Root partition usage"));
+        let gauge = |title: &str, tooltip: &str| {
+            let (value, bar) = cell(title, tooltip, true);
+            Gauge {
+                value,
+                bar: bar.expect("cell was asked for a bar"),
+            }
+        };
+        let item = |title: &str, tooltip: &str| cell(title, tooltip, false).0;
+        let cpu = gauge("CPU", tr!("Server CPU usage"));
+        let memory = gauge(tr!("RAM"), tr!("Memory in use out of the server’s total memory"));
+        let disk = gauge(tr!("Disk /"), tr!("Root partition usage"));
         let network = item(tr!("Network"), tr!("Receive and send rates across all server interfaces"));
         let uptime = item(tr!("Uptime"), tr!("Time since the server was last rebooted"));
         let load = item(trc!("load average", "Load"), tr!("One-minute load average"));
@@ -149,9 +167,10 @@ impl Inner {
 
         match &usage {
             Some(usage) => {
-                self.cpu
-                    .set_text(&tr!("{}%", format!("{:.0}", usage.cpu_percent)));
-                mark_level(&self.cpu, usage.cpu_percent);
+                self.cpu.show(
+                    &tr!("{}%", format!("{:.0}", usage.cpu_percent)),
+                    Some(usage.cpu_percent),
+                );
                 self.network.set_text(&tr!(
                     "↓ {}/s  ↑ {}/s",
                     format_size(usage.rx_per_sec as u64),
@@ -159,28 +178,25 @@ impl Inner {
                 ));
             }
             None => {
-                self.cpu.set_text("…");
+                self.cpu.show("…", None);
                 self.network.set_text("…");
             }
         }
 
-        self.memory.set_text(&format!(
-            "{} / {}",
-            format_size(sample.mem_used_kb() * 1024),
-            format_size(sample.mem_total_kb * 1024)
-        ));
-        if sample.mem_total_kb > 0 {
-            mark_level(
-                &self.memory,
-                sample.mem_used_kb() as f64 * 100.0 / sample.mem_total_kb as f64,
-            );
-        }
+        self.memory.show(
+            &format!(
+                "{} / {}",
+                format_size(sample.mem_used_kb() * 1024),
+                format_size(sample.mem_total_kb * 1024)
+            ),
+            (sample.mem_total_kb > 0)
+                .then(|| sample.mem_used_kb() as f64 * 100.0 / sample.mem_total_kb as f64),
+        );
         match sample.disk_percent() {
-            Some(percent) => {
-                self.disk.set_text(&tr!("{}%", format!("{percent:.0}")));
-                mark_level(&self.disk, percent);
-            }
-            None => self.disk.set_text("—"),
+            Some(percent) => self
+                .disk
+                .show(&tr!("{}%", format!("{percent:.0}")), Some(percent)),
+            None => self.disk.show("—", None),
         }
         let load = format!("{:.2}", sample.load1)
             .replace('.', &crate::i18n::decimal_separator().to_string());
@@ -193,13 +209,30 @@ impl Inner {
     }
 }
 
+/// Показатель в процентах: значение и мини-полоска рядом с ним.
+struct Gauge {
+    value: gtk::Label,
+    bar: gtk::ProgressBar,
+}
+
+impl Gauge {
+    /// `percent` — заполнение полоски; `None` оставляет её пустой.
+    fn show(&self, text: &str, percent: Option<f64>) {
+        self.value.set_text(text);
+        let percent = percent.unwrap_or(0.0);
+        self.bar.set_fraction((percent / 100.0).clamp(0.0, 1.0));
+        mark_level(&self.value, percent);
+        mark_level(&self.bar, percent);
+    }
+}
+
 /// Подсвечивает значение, когда оно близко к пределу.
-fn mark_level(label: &gtk::Label, percent: f64) {
-    label.remove_css_class("warning");
-    label.remove_css_class("error");
+fn mark_level(widget: &impl IsA<gtk::Widget>, percent: f64) {
+    widget.remove_css_class("warning");
+    widget.remove_css_class("error");
     if percent >= CRITICAL_PERCENT {
-        label.add_css_class("error");
+        widget.add_css_class("error");
     } else if percent >= WARN_PERCENT {
-        label.add_css_class("warning");
+        widget.add_css_class("warning");
     }
 }
