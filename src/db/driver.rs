@@ -170,12 +170,12 @@ impl DbError {
 type DbResult<T> = Result<T, DbError>;
 
 fn write_error(err: std::io::Error) -> DbError {
-    DbError::new(format!("Не удалось записать файл: {err}"))
+    DbError::new(tr!("Could not write the file: {}", err))
 }
 
 /// Заголовки результата «структура таблицы».
 fn structure_columns() -> Vec<String> {
-    ["Колонка", "Тип", "NULL", "По умолчанию", "Ключ"]
+    [tr!("Column"), tr!("Type"), "NULL", tr!("Default"), tr!("Key")]
         .into_iter()
         .map(String::from)
         .collect()
@@ -194,7 +194,7 @@ fn bytes_text(bytes: &[u8], limit: Option<usize>) -> String {
                 text.push_str(&format!("{byte:02x}"));
             }
             if shown < bytes.len() {
-                text.push_str(&format!("… ({} Б)", bytes.len()));
+                text.push_str(&tr!("… ({} B)", bytes.len()));
             }
             text
         }
@@ -386,8 +386,8 @@ impl Backend {
 async fn with_timeout<T>(job: impl Future<Output = DbResult<T>>) -> DbResult<T> {
     match tokio::time::timeout(CONNECT_TIMEOUT, job).await {
         Ok(result) => result,
-        Err(_) => Err(DbError::new(format!(
-            "Сервер не ответил за {} с",
+        Err(_) => Err(DbError::new(tr!(
+            "The server did not respond within {} s",
             CONNECT_TIMEOUT.as_secs()
         ))),
     }
@@ -421,7 +421,7 @@ fn pg_error(err: tokio_postgres::Error) -> DbError {
     let Some(db) = err.as_db_error() else {
         let mut message = err.to_string();
         if message.contains("password missing") {
-            return DbError::new("Сервер требует пароль, а он не указан");
+            return DbError::new(tr!("The server requires a password, but none was given"));
         }
         if let Some(source) = std::error::Error::source(&err) {
             let source = source.to_string();
@@ -433,16 +433,20 @@ fn pg_error(err: tokio_postgres::Error) -> DbError {
     };
     let mut message = format!("{}: {}", db.severity(), db.message());
     if let Some(detail) = db.detail() {
-        message.push_str(&format!("\nПодробности: {detail}"));
+        message.push('\n');
+        message.push_str(&tr!("Detail: {}", detail));
     }
     if let Some(hint) = db.hint() {
-        message.push_str(&format!("\nПодсказка: {hint}"));
+        message.push('\n');
+        message.push_str(&tr!("Hint: {}", hint));
     }
     if let Some(where_) = db.where_() {
-        message.push_str(&format!("\nГде: {where_}"));
+        message.push('\n');
+        message.push_str(&tr!("Where: {}", where_));
     }
     if let Some(tokio_postgres::error::ErrorPosition::Original(position)) = db.position() {
-        message.push_str(&format!("\nПозиция: {position}"));
+        message.push('\n');
+        message.push_str(&tr!("Position: {}", position));
     }
     DbError { message, lost }
 }
@@ -795,7 +799,7 @@ impl Postgres {
             }
         }
         if state == 0 {
-            return Err(DbError::new("Запрос не вернул строк — выгружать нечего"));
+            return Err(DbError::new(tr!("The query returned no rows — nothing to export")));
         }
         writer.finish().map_err(write_error)?;
         Ok(count)
@@ -837,8 +841,10 @@ impl Postgres {
                 match sent {
                     Ok(count) => total += count,
                     Err(mut err) => {
-                        err.message.push_str(&format!(
-                            "\n(ошибка в строках данных {start}–{})",
+                        err.message.push('\n');
+                        err.message.push_str(&tr!(
+                            "(error in data rows {}–{})",
+                            start,
                             total + rows.len() as u64
                         ));
                         return Err(err);
@@ -871,12 +877,12 @@ pub struct MySql {
 
 fn my_error(err: mysql_async::Error) -> DbError {
     match err {
-        mysql_async::Error::Server(server) => DbError::new(format!(
-            "{} (код {}, SQLSTATE {})",
+        mysql_async::Error::Server(server) => DbError::new(tr!(
+            "{} (code {}, SQLSTATE {})",
             server.message, server.code, server.state
         )),
         mysql_async::Error::Io(io) => DbError {
-            message: format!("Ошибка соединения: {io}"),
+            message: tr!("Connection error: {}", io),
             lost: true,
         },
         other => DbError::new(other.to_string()),
@@ -1113,7 +1119,7 @@ impl MySql {
             .collect();
         if columns.is_empty() {
             let _ = result.drop_result().await;
-            return Err(DbError::new("Запрос не вернул строк — выгружать нечего"));
+            return Err(DbError::new(tr!("The query returned no rows — nothing to export")));
         }
         writer.start(&columns).map_err(write_error)?;
         let mut count = 0u64;
@@ -1171,8 +1177,9 @@ impl MySql {
                         .collect();
                     if let Err(err) = conn.exec_drop(statement, params).await {
                         let mut err = my_error(err);
-                        err.message.push_str(&format!(
-                            "\n(ошибка в строках данных {}–{})",
+                        err.message.push('\n');
+                        err.message.push_str(&tr!(
+                            "(error in data rows {}–{})",
                             total + 1,
                             total + part.len() as u64
                         ));
@@ -1326,7 +1333,7 @@ fn lite_export(
 ) -> DbResult<u64> {
     let mut statement = conn.prepare(sql).map_err(lite_error)?;
     if statement.column_count() == 0 {
-        return Err(DbError::new("Запрос не вернул строк — выгружать нечего"));
+        return Err(DbError::new(tr!("The query returned no rows — nothing to export")));
     }
     let columns: Vec<ExportColumn> = statement
         .columns()
@@ -1365,8 +1372,8 @@ impl Sqlite {
                     | OpenFlags::SQLITE_OPEN_NO_MUTEX,
             )
             .map_err(|err| match err.sqlite_error_code() {
-                Some(rusqlite::ErrorCode::CannotOpen) => DbError::new(format!(
-                    "Не удалось открыть {}: файла нет или нет доступа",
+                Some(rusqlite::ErrorCode::CannotOpen) => DbError::new(tr!(
+                    "Could not open {}: the file does not exist or cannot be accessed",
                     target.display()
                 )),
                 _ => lite_error(err),
@@ -1379,7 +1386,7 @@ impl Sqlite {
             Ok::<_, DbError>(conn)
         })
         .await
-        .map_err(|_| DbError::new("Открытие базы прервалось"))??;
+        .map_err(|_| DbError::new(tr!("Opening the database was interrupted")))??;
         let interrupt = Arc::new(conn.get_interrupt_handle());
         let version = format!("SQLite {}", rusqlite::version());
         Ok((
@@ -1403,7 +1410,7 @@ impl Sqlite {
             job(&conn)
         })
         .await
-        .map_err(|_| DbError::new("Запрос прервался из-за внутренней ошибки"))?
+        .map_err(|_| DbError::new(tr!("The query was interrupted by an internal error")))?
     }
 
     async fn query(&self, sql: &str) -> DbResult<QueryOutput> {
@@ -1478,8 +1485,8 @@ impl Sqlite {
                         statement
                             .execute(rusqlite::params_from_iter(values))
                             .map_err(|err| {
-                                DbError::new(format!(
-                                    "{}\n(ошибка в строке данных {})",
+                                DbError::new(tr!(
+                                    "{}\n(error in data row {})",
                                     err,
                                     total + 1
                                 ))
@@ -1630,7 +1637,7 @@ impl Extension {
         tunnel: Option<&Tunnel>,
     ) -> DbResult<(Backend, String)> {
         let info = profile.extension().ok_or_else(|| {
-            DbError::new(format!("Расширение «{}» не установлено", profile.driver))
+            DbError::new(tr!("Extension “{}” is not installed", profile.driver))
         })?;
         let plugin = Plugin::start(&info).map_err(DbError::new)?;
         let (host, port) = match tunnel.and_then(Tunnel::port) {
@@ -1724,7 +1731,7 @@ impl Extension {
             .await?;
         let (output, kinds) = ext_output(&reply, None);
         if output.columns.is_empty() {
-            return Err(DbError::new("Запрос не вернул строк — выгружать нечего"));
+            return Err(DbError::new(tr!("The query returned no rows — nothing to export")));
         }
         let columns: Vec<ExportColumn> = output
             .columns
@@ -1766,8 +1773,9 @@ impl Extension {
                 )
                 .await
                 .map_err(|mut err| {
-                    err.message.push_str(&format!(
-                        "\n(ошибка в строках данных {}–{}; {} {} уже вставлено)",
+                    err.message.push('\n');
+                    err.message.push_str(&tr!(
+                        "(error in data rows {0}–{1}; {2} has already inserted {3})",
                         total + 1,
                         total + rows.len() as u64,
                         self.info.name,
@@ -1937,7 +1945,7 @@ mod tests {
         let long = vec![0xffu8; BLOB_PREVIEW_BYTES + 10];
         assert!(
             bytes_text(&long, Some(BLOB_PREVIEW_BYTES))
-                .ends_with(&format!("… ({} Б)", BLOB_PREVIEW_BYTES + 10))
+                .ends_with(&format!("… ({} B)", BLOB_PREVIEW_BYTES + 10))
         );
         assert_eq!(bytes_text(&long, None).len(), 2 + long.len() * 2);
     }

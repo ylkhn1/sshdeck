@@ -1035,7 +1035,7 @@ impl Inner {
         original: Option<Connection>,
     ) {
         let name_row = adw::EntryRow::builder()
-            .title(tr!("Name"))
+            .title(trc!("connection or command", "Name"))
             .text(name)
             .activates_default(true)
             .build();

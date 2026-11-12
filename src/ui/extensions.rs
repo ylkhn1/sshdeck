@@ -30,13 +30,13 @@ pub fn install(source: Source, done: impl FnOnce(Result<ExtensionInfo, String>) 
             Source::Url(url) => db::extension::install_url(&url),
         })
         .await
-        .unwrap_or_else(|err| Err(format!("Установка прервалась: {err}")))
+        .unwrap_or_else(|err| Err(tr!("Installation was interrupted: {}", err)))
     });
     glib::spawn_future_local(async move {
         done(
             job.recv()
                 .await
-                .unwrap_or_else(|_| Err("Фоновые задачи не запустились".to_string())),
+                .unwrap_or_else(|_| Err(tr!("Background tasks did not start").to_string())),
         );
     });
 }
@@ -71,15 +71,15 @@ pub fn age(modified: Option<SystemTime>) -> String {
         .and_then(|time| SystemTime::now().duration_since(time).ok())
         .map(|since| since.as_secs())
     else {
-        return "в папке «Загрузки»".to_string();
+        return tr!("in the Downloads folder").to_string();
     };
     let when = match secs {
-        0..60 => "только что".to_string(),
-        60..3600 => format!("{} мин назад", secs / 60),
-        3600..86400 => format!("{} ч назад", secs / 3600),
-        _ => format!("{} дн назад", secs / 86400),
+        0..60 => tr!("just now").to_string(),
+        60..3600 => tr!("{} min ago", secs / 60),
+        3600..86400 => trn!("{} hour ago", "{} hours ago", secs / 3600),
+        _ => trn!("{} day ago", "{} days ago", secs / 86400),
     };
-    format!("скачано {when}, папка «Загрузки»")
+    tr!("downloaded {}, Downloads folder", when)
 }
 
 /// Путь с `~` вместо домашнего каталога.
@@ -145,8 +145,8 @@ impl Manager {
         let page = adw::PreferencesPage::new();
 
         let offers_group = adw::PreferencesGroup::builder()
-            .title("Скачано")
-            .description("Найдено в папке «Загрузки». Установить — один щелчок.")
+            .title(tr!("Downloaded"))
+            .description(tr!("Found in the Downloads folder. Installing takes one click."))
             .visible(false)
             .build();
         let offers = boxed_list();
@@ -154,37 +154,37 @@ impl Manager {
         page.add(&offers_group);
 
         let installed_group = adw::PreferencesGroup::builder()
-            .title("Установленные")
+            .title(tr!("Installed"))
             .build();
         let installed = boxed_list();
         installed_group.add(&installed);
         page.add(&installed_group);
 
         let add_group = adw::PreferencesGroup::builder()
-            .title("Установить")
-            .description(
-                "Просто скачайте файл расширения — sshdeck сам заметит его в «Загрузках». \
-                 Файл или архив можно и перетащить в это окно. Расширение — это программа: \
-                 ставьте только из источников, которым доверяете.",
-            )
+            .title(tr!("Install"))
+            .description(tr!(
+                "Just download the extension file — sshdeck will notice it in the Downloads \
+                 folder. You can also drag a file or archive into this window. An extension \
+                 is a program: install only from sources you trust."
+            ))
             .build();
         let pick = adw::ActionRow::builder()
-            .title("Выбрать файл…")
-            .subtitle("Программа расширения или архив .zip, .tar.gz")
+            .title(tr!("Choose file…"))
+            .subtitle(tr!("Extension program or a .zip or .tar.gz archive"))
             .activatable(true)
             .build();
         pick.add_prefix(&gtk::Image::from_icon_name("document-open-symbolic"));
         pick.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
         add_group.add(&pick);
         let url = adw::EntryRow::builder()
-            .title("Ссылка на файл расширения")
+            .title(tr!("Link to extension file"))
             .show_apply_button(true)
             .input_purpose(gtk::InputPurpose::Url)
             .build();
         url.add_prefix(&gtk::Image::from_icon_name("web-browser-symbolic"));
         add_group.add(&url);
         let folder = adw::ActionRow::builder()
-            .title("Папка расширений")
+            .title(tr!("Extensions folder"))
             .subtitle(short_path(&db::extension::drivers_dir()))
             .activatable(true)
             .build();
@@ -202,7 +202,7 @@ impl Manager {
         let toasts = adw::ToastOverlay::new();
         toasts.set_child(Some(&view));
         let dialog = adw::Dialog::builder()
-            .title("Расширения СУБД")
+            .title(tr!("Database Extensions"))
             .content_width(520)
             .content_height(600)
             .child(&toasts)
@@ -297,13 +297,13 @@ impl Manager {
                 .build();
             row.add_prefix(&gtk::Image::from_icon_name("folder-download-symbolic"));
             let install = gtk::Button::builder()
-                .label("Установить")
+                .label(tr!("Install"))
                 .valign(gtk::Align::Center)
                 .css_classes(["suggested-action", "pill"])
                 .build();
             let dismiss = gtk::Button::builder()
                 .icon_name("window-close-symbolic")
-                .tooltip_text("Не предлагать")
+                .tooltip_text(tr!("Dismiss"))
                 .valign(gtk::Align::Center)
                 .css_classes(["flat", "circular"])
                 .build();
@@ -337,8 +337,8 @@ impl Manager {
         let list = db::extension::installed();
         if list.is_empty() {
             let row = adw::ActionRow::builder()
-                .title("Пока ничего не установлено")
-                .subtitle("Встроенные PostgreSQL, MySQL/MariaDB и SQLite работают без расширений")
+                .title(tr!("Nothing installed yet"))
+                .subtitle(tr!("Built-in PostgreSQL, MySQL/MariaDB and SQLite work without extensions"))
                 .css_classes(["dim-label"])
                 .build();
             self.installed.append(&row);
@@ -359,7 +359,7 @@ impl Manager {
             if db::extension::is_removable(&info) {
                 let remove = gtk::Button::builder()
                     .icon_name("user-trash-symbolic")
-                    .tooltip_text("Удалить расширение")
+                    .tooltip_text(tr!("Remove extension"))
                     .valign(gtk::Align::Center)
                     .css_classes(["flat", "circular"])
                     .build();
@@ -373,7 +373,7 @@ impl Manager {
             } else {
                 row.add_suffix(
                     &gtk::Label::builder()
-                        .label("в системе")
+                        .label(tr!("system-wide"))
                         .css_classes(["dim-label", "caption"])
                         .build(),
                 );
@@ -394,7 +394,7 @@ impl Manager {
 
     fn pick_file(&self) {
         let dialog = gtk::FileDialog::builder()
-            .title("Файл расширения")
+            .title(tr!("Extension File"))
             .modal(true)
             .build();
         if let Some(downloads) = db::extension::downloads_dir() {
@@ -450,12 +450,12 @@ impl Manager {
                     if from_url {
                         manager.url.set_text("");
                     }
-                    manager.toast(&format!("Установлено: {}", info.name));
+                    manager.toast(&tr!("Installed: {}", info.name));
                     (manager.on_change)(Some(&info));
                     next();
                 }
                 Err(error) => {
-                    dialogs::message(&manager.dialog, "Не удалось установить расширение", &error);
+                    dialogs::message(&manager.dialog, tr!("Could Not Install Extension"), &error);
                 }
             }
         });
@@ -465,10 +465,12 @@ impl Manager {
         let weak = self.me.clone();
         dialogs::confirm(
             &self.dialog,
-            &format!("Удалить расширение {}?", info.name),
-            "Сохранённые подключения останутся: их можно будет открыть, когда \
-             расширение установят снова.",
-            "Удалить",
+            &tr!("Remove Extension {}?", info.name),
+            tr!(
+                "Saved connections will be kept and can be opened once the extension \
+                 is installed again."
+            ),
+            tr!("Remove"),
             true,
             move || {
                 let Some(manager) = weak.upgrade() else {
@@ -476,11 +478,11 @@ impl Manager {
                 };
                 match db::extension::uninstall(&info) {
                     Ok(()) => {
-                        manager.toast(&format!("Удалено: {}", info.name));
+                        manager.toast(&tr!("Removed: {}", info.name));
                         (manager.on_change)(None);
                     }
                     Err(error) => {
-                        dialogs::message(&manager.dialog, "Не удалось удалить расширение", &error);
+                        dialogs::message(&manager.dialog, tr!("Could Not Remove Extension"), &error);
                     }
                 }
                 manager.refresh();

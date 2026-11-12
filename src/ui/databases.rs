@@ -37,7 +37,7 @@ pub fn profile_badge(profile: &DbProfile) -> gtk::Label {
 pub fn describe(profile: &DbProfile) -> String {
     let mut text = profile.summary();
     if profile.is_networked() && !profile.ssh.is_empty() {
-        text.push_str(&format!(" · через {}", profile.ssh));
+        text.push_str(&tr!(" · via {}", profile.ssh));
     }
     text
 }
@@ -66,7 +66,7 @@ impl Databases {
         let profiles = match Profiles::load(&profile::default_path()) {
             Ok(profiles) => profiles,
             Err(err) => {
-                notifier.error(&format!("Не удалось прочитать список баз данных: {err}"));
+                notifier.error(&tr!("Could not read the database list: {}", err));
                 Profiles::default()
             }
         };
@@ -156,7 +156,7 @@ impl Databases {
 
     pub fn duplicate(&self, profile: &DbProfile) {
         let copy = DbProfile {
-            name: format!("{} (копия)", profile.name),
+            name: tr!("{} (copy)", profile.name),
             ..profile.clone()
         };
         self.inner.edit(None, Some(copy));
@@ -181,7 +181,7 @@ impl Inner {
     fn commit(&self) {
         if let Err(err) = self.profiles.borrow().save(&profile::default_path()) {
             self.notifier
-                .error(&format!("Не удалось сохранить список баз данных: {err}"));
+                .error(&tr!("Could not save the database list: {}", err));
         }
         for handler in self.changed.borrow().iter() {
             handler();
@@ -252,7 +252,7 @@ impl Inner {
                 && keep
             {
                 this.notifier
-                    .error(&format!("Пароль не сохранён: {message}"));
+                    .error(&tr!("Password not saved: {}", message));
             }
         });
     }
@@ -272,12 +272,12 @@ impl Inner {
         on_password: impl FnOnce(String) + 'static,
     ) {
         let password_row = adw::PasswordEntryRow::builder()
-            .title("Пароль")
+            .title(tr!("Password"))
             .activates_default(true)
             .build();
         let keep_row = adw::SwitchRow::builder()
-            .title("Запомнить пароль")
-            .subtitle("В хранилище паролей системы (KWallet), не в файле")
+            .title(tr!("Remember password"))
+            .subtitle(tr!("Stored in the system password storage (KWallet), not in a file"))
             .active(true)
             .build();
         let fields = gtk::ListBox::builder()
@@ -292,10 +292,10 @@ impl Inner {
             body = format!("{reason}\n\n{body}");
         }
         let dialog = adw::AlertDialog::new(
-            Some(&format!("Подключение к «{}»", profile.name)),
+            Some(&tr!("Connect to “{}”", profile.name)),
             Some(&body),
         );
-        dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, "Подключиться")]);
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Connect"))]);
         dialog.set_close_response(CANCEL);
         dialog.set_default_response(Some(ACCEPT));
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);
@@ -323,13 +323,13 @@ impl Inner {
         let weak = self.me.clone();
         dialogs::confirm(
             &parent,
-            "Удалить подключение?",
-            &format!(
-                "«{}» исчезнет из списка баз данных вместе с сохранённым паролем. \
-                 Сама база не изменится.",
+            tr!("Delete Connection?"),
+            &tr!(
+                "“{}” will be removed from the database list together with its saved \
+                 password. The database itself will not change.",
                 profile.name
             ),
-            "Удалить",
+            tr!("Delete"),
             true,
             move || {
                 let Some(this) = weak.upgrade() else { return };
@@ -392,16 +392,16 @@ impl Inner {
 
         let dialog = adw::AlertDialog::new(
             Some(if original.is_some() {
-                "Изменить подключение к базе"
+                tr!("Edit Database Connection")
             } else {
-                "Новое подключение к базе"
+                tr!("New Database Connection")
             }),
-            Some(
-                "При подключении через SSH сервер базы указывается так, как его \
-                 видит SSH-сервер (обычно localhost).",
-            ),
+            Some(tr!(
+                "When connecting over SSH, enter the database server as the SSH \
+                 server sees it (usually localhost)."
+            )),
         );
-        dialog.add_responses(&[(CANCEL, "Отмена"), (ACCEPT, "Сохранить")]);
+        dialog.add_responses(&[(CANCEL, tr!("Cancel")), (ACCEPT, tr!("Save"))]);
         dialog.set_close_response(CANCEL);
         dialog.set_default_response(Some(ACCEPT));
         dialog.set_response_appearance(ACCEPT, adw::ResponseAppearance::Suggested);
@@ -495,7 +495,7 @@ fn kind_choices(current: &DbProfile) -> Vec<KindChoice> {
     for ext in db::extension::scan() {
         choices.push(KindChoice {
             kind: DbKind::Extension,
-            label: format!("{} (расширение)", ext.name),
+            label: tr!("{} (extension)", ext.name),
             driver: ext.id,
         });
     }
@@ -554,7 +554,7 @@ impl ProfileForm {
         let choices = kind_choices(&profile);
         let labels: Vec<&str> = choices.iter().map(|choice| choice.label.as_str()).collect();
         let kind = adw::ComboRow::builder()
-            .title("СУБД")
+            .title(tr!("Database type"))
             .model(&gtk::StringList::new(&labels))
             .selected(
                 choices
@@ -572,21 +572,21 @@ impl ProfileForm {
                 .activates_default(true)
                 .build()
         };
-        let name = entry("Название", &profile.name);
-        let host = entry("Сервер", &profile.host);
-        let port = entry("Порт", &profile.port.to_string());
+        let name = entry(trc!("connection or command", "Name"), &profile.name);
+        let host = entry(tr!("Server"), &profile.host);
+        let port = entry(tr!("Port"), &profile.port.to_string());
         port.set_input_purpose(gtk::InputPurpose::Digits);
-        let user = entry("Пользователь", &profile.user);
-        let database = entry("База данных (необязательно)", &profile.database);
-        let ssh = entry("Через SSH-сервер (необязательно): user@host", &profile.ssh);
+        let user = entry(tr!("User"), &profile.user);
+        let database = entry(tr!("Database (optional)"), &profile.database);
+        let ssh = entry(tr!("Via SSH server (optional): user@host"), &profile.ssh);
         let tls = adw::SwitchRow::builder()
-            .title("Требовать шифрование (TLS)")
-            .subtitle("Сертификат сервера не проверяется, как в sslmode=require")
+            .title(tr!("Require encryption (TLS)"))
+            .subtitle(tr!("The server certificate is not verified, as with sslmode=require"))
             .active(profile.tls)
             .build();
-        let path = entry("Файл базы", &profile.path);
+        let path = entry(tr!("Database file"), &profile.path);
         let password = adw::PasswordEntryRow::builder()
-            .title("Пароль (хранится в KWallet, не в файле)")
+            .title(tr!("Password (stored in KWallet, not in a file)"))
             .activates_default(true)
             .build();
 
@@ -596,12 +596,12 @@ impl ProfileForm {
             .width_request(420)
             .build();
         let ext_row = adw::ActionRow::builder()
-            .title("Другие СУБД — расширения")
+            .title(tr!("Other databases — extensions"))
             .subtitle_lines(3)
             .activatable(true)
             .build();
         let ext_install = gtk::Button::builder()
-            .label("Установить")
+            .label(tr!("Install"))
             .valign(gtk::Align::Center)
             .css_classes(["suggested-action", "pill"])
             .visible(false)
@@ -661,7 +661,7 @@ impl ProfileForm {
         // Выбор файла SQLite.
         let pick = gtk::Button::builder()
             .icon_name("document-open-symbolic")
-            .tooltip_text("Выбрать файл")
+            .tooltip_text(tr!("Choose file"))
             .valign(gtk::Align::Center)
             .css_classes(["flat"])
             .build();
@@ -669,7 +669,7 @@ impl ProfileForm {
             let weak = Rc::downgrade(&form);
             pick.connect_clicked(move |button| {
                 let dialog = gtk::FileDialog::builder()
-                    .title("Файл базы данных")
+                    .title(tr!("Database File"))
                     .modal(true)
                     .build();
                 let weak = weak.clone();
@@ -754,7 +754,7 @@ impl ProfileForm {
                 };
                 button.set_sensitive(false);
                 form.ext_row
-                    .set_subtitle(&format!("Устанавливаю {}…", offer.file_name()));
+                    .set_subtitle(&tr!("Installing {}…", offer.file_name()));
                 let weak = weak.clone();
                 let button = button.clone();
                 extensions::install(extensions::Source::File(offer.path), move |result| {
@@ -763,8 +763,8 @@ impl ProfileForm {
                     match result {
                         Ok(info) => {
                             form.extensions_changed(Some(&info.id));
-                            form.refresh_extensions_row(Some(&format!(
-                                "Установлено: {} — выбрано в списке СУБД",
+                            form.refresh_extensions_row(Some(&tr!(
+                                "Installed: {} — selected in the database type list",
                                 info.name
                             )));
                         }
@@ -772,7 +772,7 @@ impl ProfileForm {
                             form.refresh_extensions_row(None);
                             dialogs::message(
                                 &form.widget,
-                                "Не удалось установить расширение",
+                                tr!("Could Not Install Extension"),
                                 &error,
                             );
                         }
@@ -796,28 +796,29 @@ impl ProfileForm {
         let offer = db::extension::download_offers().into_iter().next();
         match &offer {
             Some(offer) => {
-                self.ext_row.set_title("Скачано новое расширение");
+                self.ext_row.set_title(tr!("New extension downloaded"));
                 let file = format!(
                     "{} — {}",
                     offer.file_name(),
                     extensions::age(offer.modified)
                 );
                 self.ext_row.set_subtitle(&match note {
-                    Some(note) => format!("{note}. Ещё скачано: {file}"),
+                    Some(note) => tr!("{}. Also downloaded: {}", note, file),
                     None => file,
                 });
             }
             None => {
                 let count = db::extension::installed().len();
-                self.ext_row.set_title("Другие СУБД — расширения");
+                self.ext_row.set_title(tr!("Other databases — extensions"));
                 self.ext_row.set_subtitle(&if let Some(note) = note {
                     note.to_string()
                 } else if count == 0 {
-                    "Скачайте расширение — sshdeck сам его найдёт и предложит установить"
+                    tr!("Download an extension — sshdeck will find it and offer to install it")
                         .to_string()
                 } else {
-                    format!(
-                        "Установлено расширений: {count}. Чтобы добавить ещё, просто скачайте файл"
+                    tr!(
+                        "Extensions installed: {}. To add more, just download the file",
+                        count
                     )
                 });
             }
@@ -941,7 +942,7 @@ impl ProfileForm {
         mark(
             &self.port,
             (template.is_networked() && self.port(&template).is_none())
-                .then(|| "Порт — число от 1 до 65535".to_string()),
+                .then(|| tr!("The port must be a number from 1 to 65535").to_string()),
         );
         let ssh = self.ssh.text();
         mark(

@@ -221,7 +221,7 @@ impl Inner {
         self.popover.popdown();
 
         let name_row = adw::EntryRow::builder()
-            .title(tr!("Name"))
+            .title(trc!("connection or command", "Name"))
             .text(original.as_ref().map_or("", |s| s.name.as_str()))
             .activates_default(true)
             .build();

@@ -39,7 +39,7 @@ impl ExportFormat {
     pub fn label(self) -> &'static str {
         match self {
             ExportFormat::Csv => "CSV",
-            ExportFormat::ExcelCsv => "CSV для Excel (;)",
+            ExportFormat::ExcelCsv => tr!("CSV for Excel (;)"),
             ExportFormat::Json => "JSON",
             ExportFormat::Sql => "SQL (INSERT)",
         }
@@ -445,9 +445,9 @@ impl ImportFile {
         if is_json(path) {
             let file = File::open(path).map_err(describe)?;
             let value: Value = serde_json::from_reader(BufReader::new(file))
-                .map_err(|err| format!("{}: это не JSON: {err}", path.display()))?;
+                .map_err(|err| tr!("{}: not JSON: {}", path.display(), err))?;
             let Value::Array(items) = value else {
-                return Err("Ожидался JSON-массив: [{\"колонка\": значение, …}, …]".to_string());
+                return Err(tr!("Expected a JSON array: [{\"column\": value, …}, …]").to_string());
             };
             // Колонки — все ключи объектов в порядке появления.
             let mut columns: Vec<String> = Vec::new();
@@ -495,7 +495,7 @@ impl ImportFile {
         let mut line = 0;
         let columns = if options.header {
             let Some(record) = csv.next_record().map_err(describe)? else {
-                return Err("Файл пустой".to_string());
+                return Err(tr!("The file is empty").to_string());
             };
             line = 1;
             Some(
@@ -536,7 +536,7 @@ impl ImportFile {
                         })
                         .collect(),
                 )),
-                Err(err) => Err(format!("Строка {}: {err}", self.line)),
+                Err(err) => Err(tr!("Line {}: {}", self.line, err)),
             },
             Source::Json(items) => {
                 let Some(item) = items.next() else {
@@ -558,8 +558,8 @@ impl ImportFile {
                             .collect(),
                     )),
                     (Value::Array(values), None) => Ok(Some(values.iter().map(text).collect())),
-                    _ => Err(format!(
-                        "Элемент {}: ожидался объект {{\"колонка\": значение}}",
+                    _ => Err(tr!(
+                        "Item {}: expected an object {{\"column\": value}}",
                         self.line
                     )),
                 }
@@ -611,9 +611,9 @@ impl ColumnMap {
                     }
                 }
                 if map.target.is_empty() {
-                    return Err(format!(
-                        "Ни одна колонка файла не совпала с колонками таблицы.\n\
-                         В файле: {}\nВ таблице: {}",
+                    return Err(tr!(
+                        "No column of the file matches the table columns.\n\
+                         In the file: {}\nIn the table: {}",
                         names.join(", "),
                         table_columns.join(", ")
                     ));
@@ -622,9 +622,10 @@ impl ColumnMap {
             }
             None => {
                 if first_row_width > table_columns.len() {
-                    return Err(format!(
-                        "В файле {first_row_width} колонок, а в таблице {}. \
-                         Добавьте в файл строку с именами колонок.",
+                    return Err(tr!(
+                        "The file has {} columns, but the table has {}. \
+                         Add a row with the column names to the file.",
+                        first_row_width,
                         table_columns.len()
                     ));
                 }

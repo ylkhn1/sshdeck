@@ -16,8 +16,8 @@
 <br>
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/main-dark.png">
-  <img src="docs/screenshots/main-light.png" alt="sshdeck main window: saved connections on the left, remote file tree in the middle, SSH terminal on the right, server status at the bottom">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/main-dark.png">
+  <img src="docs/screenshots/en/main-light.png" alt="sshdeck main window: saved connections on the left, remote file tree in the middle, SSH terminal on the right, server status at the bottom">
 </picture>
 
 </div>
@@ -27,7 +27,7 @@ sshdeck is inspired by MobaXterm. Each tab puts the remote server's files (over 
 sshdeck does **not** implement SSH itself. The terminal runs your system `/usr/bin/ssh`, so `~/.ssh/config`, keys, `ssh-agent`, `ProxyJump` and password prompts behave exactly as they do in a regular terminal. The app never reads, stores or logs SSH passwords or key passphrases.
 
 > [!NOTE]
-> The user interface is currently in Russian. The screenshots show demo data.
+> The interface is available in English, Russian and Spanish. By default it follows the system language; to change it, use *Menu → Language*. The screenshots show demo data.
 
 ## Contents
 
@@ -39,6 +39,7 @@ sshdeck does **not** implement SSH itself. The terminal runs your system `/usr/b
 - [Keyboard shortcuts](#keyboard-shortcuts)
 - [How it works](#how-it-works)
 - [Files and settings](#files-and-settings)
+- [Translations](#translations)
 - [Known limitations](#known-limitations)
 
 ## Highlights
@@ -51,6 +52,7 @@ sshdeck does **not** implement SSH itself. The terminal runs your system `/usr/b
 | 📁 **Organised connections** | Saved connections go into folders, and folders can be colored. Hosts from `~/.ssh/config` are listed too, along with quick connect and search. Each server shows whether it is online. |
 | 📊 **Server at a glance** | The status bar shows CPU, memory, disk, network speed, uptime and load average, and highlights values above 75 % and 90 %. |
 | 🎨 **Themes** | The app has its own light and dark palettes plus Dracula, Nord, Gruvbox, Tokyo Night, One Dark, Catppuccin and Solarized. A theme recolors the whole app, not only the terminal. |
+| 🌍 **Three languages** | The interface is available in English, Russian and Spanish, and GTK's own dialogs follow the same choice. |
 | ⚡ **Light and fast** | It is written in Rust, and all networking runs on a separate tokio runtime, so a slow network never freezes the interface. |
 
 ## Screenshots
@@ -58,18 +60,18 @@ sshdeck does **not** implement SSH itself. The terminal runs your system `/usr/b
 ### Database client
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/database-dark.png">
-  <img src="docs/screenshots/database-light.png" alt="Database tab: tree of databases, schemas and tables with sizes on the left, SQL editor with syntax highlighting and a result grid on the right">
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/en/database-dark.png">
+  <img src="docs/screenshots/en/database-light.png" alt="Database tab: tree of databases, schemas and tables with sizes on the left, SQL editor with syntax highlighting and a result grid on the right">
 </picture>
 
 ### Themes
 
-<img src="docs/screenshots/themes.png" alt="The same window in Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox Dark, Nord and Solarized Light">
+<img src="docs/screenshots/en/themes.png" alt="The same window in Tokyo Night, Catppuccin Mocha, Dracula, Gruvbox Dark, Nord and Solarized Light">
 
 ### Database connection and extensions
 
 <p align="center">
-  <img src="docs/screenshots/dialogs.png" width="820" alt="New database connection dialog with an optional SSH server, and the extension manager with the ClickHouse driver installed">
+  <img src="docs/screenshots/en/dialogs.png" width="820" alt="New database connection dialog with an optional SSH server, and the extension manager with the ClickHouse driver installed">
 </p>
 
 ## Installation
@@ -161,7 +163,7 @@ cargo clippy --all-targets  # no warnings
 - **Drag and drop.** Drop files from your file manager to upload them to the current directory. Drag rows out of the panel to download them.
 - **Transfers.** Each transfer shows its progress and a cancel button. A cancelled transfer does not leave half-written files behind.
 - **Remote editing.** Double-click a file to download it and open it with `xdg-open`. Every time you save it in the editor, it is uploaded back while the tab is open.
-- **Panel follows `cd`.** When the shell reports its current directory, the panel follows. fish does this out of the box. For bash and zsh, choose *menu → follow `cd` on this server*. This adds three lines tagged `sshdeck-cwd` to `~/.bashrc` or `~/.zshrc` on the server. The opposite action is *Go here in terminal* in the file's context menu.
+- **Panel follows `cd`.** When the shell reports its current directory, the panel follows. fish does this out of the box. For bash and zsh, choose *Menu → File Panel Follows cd on This Server…*. This adds three lines tagged `sshdeck-cwd` to `~/.bashrc` or `~/.zshrc` on the server. The opposite action is *Go Here in Terminal* in the file's context menu.
 
 ### Terminal
 
@@ -169,11 +171,11 @@ cargo clippy --all-targets  # no warnings
 - Links and IP addresses are underlined under the mouse pointer. Ctrl+click opens a link in the browser or copies an address.
 - ssh pings the server every 30 seconds so idle sessions do not drop.
 - After a normal `exit` the tab closes. If the connection fails, the tab stays open with a **Reconnect** button.
-- **Passwordless login.** Choose *menu → passwordless login (key) for this tab* after you have logged in. sshdeck takes your default key (`id_ed25519`, `id_ecdsa` or `id_rsa`). If you have none, it creates `~/.ssh/id_ed25519`. It then appends the public key to `~/.ssh/authorized_keys` on the server, skipping it if it is already there.
+- **Passwordless login.** Choose *Menu → Passwordless Login (Key) for This Tab…* after you have logged in. sshdeck takes your default key (`id_ed25519`, `id_ecdsa` or `id_rsa`). If you have none, it creates `~/.ssh/id_ed25519`. It then appends the public key to `~/.ssh/authorized_keys` on the server, skipping it if it is already there.
 
 ### Themes
 
-*Menu → Theme* offers System, Light, Dark or a colored theme. System, Light and Dark use sshdeck's own palette rather than the stock GNOME greys, and System follows the desktop's light or dark mode. A colored theme repaints the title bar, sidebar, lists, dialogs and terminal. The terminal font is set in *menu → Terminal font…*.
+*Menu → Theme* offers System default, Light, Dark or a colored theme. System default, Light and Dark use sshdeck's own palette rather than the stock GNOME greys, and System default follows the desktop's light or dark mode. A colored theme repaints the title bar, sidebar, lists, dialogs and terminal. The terminal font is set in *Menu → Terminal Font…*.
 
 ## Database client
 
@@ -183,9 +185,9 @@ The database client works in the spirit of DBeaver. It supports PostgreSQL, MySQ
 - **Passwords** are kept in the system keyring (KWallet, GNOME Keyring), never in a file. If the server rejects a saved password, the password prompt opens on its own.
 - **Tree.** It shows databases → schemas → tables and views → columns. A key icon marks the primary key. Tables show their on-disk size including indexes, and schemas and databases show their total size. The tooltip shows an approximate row count. Double-click a database to make it active.
 - **Queries.** Ctrl+Enter runs the statement under the cursor, or the selection. Ctrl+Shift+Enter runs the whole text. Double-click a table to see its first 200 rows, or a result row to see the whole row.
-- **Export.** Right-click a table, then choose *Export data…* to save every row as CSV, Excel-friendly CSV (`;` separator, BOM), JSON or SQL `INSERT`s. The table is streamed, so it is never loaded into memory. A button above the result grid saves the result that is shown.
+- **Export.** Right-click a table, then choose *Export Data…* to save every row as CSV, Excel-friendly CSV (`;` separator, BOM), JSON or SQL `INSERT`s. The table is streamed, so it is never loaded into memory. A button above the result grid saves the result that is shown.
 - **Import.** Import accepts CSV/TSV (the delimiter is detected automatically) or a JSON array of objects. Columns are matched by the header names. An empty field becomes `NULL`, and `""` stays an empty string. Everything runs in a single transaction, so on error the table is left untouched. You can choose to empty the table first.
-- **Extensions.** A driver for another database is a standalone program in any language. Download the file or a `.zip`/`.tar.gz` archive, and sshdeck notices it in *Downloads* and offers to install it. You can also pick a file, drop it onto the window or paste a link, including a GitHub file page. Extensions are installed to `~/.local/share/sshdeck/drivers/`. An example is the [ClickHouse driver](extensions/clickhouse/sshdeck-driver-clickhouse), written in Python 3 with no dependencies. The protocol, JSON lines over stdin/stdout, is described in [extensions/README.md](extensions/README.md).
+- **Extensions.** A driver for another database is a standalone program in any language. Download the file or a `.zip`/`.tar.gz` archive, and sshdeck notices it in *Downloads* and offers to install it. You can also open *Database Extensions…*, then pick a file, drop it onto the window or paste a link, including a GitHub file page. Extensions are installed to `~/.local/share/sshdeck/drivers/`. An example is the [ClickHouse driver](extensions/clickhouse/sshdeck-driver-clickhouse), written in Python 3 with no dependencies. The protocol, JSON lines over stdin/stdout, is described in [extensions/README.md](extensions/README.md).
 
 ## Keyboard shortcuts
 
@@ -226,6 +228,7 @@ The database client works in the spirit of DBeaver. It supports PostgreSQL, MySQ
 ```
 src/
   main.rs          application entry point
+  i18n.rs          interface translations: tr!/trn! macros, embedded .po catalogs
   ssh_config.rs    ~/.ssh/config parsing for the host list
   connections.rs   saved connections, folders and their colors
   probe.rs         server availability check (SSH greeting, no login)
@@ -251,6 +254,7 @@ src/
   db/sql.rs        SQL parsing: statement under cursor, highlighting, quoting
   db/secrets.rs    passwords in the system keyring
 extensions/        extension drivers (example: ClickHouse) and the protocol
+po/                Russian and Spanish translations (gettext .po)
 ```
 </details>
 
@@ -258,12 +262,18 @@ extensions/        extension drivers (example: ClickHouse) and the protocol
 
 | Path | Contents |
 |---|---|
-| `~/.config/sshdeck/settings.ini` | terminal font and theme, window appearance, saved commands |
+| `~/.config/sshdeck/settings.ini` | terminal font and theme, window appearance, interface language, saved commands |
 | `~/.config/sshdeck/connections.ini` | saved connections, folders and folder colors. It holds no passwords and can be edited by hand or copied to another machine. |
 | `~/.config/sshdeck/databases.ini` | database connections (no passwords) |
 | `~/.local/share/sshdeck/drivers/` | installed database extensions |
 
 `SSHDECK_SSH_CONFIG=<file>` replaces `~/.ssh/config`. The host list is read from that file, and it is passed to every `ssh` call with `-F`.
+
+## Translations
+
+Strings in the code are English and are wrapped in `tr!("…")`, or in `trn!` when the text depends on a number. Translations live in [`po/ru.po`](po/ru.po) and [`po/es.po`](po/es.po), standard gettext catalogs that any `.po` editor can open, such as Poedit or Lokalize. They are compiled into the binary, so nothing extra has to be installed.
+
+`cargo test` checks that every string in the code has a translation in each catalog, that no catalog entry is left unused, and that the `{}` placeholders match. To add a language, copy `po/es.po`, translate it, and register the language in `src/i18n.rs`.
 
 ## Known limitations
 

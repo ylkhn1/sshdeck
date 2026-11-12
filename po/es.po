@@ -7,3 +7,1624 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+# --- core ---
+
+msgid "System default"
+msgstr "Predeterminado del sistema"
+
+msgid "Language"
+msgstr "Idioma (Language)"
+
+msgid "The new language will be used after sshdeck is restarted."
+msgstr "El nuevo idioma se aplicará al reiniciar sshdeck."
+
+# --- db ---
+
+msgid " · via {}"
+msgstr " · a través de {}"
+
+msgid "Could not read the database list: {}"
+msgstr "No se pudo leer la lista de bases de datos: {}"
+
+msgid "{} (copy)"
+msgstr "{} (copia)"
+
+msgid "Could not save the database list: {}"
+msgstr "No se pudo guardar la lista de bases de datos: {}"
+
+msgid "Password not saved: {}"
+msgstr "No se guardó la contraseña: {}"
+
+msgid "Password"
+msgstr "Contraseña"
+
+msgid "Remember password"
+msgstr "Recordar contraseña"
+
+msgid "Stored in the system password storage (KWallet), not in a file"
+msgstr "Se guarda en el almacén de contraseñas del sistema (KWallet), no en un archivo"
+
+msgid "Connect to “{}”"
+msgstr "Conectar a «{}»"
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "Connect"
+msgstr "Conectar"
+
+msgid "Delete Connection?"
+msgstr "¿Eliminar la conexión?"
+
+msgid "“{}” will be removed from the database list together with its saved password. The database itself will not change."
+msgstr "«{}» se quitará de la lista de bases de datos junto con su contraseña guardada. La base de datos en sí no cambiará."
+
+msgid "Delete"
+msgstr "Eliminar"
+
+msgid "Edit Database Connection"
+msgstr "Editar conexión de base de datos"
+
+msgid "New Database Connection"
+msgstr "Nueva conexión de base de datos"
+
+msgid "When connecting over SSH, enter the database server as the SSH server sees it (usually localhost)."
+msgstr "Al conectar por SSH, indica el servidor de la base de datos tal como lo ve el servidor SSH (normalmente localhost)."
+
+msgid "Save"
+msgstr "Guardar"
+
+msgid "{} (extension)"
+msgstr "{} (extensión)"
+
+msgid "Database type"
+msgstr "Tipo de base de datos"
+
+msgid "Server"
+msgstr "Servidor"
+
+msgid "Port"
+msgstr "Puerto"
+
+msgid "User"
+msgstr "Usuario"
+
+msgid "Database (optional)"
+msgstr "Base de datos (opcional)"
+
+msgid "Via SSH server (optional): user@host"
+msgstr "A través del servidor SSH (opcional): user@host"
+
+msgid "Require encryption (TLS)"
+msgstr "Requerir cifrado (TLS)"
+
+msgid "The server certificate is not verified, as with sslmode=require"
+msgstr "El certificado del servidor no se verifica, como con sslmode=require"
+
+msgid "Database file"
+msgstr "Archivo de la base de datos"
+
+msgid "Password (stored in KWallet, not in a file)"
+msgstr "Contraseña (en KWallet, no en un archivo)"
+
+msgid "Other databases — extensions"
+msgstr "Otras bases de datos — extensiones"
+
+msgid "Install"
+msgstr "Instalar"
+
+msgid "Choose file"
+msgstr "Elegir archivo"
+
+msgid "Database File"
+msgstr "Archivo de base de datos"
+
+msgid "Installing {}…"
+msgstr "Instalando {}…"
+
+msgid "Installed: {} — selected in the database type list"
+msgstr "Instalado: {} — seleccionado en la lista de tipos de base de datos"
+
+msgid "Could Not Install Extension"
+msgstr "No se pudo instalar la extensión"
+
+msgid "New extension downloaded"
+msgstr "Se descargó una extensión nueva"
+
+msgid "{}. Also downloaded: {}"
+msgstr "{}. También se descargó: {}"
+
+msgid "Download an extension — sshdeck will find it and offer to install it"
+msgstr "Descarga una extensión — sshdeck la encontrará y te ofrecerá instalarla"
+
+msgid "Extensions installed: {}. To add more, just download the file"
+msgstr "Extensiones instaladas: {}. Para añadir más, solo descarga el archivo"
+
+msgid "The port must be a number from 1 to 65535"
+msgstr "El puerto debe ser un número del 1 al 65535"
+
+msgid "Installation was interrupted: {}"
+msgstr "La instalación se interrumpió: {}"
+
+msgid "Background tasks did not start"
+msgstr "Las tareas en segundo plano no se iniciaron"
+
+msgid "in the Downloads folder"
+msgstr "en la carpeta Descargas"
+
+msgid "just now"
+msgstr "hace un momento"
+
+msgid "{} min ago"
+msgstr "hace {} min"
+
+msgid "{} hour ago"
+msgid_plural "{} hours ago"
+msgstr[0] "hace {} hora"
+msgstr[1] "hace {} horas"
+
+msgid "{} day ago"
+msgid_plural "{} days ago"
+msgstr[0] "hace {} día"
+msgstr[1] "hace {} días"
+
+msgid "downloaded {}, Downloads folder"
+msgstr "descargado {}, carpeta Descargas"
+
+msgid "Downloaded"
+msgstr "Descargado"
+
+msgid "Found in the Downloads folder. Installing takes one click."
+msgstr "Encontrado en la carpeta Descargas. Instalar es cuestión de un clic."
+
+msgid "Installed"
+msgstr "Instaladas"
+
+msgid "Just download the extension file — sshdeck will notice it in the Downloads folder. You can also drag a file or archive into this window. An extension is a program: install only from sources you trust."
+msgstr "Solo descarga el archivo de la extensión — sshdeck lo detectará en la carpeta Descargas. También puedes arrastrar un archivo o un archivo comprimido a esta ventana. Una extensión es un programa: instala solo desde fuentes de confianza."
+
+msgid "Choose file…"
+msgstr "Elegir archivo…"
+
+msgid "Extension program or a .zip or .tar.gz archive"
+msgstr "Programa de la extensión o archivo comprimido .zip, .tar.gz"
+
+msgid "Link to extension file"
+msgstr "Enlace al archivo de la extensión"
+
+msgid "Extensions folder"
+msgstr "Carpeta de extensiones"
+
+msgid "Database Extensions"
+msgstr "Extensiones de bases de datos"
+
+msgid "Dismiss"
+msgstr "No sugerir"
+
+msgid "Nothing installed yet"
+msgstr "Aún no hay nada instalado"
+
+msgid "Built-in PostgreSQL, MySQL/MariaDB and SQLite work without extensions"
+msgstr "PostgreSQL, MySQL/MariaDB y SQLite integrados funcionan sin extensiones"
+
+msgid "Remove extension"
+msgstr "Eliminar extensión"
+
+msgid "system-wide"
+msgstr "en el sistema"
+
+msgid "Extension File"
+msgstr "Archivo de extensión"
+
+msgid "Installed: {}"
+msgstr "Instalado: {}"
+
+msgid "Remove Extension {}?"
+msgstr "¿Eliminar la extensión {}?"
+
+msgid "Saved connections will be kept and can be opened once the extension is installed again."
+msgstr "Las conexiones guardadas se conservarán: podrás abrirlas cuando se vuelva a instalar la extensión."
+
+msgid "Remove"
+msgstr "Eliminar"
+
+msgid "Removed: {}"
+msgstr "Eliminado: {}"
+
+msgid "Could Not Remove Extension"
+msgstr "No se pudo eliminar la extensión"
+
+msgid "Could not start background threads: {}"
+msgstr "No se pudieron iniciar los hilos en segundo plano: {}"
+
+msgid "via the {} tab"
+msgstr "a través de la pestaña {}"
+
+msgid "via SSH {}"
+msgstr "a través de SSH {}"
+
+msgid "direct, TLS"
+msgstr "conexión directa, TLS"
+
+msgid "direct"
+msgstr "conexión directa"
+
+msgid "Cancelled"
+msgstr "Cancelado"
+
+msgid "Could not read the columns of table {}"
+msgstr "No se pudieron leer las columnas de la tabla {}"
+
+msgid "Reading the file was interrupted"
+msgstr "La lectura del archivo se interrumpió"
+
+msgid "Could not write the file: {}"
+msgstr "No se pudo escribir el archivo: {}"
+
+msgid "Column"
+msgstr "Columna"
+
+msgid "Type"
+msgstr "Tipo"
+
+msgid "Default"
+msgstr "Predeterminado"
+
+msgid "Key"
+msgstr "Clave"
+
+msgid "… ({} B)"
+msgstr "… ({} B)"
+
+msgid "The server did not respond within {} s"
+msgstr "El servidor no respondió en {} s"
+
+msgid "The server requires a password, but none was given"
+msgstr "El servidor requiere una contraseña, pero no se indicó ninguna"
+
+msgid "Detail: {}"
+msgstr "Detalles: {}"
+
+msgid "Hint: {}"
+msgstr "Sugerencia: {}"
+
+msgid "Where: {}"
+msgstr "Dónde: {}"
+
+msgid "Position: {}"
+msgstr "Posición: {}"
+
+msgid "The query returned no rows — nothing to export"
+msgstr "La consulta no devolvió filas — no hay nada que exportar"
+
+msgid "(error in data rows {}–{})"
+msgstr "(error en las filas de datos {}–{})"
+
+msgid "{} (code {}, SQLSTATE {})"
+msgstr "{} (código {}, SQLSTATE {})"
+
+msgid "Connection error: {}"
+msgstr "Error de conexión: {}"
+
+msgid "Could not open {}: the file does not exist or cannot be accessed"
+msgstr "No se pudo abrir {}: el archivo no existe o no hay acceso"
+
+msgid "Opening the database was interrupted"
+msgstr "La apertura de la base de datos se interrumpió"
+
+msgid "The query was interrupted by an internal error"
+msgstr "La consulta se interrumpió por un error interno"
+
+msgid "{}\n(error in data row {})"
+msgstr "{}\n(error en la fila de datos {})"
+
+msgid "Extension “{}” is not installed"
+msgstr "La extensión «{}» no está instalada"
+
+msgid "(error in data rows {0}–{1}; {2} has already inserted {3})"
+msgstr "(error en las filas de datos {0}–{1}; {2} ya insertó {3})"
+
+msgid "no JSON description"
+msgstr "falta la descripción JSON"
+
+msgid "no sshdeck_driver field"
+msgstr "falta el campo sshdeck_driver"
+
+msgid "protocol version {}, {} is required"
+msgstr "versión del protocolo {}, se requiere la {}"
+
+msgid "the id must consist of Latin letters, digits, - and _"
+msgstr "el id debe constar de letras latinas, dígitos, - y _"
+
+msgid "This extension is installed system-wide — remove it with your package manager"
+msgstr "Esta extensión está instalada en el sistema — elimínala con el gestor de paquetes"
+
+msgid "Could not delete {}: {}"
+msgstr "No se pudo eliminar {}: {}"
+
+msgid "Could not create {}: {}"
+msgstr "No se pudo crear {}: {}"
+
+msgid "the file is not a program (there is no #! line at the start, or it was built for another system)"
+msgstr "el archivo no es un programa (no tiene una línea #! al principio o se compiló para otro sistema)"
+
+msgid "This is not an sshdeck extension: {}"
+msgstr "Esto no es una extensión de sshdeck: {}"
+
+msgid "Could not copy {}: {}"
+msgstr "No se pudo copiar {}: {}"
+
+msgid "This is a web page, not an extension. You need the file itself: on GitHub, use the “Raw” or “Download raw file” button."
+msgstr "Esto es una página web, no una extensión. Se necesita el archivo en sí: en GitHub, usa el botón «Raw» o «Download raw file»."
+
+msgid "Could not copy the file: {}"
+msgstr "No se pudo copiar el archivo: {}"
+
+msgid "Could not unpack the archive: {}"
+msgstr "No se pudo descomprimir el archivo: {}"
+
+msgid "Could not unpack the archive: bsdtar, tar or unzip is required"
+msgstr "No se pudo descomprimir el archivo: se necesita bsdtar, tar o unzip"
+
+msgid "Extension program not found: the archive must contain a file named driver or sshdeck-driver-<name>"
+msgstr "No se encontró el programa de la extensión: el archivo comprimido debe contener un archivo driver o sshdeck-driver-<nombre>"
+
+msgid "Could not make the file executable: {}"
+msgstr "No se pudo hacer ejecutable el archivo: {}"
+
+msgid "Could not replace {}: {}"
+msgstr "No se pudo reemplazar {}: {}"
+
+msgid "Could not install to {}: {}"
+msgstr "No se pudo instalar en {}: {}"
+
+msgid "A link starting with https:// or http:// is required"
+msgstr "Se necesita un enlace que empiece por https:// o http://"
+
+msgid "Downloading from a link requires curl"
+msgstr "Para descargar desde un enlace se necesita curl"
+
+msgid "Could not run curl: {}"
+msgstr "No se pudo ejecutar curl: {}"
+
+msgid "server not found — check the address and your internet connection"
+msgstr "no se encontró el servidor — comprueba la dirección y la conexión a internet"
+
+msgid "the server is not responding"
+msgstr "el servidor no responde"
+
+msgid "the server is taking too long to respond"
+msgstr "el servidor tarda demasiado en responder"
+
+msgid "secure connection error ({})"
+msgstr "error de conexión segura ({})"
+
+msgid "the file is larger than 100 MB — this does not look like an extension"
+msgstr "el archivo ocupa más de 100 MB — no parece una extensión"
+
+msgid "nothing found at the link (error 404)"
+msgstr "no hay nada en el enlace (error 404)"
+
+msgid "no access to the file (the link requires signing in)"
+msgstr "no hay acceso al archivo (el enlace requiere iniciar sesión)"
+
+msgid "Could not download: {}"
+msgstr "No se pudo descargar: {}"
+
+msgid "Extension"
+msgstr "Extensión"
+
+msgid "{} (extension not installed)"
+msgstr "{} (extensión no instalada)"
+
+msgid "Extension “{}” is not installed. Put it in {}"
+msgstr "La extensión «{}» no está instalada. Colócala en {}"
+
+msgid "Enter the database server"
+msgstr "Indica el servidor de la base de datos"
+
+msgid "SSH server: {}"
+msgstr "Servidor SSH: {}"
+
+msgid "Choose the database file"
+msgstr "Indica el archivo de la base de datos"
+
+msgid "Password storage is unavailable: {}"
+msgstr "El almacén de contraseñas no está disponible: {}"
+
+msgid "CSV for Excel (;)"
+msgstr "CSV para Excel (;)"
+
+msgid "{}: not JSON: {}"
+msgstr "{}: no es JSON: {}"
+
+msgid "Expected a JSON array: [{\"column\": value, …}, …]"
+msgstr "Se esperaba un array JSON: [{\"columna\": valor, …}, …]"
+
+msgid "The file is empty"
+msgstr "El archivo está vacío"
+
+msgid "Line {}: {}"
+msgstr "Línea {}: {}"
+
+msgid "Item {}: expected an object {{\"column\": value}}"
+msgstr "Elemento {}: se esperaba un objeto {{\"columna\": valor}}"
+
+msgid "No column of the file matches the table columns.\nIn the file: {}\nIn the table: {}"
+msgstr "Ninguna columna del archivo coincide con las columnas de la tabla.\nEn el archivo: {}\nEn la tabla: {}"
+
+msgid "The file has {} columns, but the table has {}. Add a row with the column names to the file."
+msgstr "El archivo tiene {} columnas, pero la tabla tiene {}. Añade al archivo una fila con los nombres de las columnas."
+
+msgid "Could not find a free port: {}"
+msgstr "No se pudo encontrar un puerto libre: {}"
+
+msgid "Could not prepare a directory for the tunnel: {}"
+msgstr "No se pudo preparar el directorio del túnel: {}"
+
+msgid "Could not start ssh: {}"
+msgstr "No se pudo iniciar ssh: {}"
+
+msgid "ssh exited without giving a reason"
+msgstr "ssh terminó sin indicar el motivo"
+
+msgid "The SSH tunnel to {} could not be opened:\n{}\n\nOpen a tab with this server (the tunnel will use its connection) or set up passwordless login with a key."
+msgstr "No se pudo abrir el túnel SSH a {}:\n{}\n\nAbre una pestaña con este servidor (el túnel usará su conexión) o configura el inicio de sesión sin contraseña (clave)."
+
+msgid "The SSH tunnel to {} did not open within {} s"
+msgstr "El túnel SSH a {} no se abrió en {} s"
+
+msgid "no output"
+msgstr "sin salida"
+
+msgid "did not respond within 5 s"
+msgstr "no respondió en 5 s"
+
+msgid "Could not start extension {}: {}"
+msgstr "No se pudo iniciar la extensión {}: {}"
+
+msgid "no stdin"
+msgstr "sin stdin"
+
+msgid "no stdout"
+msgstr "sin stdout"
+
+msgid "no stderr"
+msgstr "sin stderr"
+
+msgid "Extension {} exited"
+msgstr "La extensión {} terminó"
+
+msgid "Extension {} exited:\n{}"
+msgstr "La extensión {} terminó:\n{}"
+
+msgid "Extension {} does not accept requests: {}"
+msgstr "La extensión {} no acepta solicitudes: {}"
+
+msgid "Extension {} did not respond"
+msgstr "La extensión {} no respondió"
+
+# --- dbtab ---
+
+msgid "Loading…"
+msgstr "Cargando…"
+
+msgid "Search tables"
+msgstr "Buscar tablas"
+
+msgid "Reload databases and tables"
+msgstr "Volver a cargar bases de datos y tablas"
+
+msgid "Connecting…"
+msgstr "Conectando…"
+
+msgid "SELECT * FROM …\n\nCtrl+Enter — run the query under the cursor or the selection\nCtrl+Shift+Enter — run all text"
+msgstr "SELECT * FROM …\n\nCtrl+Intro — ejecutar la consulta bajo el cursor o la selección\nCtrl+Mayús+Intro — ejecutar todo el texto"
+
+msgid "Run"
+msgstr "Ejecutar"
+
+msgid "Run the query under the cursor or the selected text (Ctrl+Enter)\nRun all editor text — Ctrl+Shift+Enter"
+msgstr "Ejecutar la consulta bajo el cursor o el texto seleccionado (Ctrl+Intro)\nEjecutar todo el texto del editor — Ctrl+Mayús+Intro"
+
+msgid "Stop the query, export or import"
+msgstr "Detener la consulta, la exportación o la importación"
+
+msgid "Reconnect"
+msgstr "Reconectar"
+
+msgid "Copied: {}"
+msgstr "Copiado: {}"
+
+msgid "Database {}"
+msgstr "Base de datos {}"
+
+msgid "Size: {}"
+msgstr "Tamaño: {}"
+
+msgid "Double-click to make it active: editor queries will run in it"
+msgstr "Doble clic para activarla: las consultas del editor se ejecutarán en ella"
+
+msgid "Schema {1}: {0} table"
+msgid_plural "Schema {1}: {0} tables"
+msgstr[0] "Esquema {1}: {0} tabla"
+msgstr[1] "Esquema {1}: {0} tablas"
+
+msgid "View {}.{}"
+msgstr "Vista {}.{}"
+
+msgid "Table {}.{}"
+msgstr "Tabla {}.{}"
+
+msgid "≈ {} row"
+msgid_plural "≈ {} rows"
+msgstr[0] "≈ {} fila"
+msgstr[1] "≈ {} filas"
+
+msgid "Size including indexes: {}"
+msgstr "Tamaño con índices: {}"
+
+msgid "Double-click for data, right-click for the menu"
+msgstr "Doble clic para ver los datos, clic derecho para el menú"
+
+msgid "primary key"
+msgstr "clave primaria"
+
+msgid "Connecting via SSH…"
+msgstr "Conectando a través de SSH…"
+
+msgid "Loading the table list…"
+msgstr "Cargando la lista de tablas…"
+
+msgid "Write a query and press Ctrl+Enter.\nDouble-click a table on the left to see its data; right-click it for structure, export and import."
+msgstr "Escribe una consulta y pulsa Ctrl+Intro.\nHaz doble clic en una tabla a la izquierda para ver sus datos; haz clic derecho para ver la estructura, exportar e importar."
+
+msgid "Not connected"
+msgstr "Sin conexión"
+
+msgid "The server rejected the password"
+msgstr "El servidor rechazó la contraseña"
+
+msgid "Enter Password"
+msgstr "Introducir contraseña"
+
+msgid "Could not connect to the database"
+msgstr "No se pudo conectar a la base de datos"
+
+msgid "Connection failed"
+msgstr "Error de conexión"
+
+msgid "Error"
+msgstr "Error"
+
+msgid "Loaded {0} row into {1}"
+msgid_plural "Loaded {0} rows into {1}"
+msgstr[0] "Se cargó {0} fila en {1}"
+msgstr[1] "Se cargaron {0} filas en {1}"
+
+msgid "Exported {0} row to {1}"
+msgid_plural "Exported {0} rows to {1}"
+msgstr[0] "Se exportó {0} fila a {1}"
+msgstr[1] "Se exportaron {0} filas a {1}"
+
+msgid "Import failed; the table was not changed"
+msgstr "La importación falló; la tabla no se modificó"
+
+msgid "Export failed"
+msgstr "La exportación falló"
+
+msgid "Could not read the table list:\n{}"
+msgstr "No se pudo leer la lista de tablas:\n{}"
+
+msgid "The database has no tables"
+msgstr "La base de datos no tiene tablas"
+
+msgid "No schemas"
+msgstr "No hay esquemas"
+
+msgid "The server rejected the password. Enter it again."
+msgstr "El servidor rechazó la contraseña. Introdúcela de nuevo."
+
+msgid "Connection to the database was lost"
+msgstr "Se perdió la conexión con la base de datos"
+
+msgid "database {}"
+msgstr "base de datos {}"
+
+msgid "Nothing to run: write a query in the editor"
+msgstr "No hay nada que ejecutar: escribe una consulta en el editor"
+
+msgid "Not connected to the database"
+msgstr "No hay conexión con la base de datos"
+
+msgid "Wait for the query to finish or stop it"
+msgstr "Espera a que termine la consulta o detenla"
+
+msgid "Structure of {}"
+msgstr "Estructura de {}"
+
+msgid "Error: {}"
+msgstr "Error: {}"
+
+msgid "No tables"
+msgstr "No hay tablas"
+
+msgid "Nothing found.\nOnly expanded databases are searched — expand a database to search it too."
+msgstr "No se encontró nada.\nSolo se busca en las bases de datos desplegadas: despliega una base de datos para buscar también en ella."
+
+msgid "Nothing found"
+msgstr "No se encontró nada"
+
+msgid "Editor queries now run in database {}"
+msgstr "Las consultas del editor ahora se ejecutan en la base de datos {}"
+
+msgid "Make Active"
+msgstr "Activar"
+
+msgid "Refresh"
+msgstr "Actualizar"
+
+msgid "Copy Name"
+msgstr "Copiar nombre"
+
+msgid "Insert Name into Editor"
+msgstr "Insertar nombre en el editor"
+
+msgid "Data (First {} Row)"
+msgid_plural "Data (First {} Rows)"
+msgstr[0] "Datos (primera {} fila)"
+msgstr[1] "Datos (primeras {} filas)"
+
+msgid "Structure"
+msgstr "Estructura"
+
+msgid "Export Data…"
+msgstr "Exportar datos…"
+
+msgid "Import Data…"
+msgstr "Importar datos…"
+
+msgid "All rows of view {}.{}"
+msgstr "Todas las filas de la vista {}.{}"
+
+msgid "All rows of table {}.{}"
+msgstr "Todas las filas de la tabla {}.{}"
+
+msgid "Nothing to export"
+msgstr "No hay nada que exportar"
+
+msgid "The query will run again, and the file will get all of its rows, not just the first {}."
+msgstr "La consulta se ejecutará de nuevo y el archivo recibirá todas sus filas, no solo las primeras {}."
+
+msgid "Only the first {} row will be saved: the query changes data, so it is not run again."
+msgid_plural "Only the first {} rows will be saved: the query changes data, so it is not run again."
+msgstr[0] "Solo se guardará la primera {} fila: la consulta modifica datos, por lo que no se vuelve a ejecutar."
+msgstr[1] "Solo se guardarán las primeras {} filas: la consulta modifica datos, por lo que no se vuelve a ejecutar."
+
+msgid "{} row of the result will be saved."
+msgid_plural "{} rows of the result will be saved."
+msgstr[0] "Se guardará {} fila del resultado."
+msgstr[1] "Se guardarán {} filas del resultado."
+
+msgid "Format"
+msgstr "Formato"
+
+msgid "Export Data"
+msgstr "Exportar datos"
+
+msgid "Save As…"
+msgstr "Guardar como…"
+
+msgid "Save To"
+msgstr "Guardar en"
+
+msgid "Saved {0} row to {1}"
+msgid_plural "Saved {0} rows to {1}"
+msgstr[0] "Se guardó {0} fila en {1}"
+msgstr[1] "Se guardaron {0} filas en {1}"
+
+msgid "Could not save the file: {}"
+msgstr "No se pudo guardar el archivo: {}"
+
+msgid "Export → {}"
+msgstr "Exportación → {}"
+
+msgid "All Files"
+msgstr "Todos los archivos"
+
+msgid "Import into {}.{}"
+msgstr "Importar en {}.{}"
+
+msgid "First row has column names"
+msgstr "La primera fila contiene los nombres de columna"
+
+msgid "Otherwise values go into the table columns in order"
+msgstr "Si no, los valores van a las columnas de la tabla en orden"
+
+msgid "Empty values as NULL"
+msgstr "Valores vacíos como NULL"
+
+msgid "Otherwise as empty strings"
+msgstr "Si no, como cadenas vacías"
+
+msgid "Clear the table before loading"
+msgstr "Vaciar la tabla antes de cargar"
+
+msgid "All rows of the table will be deleted"
+msgstr "Se eliminarán todas las filas de la tabla"
+
+msgid "Rows are inserted in batches: on error, rows already inserted stay."
+msgstr "Las filas se insertan por lotes: si hay un error, las ya insertadas se conservan."
+
+msgid "Loading runs in a single transaction: on error, the table is not changed."
+msgstr "La carga se realiza en una sola transacción: si hay un error, la tabla no se modifica."
+
+msgid "{} → {}.{}\n\nFile columns are matched to table columns by name. {}"
+msgstr "{} → {}.{}\n\nLas columnas del archivo se asocian con las columnas de la tabla por nombre. {}"
+
+msgid "Import Data"
+msgstr "Importar datos"
+
+msgid "Load"
+msgstr "Cargar"
+
+msgid "Import {} → {}"
+msgstr "Importación {} → {}"
+
+msgid "No columns"
+msgstr "No hay columnas"
+
+msgid "Save the result to a file (CSV, JSON, SQL)"
+msgstr "Guardar el resultado en un archivo (CSV, JSON, SQL)"
+
+msgid "The query returned no rows"
+msgstr "La consulta no devolvió filas"
+
+msgid "running…"
+msgstr "ejecutando…"
+
+msgid "Exported {} row"
+msgid_plural "Exported {} rows"
+msgstr[0] "Se exportó {} fila"
+msgstr[1] "Se exportaron {} filas"
+
+msgid "From file {}"
+msgstr "Del archivo {}"
+
+msgid "File: {}"
+msgstr "Archivo: {}"
+
+msgid "Skipped file columns that are not in the table: {}"
+msgstr "Se omitieron las columnas del archivo que no existen en la tabla: {}"
+
+msgid "Done: {} row affected"
+msgid_plural "Done: {} rows affected"
+msgstr[0] "Listo: {} fila afectada"
+msgstr[1] "Listo: {} filas afectadas"
+
+msgid "Done"
+msgstr "Listo"
+
+msgid "{} statement executed"
+msgid_plural "{} statements executed"
+msgstr[0] "{} instrucción ejecutada"
+msgstr[1] "{} instrucciones ejecutadas"
+
+msgid "first {} row"
+msgid_plural "first {} rows"
+msgstr[0] "primera {} fila"
+msgstr[1] "primeras {} filas"
+
+msgid "Row {}"
+msgstr "Fila {}"
+
+msgid "Copy"
+msgstr "Copiar"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "{} row"
+msgid_plural "{} rows"
+msgstr[0] "{} fila"
+msgstr[1] "{} filas"
+
+msgid "{} ms"
+msgstr "{} ms"
+
+msgid "{} s"
+msgstr "{} s"
+
+# --- files ---
+
+msgid "XDG_RUNTIME_DIR is not set"
+msgstr "la variable XDG_RUNTIME_DIR no está definida"
+
+msgid "Enter an address like user@host"
+msgstr "Introduce una dirección como usuario@host"
+
+msgid "The address contains invalid characters"
+msgstr "La dirección contiene caracteres no válidos"
+
+msgid "A port number must follow -p"
+msgstr "Después de -p hay que indicar el puerto"
+
+msgid "The port is specified twice"
+msgstr "El puerto está indicado dos veces"
+
+msgid "Option “{}” is not supported: only -p <port> is allowed"
+msgstr "La opción «{}» no se admite: solo se puede indicar -p <puerto>"
+
+msgid "The address must not contain spaces"
+msgstr "La dirección no debe contener espacios"
+
+msgid "Invalid port “{}” (must be a number from 1 to 65535)"
+msgstr "Puerto no válido: «{}» (debe ser un número del 1 al 65535)"
+
+msgid "No active connection. Log in to the server in this tab’s terminal first."
+msgstr "No hay ninguna conexión activa. Primero inicia sesión en el servidor desde el terminal de esta pestaña."
+
+msgid "The server did not confirm the shell settings change"
+msgstr "El servidor no confirmó el cambio en la configuración del shell"
+
+msgid "Could not change the shell settings: {}"
+msgstr "No se pudo cambiar la configuración del shell: {}"
+
+msgid "{0} already exists, but there is no .pub file next to it. Restore it with: ssh-keygen -y -f {0} > {0}.pub"
+msgstr "{0} ya existe, pero no hay ningún archivo .pub junto a él. Restáuralo con: ssh-keygen -y -f {0} > {0}.pub"
+
+msgid "Could not start {}: {}"
+msgstr "No se pudo iniciar {}: {}"
+
+msgid "ssh-keygen failed: {}"
+msgstr "ssh-keygen terminó con un error: {}"
+
+msgid "{}: not an SSH public key"
+msgstr "{}: no es una clave pública SSH"
+
+msgid "The server did not confirm that the key was installed"
+msgstr "El servidor no confirmó la instalación de la clave"
+
+msgid "Could not install the key on the server: {}"
+msgstr "No se pudo instalar la clave en el servidor: {}"
+
+msgid "Unsupported format"
+msgstr "formato no admitido"
+
+msgid "The data source is unavailable"
+msgstr "la fuente de datos no está disponible"
+
+msgid "no such file or folder"
+msgstr "no existe el archivo o la carpeta"
+
+msgid "permission denied"
+msgstr "permiso denegado"
+
+msgid "the server does not support this operation"
+msgstr "el servidor no admite esta operación"
+
+msgid "the server rejected the operation"
+msgstr "el servidor rechazó la operación"
+
+msgid "server error: {}"
+msgstr "error del servidor: {}"
+
+msgid "No SFTP connection"
+msgstr "No hay conexión SFTP"
+
+msgid "Could not get the ssh input/output pipes"
+msgstr "No se pudieron obtener los canales de entrada/salida de ssh"
+
+msgid "Could not open an SFTP session: {}"
+msgstr "No se pudo abrir una sesión SFTP: {}"
+
+msgid "The server did not respond to the SFTP request"
+msgstr "El servidor no respondió a la solicitud SFTP"
+
+msgid "ssh exited ({})"
+msgstr "ssh terminó ({})"
+
+msgid "ssh exited: {}"
+msgstr "ssh terminó: {}"
+
+msgid "Could not create folder “{}”: {}"
+msgstr "No se pudo crear la carpeta «{}»: {}"
+
+msgid "Could not rename “{}”: {}"
+msgstr "No se pudo cambiar el nombre de «{}»: {}"
+
+msgid "Could not delete “{}”: {}"
+msgstr "No se pudo eliminar «{}»: {}"
+
+msgid "Connection lost"
+msgstr "Se perdió la conexión"
+
+msgid "the name “{}” is already taken"
+msgstr "el nombre «{}» ya está en uso"
+
+msgid "Could not connect, or the connection was lost — see the terminal for details"
+msgstr "No se pudo conectar o se perdió la conexión: consulta los detalles en el terminal"
+
+msgid "ssh was terminated by a signal"
+msgstr "ssh fue interrumpido por una señal"
+
+msgid "Your key {} will be used."
+msgstr "Se usará tu clave {}."
+
+msgid "There is no local key yet: {} will be created (ed25519, no passphrase)."
+msgstr "Todavía no hay ninguna clave local: se creará {} (ed25519, sin frase de contraseña)."
+
+msgid "{}\n\nIts public part will be added to ~/.ssh/authorized_keys on {}. After that, ssh will log in to this server with the key instead of asking for a password. The app never sees or stores the password itself."
+msgstr "{}\n\nSu parte pública se añadirá a ~/.ssh/authorized_keys en {}. Después, ssh iniciará sesión en este servidor con la clave sin pedir la contraseña. La aplicación nunca ve ni guarda la contraseña."
+
+msgid "Set Up Passwordless Login?"
+msgstr "¿Configurar el inicio de sesión sin contraseña?"
+
+msgid "Set Up"
+msgstr "Configurar"
+
+msgid "A new key {} was created."
+msgstr "Se creó una clave nueva: {}."
+
+msgid "Passwordless Login Enabled"
+msgstr "Inicio de sesión sin contraseña configurado"
+
+msgid "Key {} is installed on {}. Next time you will log in without a password."
+msgstr "La clave {} está instalada en {}. La próxima vez iniciarás sesión sin contraseña."
+
+msgid "Key Already Installed"
+msgstr "La clave ya está instalada"
+
+msgid "Key {} is already on {}; nothing had to be changed."
+msgstr "La clave {} ya está en {}; no hubo que cambiar nada."
+
+msgid "Key login setup was interrupted by an internal error"
+msgstr "La configuración del inicio de sesión con clave se interrumpió por un error interno"
+
+msgid "Follow cd in the File Panel?"
+msgstr "¿Seguir cd en el panel de archivos?"
+
+msgid "For the file panel to follow cd in the terminal, the shell on {} must report the current folder. fish does this by itself. For bash and zsh, three lines marked sshdeck-cwd will be appended to ~/.bashrc or ~/.zshrc on the server; they take effect in new sessions."
+msgstr "Para que el panel de archivos siga los cd del terminal, el shell de {} debe informar de la carpeta actual. fish lo hace por sí mismo. Para bash y zsh se añadirán al final de ~/.bashrc o ~/.zshrc en el servidor tres líneas marcadas con sshdeck-cwd; funcionan en las sesiones nuevas."
+
+msgid "Enable"
+msgstr "Activar"
+
+msgid "Following cd Enabled"
+msgstr "Seguimiento de cd activado"
+
+msgid "The snippet was added to the shell settings file. It takes effect after you log in again: close the tab and reconnect."
+msgstr "El fragmento se añadió al archivo de configuración del shell. Funcionará después de volver a iniciar sesión: cierra la pestaña y vuelve a conectarte."
+
+msgid "Following cd Already Enabled"
+msgstr "El seguimiento de cd ya está activado"
+
+msgid "The sshdeck-cwd snippet is already in the shell settings file."
+msgstr "El fragmento sshdeck-cwd ya está en el archivo de configuración del shell."
+
+msgid "Nothing to Change"
+msgstr "No hay nada que cambiar"
+
+msgid "The server uses fish, which reports the current folder by itself."
+msgstr "El servidor usa fish, que informa de la carpeta actual por sí mismo."
+
+msgid "Shell Not Supported"
+msgstr "Shell no compatible"
+
+msgid "Only bash and zsh can be set up automatically. No files on the server were changed."
+msgstr "Solo bash y zsh se pueden configurar automáticamente. No se modificó ningún archivo del servidor."
+
+msgid "Setup was interrupted by an internal error"
+msgstr "La configuración se interrumpió por un error interno"
+
+msgid "Could Not Start SFTP"
+msgstr "No se pudo iniciar SFTP"
+
+msgid "Home folder"
+msgstr "Carpeta personal"
+
+msgid "Up one level"
+msgstr "Subir un nivel"
+
+msgid "Refresh (F5)"
+msgstr "Actualizar (F5)"
+
+msgid "Current folder. Type a path and press Enter"
+msgstr "Carpeta actual. Escribe una ruta y pulsa Intro"
+
+msgid "Files…"
+msgstr "Archivos…"
+
+msgid "Folder…"
+msgstr "Carpeta…"
+
+msgid "Upload"
+msgstr "Subir"
+
+msgid "Upload to the current folder on the server"
+msgstr "Subir a la carpeta actual del servidor"
+
+msgid "Download"
+msgstr "Descargar"
+
+msgid "Download the selection to a local folder"
+msgstr "Descargar la selección a una carpeta local"
+
+msgid "New folder"
+msgstr "Nueva carpeta"
+
+msgid "Show hidden files"
+msgstr "Mostrar archivos ocultos"
+
+msgid "Follow cd in the terminal"
+msgstr "Seguir cd en el terminal"
+
+msgid "Size"
+msgstr "Tamaño"
+
+msgid "Modified"
+msgstr "Modificado"
+
+msgid "Name"
+msgstr "Nombre"
+
+msgid "Open or Edit"
+msgstr "Abrir o editar"
+
+msgid "Download…"
+msgstr "Descargar…"
+
+msgid "Go Here in Terminal"
+msgstr "Ir aquí en el terminal"
+
+msgid "Copy Path"
+msgstr "Copiar ruta"
+
+msgid "Upload Files…"
+msgstr "Subir archivos…"
+
+msgid "Upload Folder…"
+msgstr "Subir carpeta…"
+
+msgid "New Folder…"
+msgstr "Nueva carpeta…"
+
+msgid "Rename…"
+msgstr "Cambiar nombre…"
+
+msgid "Broken symbolic link"
+msgstr "Enlace simbólico roto"
+
+msgid "Symbolic link"
+msgstr "Enlace simbólico"
+
+msgid "{} and {} more"
+msgid_plural "{} and {} more"
+msgstr[0] "{} y {} más"
+msgstr[1] "{} y {} más"
+
+msgid "Could not open “{}”: {}"
+msgstr "No se pudo abrir «{}»: {}"
+
+msgid "Could not read “{}”: {}"
+msgstr "No se pudo leer «{}»: {}"
+
+msgid "Connection Closed"
+msgstr "Conexión cerrada"
+
+msgid "Click “Reconnect” to log in again."
+msgstr "Pulsa «Reconectar» para volver a iniciar sesión."
+
+msgid "Waiting for Login"
+msgstr "Esperando el inicio de sesión"
+
+msgid "Enter your password or key passphrase in the terminal on the right — the file panel will connect automatically."
+msgstr "Introduce la contraseña o la frase de contraseña de la clave en el terminal de la derecha: el panel de archivos se conectará solo."
+
+msgid "No SFTP Connection"
+msgstr "No hay conexión SFTP"
+
+msgid "{}\nThe panel will connect once you log in in the terminal."
+msgstr "{}\nEl panel se conectará cuando inicies sesión en el terminal."
+
+msgid "“{}” cannot be opened: it is neither a file nor a folder"
+msgstr "No se puede abrir «{}»: no es un archivo ni una carpeta"
+
+msgid "Select a single file or folder"
+msgstr "Selecciona un solo archivo o carpeta"
+
+msgid "New Folder"
+msgstr "Nueva carpeta"
+
+msgid "Name of the new folder in {}"
+msgstr "Nombre de la nueva carpeta en {}"
+
+msgid "Create"
+msgstr "Crear"
+
+msgid "The name cannot contain “/”"
+msgstr "El nombre no puede contener «/»"
+
+msgid "Select a single item to rename"
+msgstr "Selecciona un solo elemento para cambiarle el nombre"
+
+msgid "Rename"
+msgstr "Cambiar nombre"
+
+msgid "New name for “{}”"
+msgstr "Nuevo nombre para «{}»"
+
+msgid "Select what to delete"
+msgstr "Selecciona lo que quieres eliminar"
+
+msgid "Delete “{}” from the Server?"
+msgstr "¿Eliminar «{}» del servidor?"
+
+msgid "Delete {} Item from the Server?"
+msgid_plural "Delete {} Items from the Server?"
+msgstr[0] "¿Eliminar {} elemento del servidor?"
+msgstr[1] "¿Eliminar {} elementos del servidor?"
+
+msgid "Folders are deleted with all their contents."
+msgstr "Las carpetas se eliminan con todo su contenido."
+
+msgid "This action cannot be undone."
+msgstr "Esta acción no se puede deshacer."
+
+msgid "Select files or folders to download"
+msgstr "Selecciona archivos o carpetas para descargar"
+
+msgid "Download to Folder"
+msgstr "Descargar en una carpeta"
+
+msgid "Download Here"
+msgstr "Descargar aquí"
+
+msgid "The selected folder is not local"
+msgstr "La carpeta seleccionada no es local"
+
+msgid "Downloading {}"
+msgstr "Descargando: {}"
+
+msgid "Replace Existing Local Files?"
+msgstr "¿Reemplazar los archivos locales existentes?"
+
+msgid "The selected folder already contains: {}"
+msgstr "La carpeta seleccionada ya contiene: {}"
+
+msgid "Replace"
+msgstr "Reemplazar"
+
+msgid "Upload Folder"
+msgstr "Subir carpeta"
+
+msgid "Upload Files"
+msgstr "Subir archivos"
+
+msgid "Uploading {}"
+msgstr "Subiendo: {}"
+
+msgid "Replace Existing Files on the Server?"
+msgstr "¿Reemplazar los archivos existentes en el servidor?"
+
+msgid "{} already contains: {}"
+msgstr "{} ya contiene: {}"
+
+msgid "Cancel transfer"
+msgstr "Cancelar la transferencia"
+
+msgid "Preparing…"
+msgstr "Preparando…"
+
+msgid "{} of {}"
+msgstr "{} de {}"
+
+msgid "{} — skipped (links to folders and special files): {}"
+msgstr "{}: se omitieron (enlaces a carpetas y archivos especiales): {}"
+
+msgid "Could not create a temporary folder: {}"
+msgstr "No se pudo crear una carpeta temporal: {}"
+
+msgid "the tab is closed"
+msgstr "la pestaña está cerrada"
+
+msgid "Dragging {}"
+msgstr "Arrastrando: {}"
+
+msgid "the transfer was cancelled"
+msgstr "se canceló la transferencia"
+
+msgid "the transfer was interrupted"
+msgstr "se interrumpió la transferencia"
+
+msgid "Open “{}”?"
+msgstr "¿Abrir «{}»?"
+
+msgid "The file is large ({}); it will be downloaded in full to a temporary folder."
+msgstr "El archivo es grande ({}); se descargará completo en una carpeta temporal."
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Opening {}"
+msgstr "Abriendo: {}"
+
+msgid "Could not watch “{}” for changes: {}"
+msgstr "No se pudieron vigilar los cambios de «{}»: {}"
+
+msgid "Saving {} to the server"
+msgstr "Guardando en el servidor: {}"
+
+msgid "Saved to the server: {}"
+msgstr "Guardado en el servidor: {}"
+
+# --- shell ---
+
+msgid "Checking availability…"
+msgstr "Comprobando disponibilidad…"
+
+msgid "Search or user@host"
+msgstr "Buscar o user@host"
+
+msgid "Quick connect: user@host, user@host -p 2222 or an alias from ~/.ssh/config"
+msgstr "Conexión rápida: user@host, user@host -p 2222 o un alias de ~/.ssh/config"
+
+msgid "Save a new connection"
+msgstr "Guardar una conexión nueva"
+
+msgid "Reload saved connections and ~/.ssh/config"
+msgstr "Volver a cargar las conexiones guardadas y ~/.ssh/config"
+
+msgid "The file was renamed to {}."
+msgstr "Se cambió el nombre del archivo a {}."
+
+msgid "Fix the file by hand: the next save will overwrite it."
+msgstr "Corrige el archivo a mano: el próximo guardado lo sobrescribirá."
+
+msgid "Could not read saved connections: {}\n{}"
+msgstr "No se pudieron leer las conexiones guardadas: {}\n{}"
+
+msgid "Could not save connections: {}"
+msgstr "No se pudieron guardar las conexiones: {}"
+
+msgid "the check was interrupted"
+msgstr "la comprobación se interrumpió"
+
+msgid "Saved"
+msgstr "Guardadas"
+
+msgid "Nothing here yet. Press “+” at the top to save a connection with a name and folder."
+msgstr "Todavía no hay nada. Pulsa «+» arriba para guardar una conexión con nombre y carpeta."
+
+msgid "PostgreSQL, MySQL, MariaDB or SQLite — press “+” next to the heading. Servers can be reached over SSH."
+msgstr "PostgreSQL, MySQL, MariaDB o SQLite: pulsa «+» junto al encabezado. Se puede acceder al servidor a través de SSH."
+
+msgid "From ~/.ssh/config"
+msgstr "De ~/.ssh/config"
+
+msgid "New database connection"
+msgstr "Nueva conexión de base de datos"
+
+msgid "Databases"
+msgstr "Bases de datos"
+
+msgid "Click to collapse or expand the folder"
+msgstr "Haz clic para contraer o expandir la carpeta"
+
+msgid "Edit…"
+msgstr "Editar…"
+
+msgid "Duplicate…"
+msgstr "Duplicar…"
+
+msgid "Delete…"
+msgstr "Eliminar…"
+
+msgid "New Connection in Folder…"
+msgstr "Nueva conexión en la carpeta…"
+
+msgid "Rename Folder…"
+msgstr "Cambiar nombre de la carpeta…"
+
+msgid "Red"
+msgstr "Rojo"
+
+msgid "Orange"
+msgstr "Naranja"
+
+msgid "Yellow"
+msgstr "Amarillo"
+
+msgid "Green"
+msgstr "Verde"
+
+msgid "Blue"
+msgstr "Azul"
+
+msgid "Purple"
+msgstr "Morado"
+
+msgid "Brown"
+msgstr "Marrón"
+
+msgid "No Color"
+msgstr "Sin color"
+
+msgid "Folder Color"
+msgstr "Color de la carpeta"
+
+msgid "Remove Folder, Keep Connections"
+msgstr "Quitar la carpeta y conservar las conexiones"
+
+msgid "Delete Folder and Connections…"
+msgstr "Eliminar la carpeta con sus conexiones…"
+
+msgid "Save to Connections…"
+msgstr "Guardar en conexiones…"
+
+msgid "New Connection…"
+msgstr "Nueva conexión…"
+
+msgid "New Database Connection…"
+msgstr "Nueva conexión de base de datos…"
+
+msgid "Database Extensions…"
+msgstr "Extensiones de bases de datos…"
+
+msgid "“{}” ({}) will be removed from the list. Nothing changes on the server."
+msgstr "«{}» ({}) desaparecerá de la lista. En el servidor no cambia nada."
+
+msgid "Rename Folder"
+msgstr "Cambiar nombre de la carpeta"
+
+msgid "If a folder with this name already exists, the connections will be merged into it."
+msgstr "Si ya existe una carpeta con este nombre, las conexiones se combinarán en ella."
+
+msgid "Folder “{}” removed, connections kept"
+msgstr "Carpeta «{}» quitada; las conexiones se conservaron"
+
+msgid "Delete Folder and Connections?"
+msgstr "¿Eliminar la carpeta con sus conexiones?"
+
+msgid "Folder “{}” and the saved connections in it ({}) will be removed from the list. Nothing changes on the servers."
+msgstr "La carpeta «{}» y las conexiones guardadas en ella ({}) desaparecerán de la lista. En los servidores no cambia nada."
+
+msgctxt "connection or command"
+msgid "Name"
+msgstr "Nombre"
+
+msgid "Address: user@host or user@host -p 2222"
+msgstr "Dirección: user@host o user@host -p 2222"
+
+msgid "Folder (optional)"
+msgstr "Carpeta (opcional)"
+
+msgid "Choose an existing folder"
+msgstr "Elegir una carpeta existente"
+
+msgid "Command after login (optional)"
+msgstr "Comando tras iniciar sesión (opcional)"
+
+msgid "Edit Connection"
+msgstr "Editar conexión"
+
+msgid "New Connection"
+msgstr "Nueva conexión"
+
+msgid "Passwords are not saved: ssh still asks for them in the terminal."
+msgstr "Las contraseñas no se guardan: ssh las sigue pidiendo en la terminal."
+
+msgid "{} — {}\nDouble-click to connect"
+msgstr "{} — {}\nDoble clic para conectar"
+
+msgid "Match window style"
+msgstr "Igual que el estilo de la ventana"
+
+msgid "Light"
+msgstr "Claro"
+
+msgid "Dark"
+msgstr "Oscuro"
+
+msgid "No Open Sessions"
+msgstr "No hay sesiones abiertas"
+
+msgid "Double-click a connection or database on the left, or type user@host and press Enter"
+msgstr "Haz doble clic en una conexión o base de datos a la izquierda, o escribe user@host y pulsa Intro"
+
+msgid "Passwordless Login (Key) for This Tab…"
+msgstr "Inicio de sesión sin contraseña (clave) para esta pestaña…"
+
+msgid "File Panel Follows cd on This Server…"
+msgstr "Seguir cd en el panel de archivos en este servidor…"
+
+msgid "Theme"
+msgstr "Tema"
+
+msgid "Terminal Font…"
+msgstr "Tipo de letra de la terminal…"
+
+msgid "Reload Connection List"
+msgstr "Volver a cargar la lista de conexiones"
+
+msgid "Menu"
+msgstr "Menú"
+
+msgid "Show or hide the connection list"
+msgstr "Mostrar u ocultar la lista de conexiones"
+
+msgid "Show or hide the file panel"
+msgstr "Mostrar u ocultar el panel de archivos"
+
+msgid "Open a tab and log in to a server first"
+msgstr "Primero abre una pestaña e inicia sesión en un servidor"
+
+msgid "Open a tab and log in to a server first — the key is installed through it"
+msgstr "Primero abre una pestaña e inicia sesión en un servidor: la clave se instala a través de ella"
+
+msgid "Could Not Prepare the Socket Directory"
+msgstr "No se pudo preparar el directorio de sockets"
+
+msgid "Could not save settings: {}"
+msgstr "No se pudo guardar la configuración: {}"
+
+msgid "Terminal Font"
+msgstr "Tipo de letra de la terminal"
+
+msgid "Add Command…"
+msgstr "Añadir comando…"
+
+msgid "Saved commands"
+msgstr "Comandos guardados"
+
+msgid "Your commands will appear here. Click a command to run it in the terminal of the current tab."
+msgstr "Aquí aparecerán tus comandos. Haz clic en un comando para ejecutarlo en la terminal de la pestaña actual."
+
+msgid "Run in the terminal:\n{}"
+msgstr "Ejecutar en la terminal:\n{}"
+
+msgid "Edit"
+msgstr "Editar"
+
+msgid "No open tab to send the command to"
+msgstr "No hay ninguna pestaña abierta a la que enviar el comando"
+
+msgid "Delete Command?"
+msgstr "¿Eliminar el comando?"
+
+msgid "“{}” will be removed from the saved commands."
+msgstr "«{}» desaparecerá de los comandos guardados."
+
+msgid "Command"
+msgstr "Comando"
+
+msgid "Edit Command"
+msgstr "Editar comando"
+
+msgid "New Command"
+msgstr "Nuevo comando"
+
+msgid "Clicking a command in the list types it into the terminal of the current tab and presses Enter."
+msgstr "Al hacer clic en un comando de la lista, se escribe en la terminal de la pestaña actual y se pulsa Intro."
+
+msgid "Server CPU usage"
+msgstr "Uso de CPU del servidor"
+
+msgid "RAM"
+msgstr "RAM"
+
+msgid "Memory in use out of the server’s total memory"
+msgstr "Memoria en uso del total de memoria del servidor"
+
+msgid "Disk /"
+msgstr "Disco /"
+
+msgid "Root partition usage"
+msgstr "Ocupación de la partición raíz"
+
+msgid "Network"
+msgstr "Red"
+
+msgid "Receive and send rates across all server interfaces"
+msgstr "Recepción y envío por todas las interfaces del servidor"
+
+msgid "Uptime"
+msgstr "Tiempo activo"
+
+msgid "Time since the server was last rebooted"
+msgstr "Tiempo de funcionamiento del servidor desde el último reinicio"
+
+msgctxt "load average"
+msgid "Load"
+msgstr "Carga"
+
+msgid "One-minute load average"
+msgstr "Carga media del último minuto (load average)"
+
+msgid "{}%"
+msgstr "{} %"
+
+msgid "↓ {}/s  ↑ {}/s"
+msgstr "↓ {}/s  ↑ {}/s"
+
+msgid "Details"
+msgstr "Detalles"
+
+msgid "Message"
+msgstr "Mensaje"
+
+msgid "B"
+msgstr "B"
+
+msgid "KB"
+msgstr "KB"
+
+msgid "MB"
+msgstr "MB"
+
+msgid "GB"
+msgstr "GB"
+
+msgid "TB"
+msgstr "TB"
+
+msgid "Online · {} ms"
+msgstr "En línea · {} ms"
+
+msgid "Unreachable: {}"
+msgstr "No disponible: {}"
+
+msgid "Not checked: {}"
+msgstr "No se comprueba: {}"
+
+msgid "could not start ssh: {}"
+msgstr "no se pudo iniciar ssh: {}"
+
+msgid "connects through {}"
+msgstr "se conecta a través de {}"
+
+msgid "ssh could not parse the address"
+msgstr "ssh no pudo interpretar la dirección"
+
+msgid "name {} not found"
+msgstr "no se encontró el nombre {}"
+
+msgid "{} has no addresses"
+msgstr "{} no tiene direcciones"
+
+msgid "the server closed the connection without an SSH greeting"
+msgstr "el servidor cerró la conexión sin saludo SSH"
+
+msgid "the port is open, but there is no SSH greeting"
+msgstr "el puerto está abierto, pero no hay saludo SSH"
+
+msgid "something other than SSH answers on the port"
+msgstr "en el puerto responde algo que no es SSH"
+
+msgid "port {} is closed"
+msgstr "el puerto {} está cerrado"
+
+msgid "the server reset the connection"
+msgstr "el servidor restableció la conexión"
+
+msgid "no response"
+msgstr "sin respuesta"
+
+msgid "no route to the server"
+msgstr "no hay ruta hacia el servidor"
+
+msgid "{} d {} h"
+msgstr "{} d {} h"
+
+msgid "{} h {} min"
+msgstr "{} h {} min"
+
+msgid "{} min"
+msgstr "{} min"
+
+msgid "{}: Include is nested too deeply"
+msgstr "{}: Include está anidado a demasiada profundidad"
+
+msgid "{}: could not read: {}"
+msgstr "{}: no se pudo leer: {}"

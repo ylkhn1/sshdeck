@@ -59,7 +59,7 @@ impl StatusBar {
         let disk = item(tr!("Disk /"), tr!("Root partition usage"));
         let network = item(tr!("Network"), tr!("Receive and send rates across all server interfaces"));
         let uptime = item(tr!("Uptime"), tr!("Time since the server was last rebooted"));
-        let load = item(tr!("Load"), tr!("One-minute load average"));
+        let load = item(trc!("load average", "Load"), tr!("One-minute load average"));
 
         // Прокрутка без полосы: строка не задаёт минимальную ширину окна.
         let root = gtk::ScrolledWindow::builder()

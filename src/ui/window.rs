@@ -22,7 +22,7 @@ use crate::settings::Settings;
 /// libadwaita (`--window-bg-color` и т. п.), которые задаёт выбранная тема,
 /// поэтому правила одинаково работают в светлом и тёмном вариантах.
 const CSS: &str = "
-/* ---------- шапки: вкладки прямо в заголовке окна */
+/* ---------- header bars: tabs right in the window title bar */
 .sshdeck-topbar, .sshdeck-sidebar-header { min-height: 40px; padding: 0 6px; }
 .sshdeck-sidebar-header { padding-left: 14px; }
 .sshdeck-topbar {
@@ -73,7 +73,7 @@ const CSS: &str = "
 }
 .sshdeck-topbar tabbar tab:selected label { font-weight: 600; }
 
-/* ---------- боковая панель */
+/* ---------- sidebar */
 .sshdeck-logo {
   min-width: 22px; min-height: 22px; margin-right: 6px; border-radius: 7px;
   background-color: var(--accent-bg-color); color: var(--accent-fg-color);
@@ -110,13 +110,13 @@ const CSS: &str = "
 .sshdeck-avatar-6 { color: #2bb062; background-color: color-mix(in srgb, #2bb062 18%, transparent); }
 .sshdeck-avatar-7 { color: #14a3b8; background-color: color-mix(in srgb, #14a3b8 18%, transparent); }
 
-/* ---------- пустой экран */
+/* ---------- empty page */
 .sshdeck-empty > scrolledwindow > viewport > box > clamp > box > .icon {
   color: var(--accent-color); -gtk-icon-size: 96px;
 }
 .sshdeck-empty .title { font-weight: 800; }
 
-/* ---------- вкладка: файлы | терминал */
+/* ---------- tab: files | terminal */
 paned.sshdeck-split > separator {
   background-color: color-mix(in srgb, currentColor 9%, transparent);
 }
@@ -137,8 +137,8 @@ columnview.sshdeck-files > listview > row:selected {
 .sshdeck-transfer { padding: 6px 6px 10px 12px; }
 .sshdeck-section { margin: 10px 14px 2px 14px; }
 
-/* ---------- доступность сервера: точка в углу значка. Цвета заданы в sRGB:
-   --success-color в libadwaita считается в oklab и не везде рисуется верно */
+/* ---------- server availability: a dot in the corner of the icon. Colors are in sRGB:
+   libadwaita computes --success-color in oklab, and it does not render correctly everywhere */
 .sshdeck-status {
   min-width: 8px; min-height: 8px; border-radius: 99px;
   margin: 0 -2px -2px 0;
@@ -154,7 +154,7 @@ columnview.sshdeck-files > listview > row:selected {
 .sshdeck-host-content > box > label { transition: opacity 300ms ease-out; }
 .sshdeck-host-content.offline > box > label { opacity: 0.6; }
 
-/* ---------- плавные переходы (GTK отключает их, если анимации выключены) */
+/* ---------- smooth transitions (GTK disables them when animations are off) */
 .sshdeck-hosts > row, .sshdeck-topbar tabbar tab, .sshdeck-topbar > button,
 .sshdeck-topbar > revealer > button, .sshdeck-topbar > menubutton > button,
 columnview.sshdeck-files > listview > row, .sshdeck-stat {
@@ -163,7 +163,7 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
 .sshdeck-folder-arrow { transition: transform 200ms cubic-bezier(0.25, 0.46, 0.45, 0.94); }
 .sshdeck-folder-arrow.collapsed { transform: rotate(-90deg); }
 
-/* ---------- строка состояния сервера */
+/* ---------- server status bar */
 .sshdeck-statusbar {
   padding: 2px 8px; font-size: 0.85em;
   background-color: var(--window-bg-color);
@@ -174,7 +174,7 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
   background-color: color-mix(in srgb, currentColor 6%, transparent);
 }
 
-/* ---------- базы данных */
+/* ---------- databases */
 .sshdeck-db-badge {
   min-width: 22px; min-height: 22px; border-radius: 6px;
   font-weight: 800; font-size: 0.7em; font-family: monospace;
@@ -197,7 +197,7 @@ columnview.sshdeck-files > listview > row, .sshdeck-stat {
 textview.sshdeck-sql > text { background-color: var(--view-bg-color); }
 textview.sshdeck-sql { font-family: monospace; }
 .sshdeck-db-caption { font-family: monospace; font-size: 0.8em; }
-/* таблица результатов */
+/* result grid */
 columnview.sshdeck-grid { background-color: var(--view-bg-color); }
 columnview.sshdeck-grid > header > button {
   padding: 6px 10px;

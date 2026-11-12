@@ -54,8 +54,8 @@ pub fn is_removable(info: &ExtensionInfo) -> bool {
 
 pub fn uninstall(info: &ExtensionInfo) -> Result<(), String> {
     let entry = entry_of(&drivers_dir(), &info.path)
-        .ok_or("Это расширение установлено в системе — удалить его можно менеджером пакетов")?;
-    remove_entry(&entry).map_err(|err| format!("Не удалось удалить {}: {err}", entry.display()))?;
+        .ok_or(tr!("This extension is installed system-wide — remove it with your package manager"))?;
+    remove_entry(&entry).map_err(|err| tr!("Could not delete {}: {}", entry.display(), err))?;
     scan();
     Ok(())
 }
@@ -107,7 +107,7 @@ impl Staging {
     fn new(dir: &Path) -> Result<Self, String> {
         static NEXT: AtomicU64 = AtomicU64::new(0);
         fs::create_dir_all(dir)
-            .map_err(|err| format!("Не удалось создать {}: {err}", dir.display()))?;
+            .map_err(|err| tr!("Could not create {}: {}", dir.display(), err))?;
         let path = dir.join(format!(
             ".install-{}-{}",
             std::process::id(),
@@ -115,7 +115,7 @@ impl Staging {
         ));
         let _ = fs::remove_dir_all(&path);
         fs::create_dir(&path)
-            .map_err(|err| format!("Не удалось создать {}: {err}", path.display()))?;
+            .map_err(|err| tr!("Could not create {}: {}", path.display(), err))?;
         Ok(Self(path))
     }
 
@@ -162,11 +162,11 @@ fn driver_in(package: &Path) -> PathBuf {
 
 fn not_extension(error: &str) -> String {
     let reason = if error.contains("os error 8") {
-        "файл не является программой (нет строки #! в начале или он собран для другой системы)"
+        tr!("the file is not a program (there is no #! line at the start, or it was built for another system)")
     } else {
         error
     };
-    format!("Это не расширение sshdeck: {reason}")
+    tr!("This is not an sshdeck extension: {}", reason)
 }
 
 /// Готовит пакет во временном каталоге: исполняемый файл или каталог с
@@ -176,7 +176,7 @@ fn stage(source: &Path, work: &Path) -> Result<PathBuf, String> {
     if meta.is_dir() {
         let package = work.join("package");
         copy_dir(source, &package)
-            .map_err(|err| format!("Не удалось скопировать {}: {err}", source.display()))?;
+            .map_err(|err| tr!("Could not copy {}: {}", source.display(), err))?;
         return package_in(&package);
     }
     let head = read_head(source).map_err(|err| format!("{}: {err}", source.display()))?;
@@ -188,13 +188,13 @@ fn stage(source: &Path, work: &Path) -> Result<PathBuf, String> {
     }
     if is_html(&head) {
         return Err(
-            "Это веб-страница, а не расширение. Нужен сам файл: на GitHub — \
-                    кнопка «Raw» или «Download raw file»."
+            tr!("This is a web page, not an extension. You need the file itself: on GitHub, \
+                 use the “Raw” or “Download raw file” button.")
                 .to_string(),
         );
     }
     let file = work.join("driver");
-    fs::copy(source, &file).map_err(|err| format!("Не удалось скопировать файл: {err}"))?;
+    fs::copy(source, &file).map_err(|err| tr!("Could not copy the file: {}", err))?;
     make_executable(&file)?;
     Ok(file)
 }
@@ -268,8 +268,8 @@ fn extract(archive: &Path, head: &[u8], dest: &Path) -> Result<(), String> {
         }
     }
     Err(match last_error {
-        Some(error) => format!("Не удалось распаковать архив: {error}"),
-        None => "Не удалось распаковать архив: нужна программа bsdtar, tar или unzip".to_string(),
+        Some(error) => tr!("Could not unpack the archive: {}", error),
+        None => tr!("Could not unpack the archive: bsdtar, tar or unzip is required").to_string(),
     })
 }
 
@@ -320,8 +320,8 @@ fn package_in(package: &Path) -> Result<PathBuf, String> {
             ([], [one]) => one.clone(),
             _ => {
                 return Err(
-                    "Не найдена программа расширения: в архиве должен быть файл \
-                            driver или sshdeck-driver-<имя>"
+                    tr!("Extension program not found: the archive must contain a file named \
+                         driver or sshdeck-driver-<name>")
                         .to_string(),
                 );
             }
@@ -337,7 +337,7 @@ fn make_executable(path: &Path) -> Result<(), String> {
     let mut permissions = meta.permissions();
     permissions.set_mode(permissions.mode() | 0o755);
     fs::set_permissions(path, permissions)
-        .map_err(|err| format!("Не удалось сделать файл исполняемым: {err}"))
+        .map_err(|err| tr!("Could not make the file executable: {}", err))
 }
 
 fn copy_dir(from: &Path, to: &Path) -> std::io::Result<()> {
@@ -389,15 +389,16 @@ fn replace(package: &Path, target: &Path, staging: &Path) -> Result<(), String> 
     let had_previous = fs::symlink_metadata(target).is_ok();
     if had_previous {
         fs::rename(target, &previous)
-            .map_err(|err| format!("Не удалось заменить {}: {err}", target.display()))?;
+            .map_err(|err| tr!("Could not replace {}: {}", target.display(), err))?;
     }
     if let Err(err) = fs::rename(package, target) {
         if had_previous {
             let _ = fs::rename(&previous, target);
         }
-        return Err(format!(
-            "Не удалось установить в {}: {err}",
-            target.display()
+        return Err(tr!(
+            "Could not install to {}: {}",
+            target.display(),
+            err
         ));
     }
     Ok(())
@@ -446,7 +447,7 @@ fn url_file_name(url: &str) -> String {
 fn download(url: &str, work: &Path) -> Result<PathBuf, String> {
     let url = url.trim();
     if !(url.starts_with("https://") || url.starts_with("http://")) {
-        return Err("Нужна ссылка, начинающаяся с https:// или http://".to_string());
+        return Err(tr!("A link starting with https:// or http:// is required").to_string());
     }
     let url = direct_url(url);
     let file = work.join(url_file_name(&url));
@@ -471,9 +472,9 @@ fn download(url: &str, work: &Path) -> Result<PathBuf, String> {
         .output()
         .map_err(|err| {
             if err.kind() == std::io::ErrorKind::NotFound {
-                "Для загрузки по ссылке нужна программа curl".to_string()
+                tr!("Downloading from a link requires curl").to_string()
             } else {
-                format!("Не удалось запустить curl: {err}")
+                tr!("Could not run curl: {}", err)
             }
         })?;
     if !output.status.success() {
@@ -487,18 +488,18 @@ fn download(url: &str, work: &Path) -> Result<PathBuf, String> {
 fn download_error(code: Option<i32>, stderr: &str) -> String {
     let detail = stderr.trim().trim_start_matches("curl: ");
     let reason = match code {
-        Some(6) => "сервер не найден — проверьте адрес и интернет".to_string(),
-        Some(7) => "сервер не отвечает".to_string(),
-        Some(28) => "сервер слишком долго не отвечает".to_string(),
-        Some(35 | 60) => format!("ошибка защищённого соединения ({detail})"),
-        Some(63) => "файл больше 100 МБ — это не похоже на расширение".to_string(),
-        Some(22) if detail.contains("404") => "по ссылке ничего нет (ошибка 404)".to_string(),
+        Some(6) => tr!("server not found — check the address and your internet connection").to_string(),
+        Some(7) => tr!("the server is not responding").to_string(),
+        Some(28) => tr!("the server is taking too long to respond").to_string(),
+        Some(35 | 60) => tr!("secure connection error ({})", detail),
+        Some(63) => tr!("the file is larger than 100 MB — this does not look like an extension").to_string(),
+        Some(22) if detail.contains("404") => tr!("nothing found at the link (error 404)").to_string(),
         Some(22) if detail.contains("403") || detail.contains("401") => {
-            "нет доступа к файлу (ссылка требует входа)".to_string()
+            tr!("no access to the file (the link requires signing in)").to_string()
         }
         _ => detail.to_string(),
     };
-    format!("Не удалось скачать: {reason}")
+    tr!("Could not download: {}", reason)
 }
 
 // --------------------------------------------------------- предложения из загрузок
@@ -694,20 +695,20 @@ mod tests {
         let text = tmp.path().join("notes.txt");
         write(&text, "просто текст\n");
         let error = install_into(&drivers, &text).expect_err("text");
-        assert!(error.starts_with("Это не расширение sshdeck"), "{error}");
+        assert!(error.starts_with("This is not an sshdeck extension"), "{error}");
         let script = tmp.path().join("script");
         write(&script, "#!/bin/sh\necho hello\n");
         let error = install_into(&drivers, &script).expect_err("script");
-        assert!(error.contains("нет описания JSON"), "{error}");
+        assert!(error.contains("no JSON description"), "{error}");
         let page = tmp.path().join("page");
         write(&page, "\n<!DOCTYPE html><html></html>");
         let error = install_into(&drivers, &page).expect_err("html");
-        assert!(error.contains("веб-страница"), "{error}");
+        assert!(error.contains("web page"), "{error}");
         let src = tmp.path().join("src");
         write(&src.join("a"), "1");
         write(&src.join("b"), "2");
         let error = install_into(&drivers, &src).expect_err("ambiguous");
-        assert!(error.contains("Не найдена программа"), "{error}");
+        assert!(error.contains("Extension program not found"), "{error}");
         assert!(fs::read_dir(&drivers).unwrap().next().is_none());
     }
 
@@ -741,7 +742,7 @@ mod tests {
                 Some(22),
                 "curl: (22) The requested URL returned error: 404\n"
             ),
-            "Не удалось скачать: по ссылке ничего нет (ошибка 404)"
+            "Could not download: nothing found at the link (error 404)"
         );
         assert!(download_error(Some(99), "curl: (99) odd").ends_with("(99) odd"));
     }

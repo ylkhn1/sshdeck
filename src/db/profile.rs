@@ -58,7 +58,7 @@ impl DbKind {
             DbKind::Postgres => "PostgreSQL",
             DbKind::MySql => "MySQL / MariaDB",
             DbKind::Sqlite => "SQLite",
-            DbKind::Extension => "Расширение",
+            DbKind::Extension => tr!("Extension"),
         }
     }
 
@@ -182,7 +182,7 @@ impl DbProfile {
     pub fn kind_label(&self) -> String {
         match self.kind {
             DbKind::Extension => self.extension().map_or_else(
-                || format!("{} (расширение не установлено)", self.driver),
+                || tr!("{} (extension not installed)", self.driver),
                 |ext| ext.name,
             ),
             kind => kind.label().to_string(),
@@ -252,23 +252,23 @@ impl DbProfile {
     /// Чего не хватает, чтобы подключиться; `None` — профиль годится.
     pub fn problem(&self) -> Option<String> {
         if self.kind == DbKind::Extension && self.extension().is_none() {
-            return Some(format!(
-                "Расширение «{}» не установлено. Положите его в {}",
+            return Some(tr!(
+                "Extension “{}” is not installed. Put it in {}",
                 self.driver,
                 super::extension::drivers_dir().display()
             ));
         }
         if self.is_networked() {
             if self.host.trim().is_empty() {
-                return Some("Укажите сервер базы данных".to_string());
+                return Some(tr!("Enter the database server").to_string());
             }
             if !self.ssh.trim().is_empty()
                 && let Err(message) = crate::session::validate_target(&self.ssh)
             {
-                return Some(format!("SSH-сервер: {message}"));
+                return Some(tr!("SSH server: {}", message));
             }
         } else if self.path.trim().is_empty() {
-            return Some("Укажите файл базы данных".to_string());
+            return Some(tr!("Choose the database file").to_string());
         }
         None
     }
@@ -464,7 +464,7 @@ mod tests {
         assert!(
             profile
                 .problem()
-                .is_some_and(|p| p.contains("не установлено"))
+                .is_some_and(|p| p.contains("is not installed"))
         );
     }
 

@@ -705,9 +705,20 @@ msgstr[2] "{} строк"
             .collect()
     }
 
-    /// The part of a file that ships: everything before its test module.
+    /// The part of a file that ships: everything before its `mod tests`
+    /// (other `#[cfg(test)]` items in the middle of a file are kept — they
+    /// are few and must not hide the code after them).
     fn shipped_part(text: &str) -> &str {
-        text.find("#[cfg(test)]").map_or(text, |at| &text[..at])
+        let mut from = 0;
+        while let Some(at) = text[from..].find("#[cfg(test)]") {
+            let at = from + at;
+            let rest = text[at + "#[cfg(test)]".len()..].trim_start();
+            if rest.starts_with("mod tests") {
+                return &text[..at];
+            }
+            from = at + 1;
+        }
+        text
     }
 
     /// Every string passed to tr!/trn!/trc!/n_! in the shipped code, with

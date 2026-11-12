@@ -7,3 +7,1641 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
+# --- core ---
+
+msgid "System default"
+msgstr "Как в системе"
+
+msgid "Language"
+msgstr "Язык (Language)"
+
+msgid "The new language will be used after sshdeck is restarted."
+msgstr "Новый язык включится после перезапуска sshdeck."
+
+# --- db ---
+
+msgid " · via {}"
+msgstr " · через {}"
+
+msgid "Could not read the database list: {}"
+msgstr "Не удалось прочитать список баз данных: {}"
+
+msgid "{} (copy)"
+msgstr "{} (копия)"
+
+msgid "Could not save the database list: {}"
+msgstr "Не удалось сохранить список баз данных: {}"
+
+msgid "Password not saved: {}"
+msgstr "Пароль не сохранён: {}"
+
+msgid "Password"
+msgstr "Пароль"
+
+msgid "Remember password"
+msgstr "Запомнить пароль"
+
+msgid "Stored in the system password storage (KWallet), not in a file"
+msgstr "В хранилище паролей системы (KWallet), не в файле"
+
+msgid "Connect to “{}”"
+msgstr "Подключение к «{}»"
+
+msgid "Cancel"
+msgstr "Отмена"
+
+msgid "Connect"
+msgstr "Подключиться"
+
+msgid "Delete Connection?"
+msgstr "Удалить подключение?"
+
+msgid "“{}” will be removed from the database list together with its saved password. The database itself will not change."
+msgstr "«{}» исчезнет из списка баз данных вместе с сохранённым паролем. Сама база не изменится."
+
+msgid "Delete"
+msgstr "Удалить"
+
+msgid "Edit Database Connection"
+msgstr "Изменить подключение к базе"
+
+msgid "New Database Connection"
+msgstr "Новое подключение к базе"
+
+msgid "When connecting over SSH, enter the database server as the SSH server sees it (usually localhost)."
+msgstr "При подключении через SSH сервер базы указывается так, как его видит SSH-сервер (обычно localhost)."
+
+msgid "Save"
+msgstr "Сохранить"
+
+msgid "{} (extension)"
+msgstr "{} (расширение)"
+
+msgid "Database type"
+msgstr "СУБД"
+
+msgid "Server"
+msgstr "Сервер"
+
+msgid "Port"
+msgstr "Порт"
+
+msgid "User"
+msgstr "Пользователь"
+
+msgid "Database (optional)"
+msgstr "База данных (необязательно)"
+
+msgid "Via SSH server (optional): user@host"
+msgstr "Через SSH-сервер (необязательно): user@host"
+
+msgid "Require encryption (TLS)"
+msgstr "Требовать шифрование (TLS)"
+
+msgid "The server certificate is not verified, as with sslmode=require"
+msgstr "Сертификат сервера не проверяется, как в sslmode=require"
+
+msgid "Database file"
+msgstr "Файл базы"
+
+msgid "Password (stored in KWallet, not in a file)"
+msgstr "Пароль (хранится в KWallet, не в файле)"
+
+msgid "Other databases — extensions"
+msgstr "Другие СУБД — расширения"
+
+msgid "Install"
+msgstr "Установить"
+
+msgid "Choose file"
+msgstr "Выбрать файл"
+
+msgid "Database File"
+msgstr "Файл базы данных"
+
+msgid "Installing {}…"
+msgstr "Устанавливаю {}…"
+
+msgid "Installed: {} — selected in the database type list"
+msgstr "Установлено: {} — выбрано в списке СУБД"
+
+msgid "Could Not Install Extension"
+msgstr "Не удалось установить расширение"
+
+msgid "New extension downloaded"
+msgstr "Скачано новое расширение"
+
+msgid "{}. Also downloaded: {}"
+msgstr "{}. Ещё скачано: {}"
+
+msgid "Download an extension — sshdeck will find it and offer to install it"
+msgstr "Скачайте расширение — sshdeck сам его найдёт и предложит установить"
+
+msgid "Extensions installed: {}. To add more, just download the file"
+msgstr "Установлено расширений: {}. Чтобы добавить ещё, просто скачайте файл"
+
+msgid "The port must be a number from 1 to 65535"
+msgstr "Порт — число от 1 до 65535"
+
+msgid "Installation was interrupted: {}"
+msgstr "Установка прервалась: {}"
+
+msgid "Background tasks did not start"
+msgstr "Фоновые задачи не запустились"
+
+msgid "in the Downloads folder"
+msgstr "в папке «Загрузки»"
+
+msgid "just now"
+msgstr "только что"
+
+msgid "{} min ago"
+msgstr "{} мин назад"
+
+msgid "{} hour ago"
+msgid_plural "{} hours ago"
+msgstr[0] "{} ч назад"
+msgstr[1] "{} ч назад"
+msgstr[2] "{} ч назад"
+
+msgid "{} day ago"
+msgid_plural "{} days ago"
+msgstr[0] "{} дн назад"
+msgstr[1] "{} дн назад"
+msgstr[2] "{} дн назад"
+
+msgid "downloaded {}, Downloads folder"
+msgstr "скачано {}, папка «Загрузки»"
+
+msgid "Downloaded"
+msgstr "Скачано"
+
+msgid "Found in the Downloads folder. Installing takes one click."
+msgstr "Найдено в папке «Загрузки». Установить — один щелчок."
+
+msgid "Installed"
+msgstr "Установленные"
+
+msgid "Just download the extension file — sshdeck will notice it in the Downloads folder. You can also drag a file or archive into this window. An extension is a program: install only from sources you trust."
+msgstr "Просто скачайте файл расширения — sshdeck сам заметит его в «Загрузках». Файл или архив можно и перетащить в это окно. Расширение — это программа: ставьте только из источников, которым доверяете."
+
+msgid "Choose file…"
+msgstr "Выбрать файл…"
+
+msgid "Extension program or a .zip or .tar.gz archive"
+msgstr "Программа расширения или архив .zip, .tar.gz"
+
+msgid "Link to extension file"
+msgstr "Ссылка на файл расширения"
+
+msgid "Extensions folder"
+msgstr "Папка расширений"
+
+msgid "Database Extensions"
+msgstr "Расширения СУБД"
+
+msgid "Dismiss"
+msgstr "Не предлагать"
+
+msgid "Nothing installed yet"
+msgstr "Пока ничего не установлено"
+
+msgid "Built-in PostgreSQL, MySQL/MariaDB and SQLite work without extensions"
+msgstr "Встроенные PostgreSQL, MySQL/MariaDB и SQLite работают без расширений"
+
+msgid "Remove extension"
+msgstr "Удалить расширение"
+
+msgid "system-wide"
+msgstr "в системе"
+
+msgid "Extension File"
+msgstr "Файл расширения"
+
+msgid "Installed: {}"
+msgstr "Установлено: {}"
+
+msgid "Remove Extension {}?"
+msgstr "Удалить расширение {}?"
+
+msgid "Saved connections will be kept and can be opened once the extension is installed again."
+msgstr "Сохранённые подключения останутся: их можно будет открыть, когда расширение установят снова."
+
+msgid "Remove"
+msgstr "Удалить"
+
+msgid "Removed: {}"
+msgstr "Удалено: {}"
+
+msgid "Could Not Remove Extension"
+msgstr "Не удалось удалить расширение"
+
+msgid "Could not start background threads: {}"
+msgstr "Не удалось запустить фоновые потоки: {}"
+
+msgid "via the {} tab"
+msgstr "через вкладку {}"
+
+msgid "via SSH {}"
+msgstr "через SSH {}"
+
+msgid "direct, TLS"
+msgstr "напрямую, TLS"
+
+msgid "direct"
+msgstr "напрямую"
+
+msgid "Cancelled"
+msgstr "Прервано"
+
+msgid "Could not read the columns of table {}"
+msgstr "Не удалось прочитать колонки таблицы {}"
+
+msgid "Reading the file was interrupted"
+msgstr "Чтение файла прервалось"
+
+msgid "Could not write the file: {}"
+msgstr "Не удалось записать файл: {}"
+
+msgid "Column"
+msgstr "Колонка"
+
+msgid "Type"
+msgstr "Тип"
+
+msgid "Default"
+msgstr "По умолчанию"
+
+msgid "Key"
+msgstr "Ключ"
+
+msgid "… ({} B)"
+msgstr "… ({} Б)"
+
+msgid "The server did not respond within {} s"
+msgstr "Сервер не ответил за {} с"
+
+msgid "The server requires a password, but none was given"
+msgstr "Сервер требует пароль, а он не указан"
+
+msgid "Detail: {}"
+msgstr "Подробности: {}"
+
+msgid "Hint: {}"
+msgstr "Подсказка: {}"
+
+msgid "Where: {}"
+msgstr "Где: {}"
+
+msgid "Position: {}"
+msgstr "Позиция: {}"
+
+msgid "The query returned no rows — nothing to export"
+msgstr "Запрос не вернул строк — выгружать нечего"
+
+msgid "(error in data rows {}–{})"
+msgstr "(ошибка в строках данных {}–{})"
+
+msgid "{} (code {}, SQLSTATE {})"
+msgstr "{} (код {}, SQLSTATE {})"
+
+msgid "Connection error: {}"
+msgstr "Ошибка соединения: {}"
+
+msgid "Could not open {}: the file does not exist or cannot be accessed"
+msgstr "Не удалось открыть {}: файла нет или нет доступа"
+
+msgid "Opening the database was interrupted"
+msgstr "Открытие базы прервалось"
+
+msgid "The query was interrupted by an internal error"
+msgstr "Запрос прервался из-за внутренней ошибки"
+
+msgid "{}\n(error in data row {})"
+msgstr "{}\n(ошибка в строке данных {})"
+
+msgid "Extension “{}” is not installed"
+msgstr "Расширение «{}» не установлено"
+
+msgid "(error in data rows {0}–{1}; {2} has already inserted {3})"
+msgstr "(ошибка в строках данных {0}–{1}; {2} {3} уже вставлено)"
+
+msgid "no JSON description"
+msgstr "нет описания JSON"
+
+msgid "no sshdeck_driver field"
+msgstr "нет поля sshdeck_driver"
+
+msgid "protocol version {}, {} is required"
+msgstr "версия протокола {}, нужна {}"
+
+msgid "the id must consist of Latin letters, digits, - and _"
+msgstr "id должен состоять из латинских букв, цифр, - и _"
+
+msgid "This extension is installed system-wide — remove it with your package manager"
+msgstr "Это расширение установлено в системе — удалить его можно менеджером пакетов"
+
+msgid "Could not delete {}: {}"
+msgstr "Не удалось удалить {}: {}"
+
+msgid "Could not create {}: {}"
+msgstr "Не удалось создать {}: {}"
+
+msgid "the file is not a program (there is no #! line at the start, or it was built for another system)"
+msgstr "файл не является программой (нет строки #! в начале или он собран для другой системы)"
+
+msgid "This is not an sshdeck extension: {}"
+msgstr "Это не расширение sshdeck: {}"
+
+msgid "Could not copy {}: {}"
+msgstr "Не удалось скопировать {}: {}"
+
+msgid "This is a web page, not an extension. You need the file itself: on GitHub, use the “Raw” or “Download raw file” button."
+msgstr "Это веб-страница, а не расширение. Нужен сам файл: на GitHub — кнопка «Raw» или «Download raw file»."
+
+msgid "Could not copy the file: {}"
+msgstr "Не удалось скопировать файл: {}"
+
+msgid "Could not unpack the archive: {}"
+msgstr "Не удалось распаковать архив: {}"
+
+msgid "Could not unpack the archive: bsdtar, tar or unzip is required"
+msgstr "Не удалось распаковать архив: нужна программа bsdtar, tar или unzip"
+
+msgid "Extension program not found: the archive must contain a file named driver or sshdeck-driver-<name>"
+msgstr "Не найдена программа расширения: в архиве должен быть файл driver или sshdeck-driver-<имя>"
+
+msgid "Could not make the file executable: {}"
+msgstr "Не удалось сделать файл исполняемым: {}"
+
+msgid "Could not replace {}: {}"
+msgstr "Не удалось заменить {}: {}"
+
+msgid "Could not install to {}: {}"
+msgstr "Не удалось установить в {}: {}"
+
+msgid "A link starting with https:// or http:// is required"
+msgstr "Нужна ссылка, начинающаяся с https:// или http://"
+
+msgid "Downloading from a link requires curl"
+msgstr "Для загрузки по ссылке нужна программа curl"
+
+msgid "Could not run curl: {}"
+msgstr "Не удалось запустить curl: {}"
+
+msgid "server not found — check the address and your internet connection"
+msgstr "сервер не найден — проверьте адрес и интернет"
+
+msgid "the server is not responding"
+msgstr "сервер не отвечает"
+
+msgid "the server is taking too long to respond"
+msgstr "сервер слишком долго не отвечает"
+
+msgid "secure connection error ({})"
+msgstr "ошибка защищённого соединения ({})"
+
+msgid "the file is larger than 100 MB — this does not look like an extension"
+msgstr "файл больше 100 МБ — это не похоже на расширение"
+
+msgid "nothing found at the link (error 404)"
+msgstr "по ссылке ничего нет (ошибка 404)"
+
+msgid "no access to the file (the link requires signing in)"
+msgstr "нет доступа к файлу (ссылка требует входа)"
+
+msgid "Could not download: {}"
+msgstr "Не удалось скачать: {}"
+
+msgid "Extension"
+msgstr "Расширение"
+
+msgid "{} (extension not installed)"
+msgstr "{} (расширение не установлено)"
+
+msgid "Extension “{}” is not installed. Put it in {}"
+msgstr "Расширение «{}» не установлено. Положите его в {}"
+
+msgid "Enter the database server"
+msgstr "Укажите сервер базы данных"
+
+msgid "SSH server: {}"
+msgstr "SSH-сервер: {}"
+
+msgid "Choose the database file"
+msgstr "Укажите файл базы данных"
+
+msgid "Password storage is unavailable: {}"
+msgstr "Хранилище паролей недоступно: {}"
+
+msgid "CSV for Excel (;)"
+msgstr "CSV для Excel (;)"
+
+msgid "{}: not JSON: {}"
+msgstr "{}: это не JSON: {}"
+
+msgid "Expected a JSON array: [{\"column\": value, …}, …]"
+msgstr "Ожидался JSON-массив: [{\"колонка\": значение, …}, …]"
+
+msgid "The file is empty"
+msgstr "Файл пустой"
+
+msgid "Line {}: {}"
+msgstr "Строка {}: {}"
+
+msgid "Item {}: expected an object {{\"column\": value}}"
+msgstr "Элемент {}: ожидался объект {{\"колонка\": значение}}"
+
+msgid "No column of the file matches the table columns.\nIn the file: {}\nIn the table: {}"
+msgstr "Ни одна колонка файла не совпала с колонками таблицы.\nВ файле: {}\nВ таблице: {}"
+
+msgid "The file has {} columns, but the table has {}. Add a row with the column names to the file."
+msgstr "В файле {} колонок, а в таблице {}. Добавьте в файл строку с именами колонок."
+
+msgid "Could not find a free port: {}"
+msgstr "Не удалось найти свободный порт: {}"
+
+msgid "Could not prepare a directory for the tunnel: {}"
+msgstr "Не удалось подготовить каталог для туннеля: {}"
+
+msgid "Could not start ssh: {}"
+msgstr "Не удалось запустить ssh: {}"
+
+msgid "ssh exited without giving a reason"
+msgstr "ssh завершился без объяснения причин"
+
+msgid "The SSH tunnel to {} could not be opened:\n{}\n\nOpen a tab with this server (the tunnel will use its connection) or set up passwordless login with a key."
+msgstr "SSH-туннель к {} не поднялся:\n{}\n\nОткройте вкладку с этим сервером (туннель пойдёт через её соединение) или настройте вход по ключу."
+
+msgid "The SSH tunnel to {} did not open within {} s"
+msgstr "SSH-туннель к {} не поднялся за {} с"
+
+msgid "no output"
+msgstr "нет вывода"
+
+msgid "did not respond within 5 s"
+msgstr "не ответило за 5 с"
+
+msgid "Could not start extension {}: {}"
+msgstr "Не удалось запустить расширение {}: {}"
+
+msgid "no stdin"
+msgstr "нет stdin"
+
+msgid "no stdout"
+msgstr "нет stdout"
+
+msgid "no stderr"
+msgstr "нет stderr"
+
+msgid "Extension {} exited"
+msgstr "Расширение {} завершилось"
+
+msgid "Extension {} exited:\n{}"
+msgstr "Расширение {} завершилось:\n{}"
+
+msgid "Extension {} does not accept requests: {}"
+msgstr "Расширение {} не принимает запросы: {}"
+
+msgid "Extension {} did not respond"
+msgstr "Расширение {} не ответило"
+
+# --- dbtab ---
+
+msgid "Loading…"
+msgstr "Загрузка…"
+
+msgid "Search tables"
+msgstr "Поиск таблиц"
+
+msgid "Reload databases and tables"
+msgstr "Перечитать базы и таблицы"
+
+msgid "Connecting…"
+msgstr "Подключение…"
+
+msgid "SELECT * FROM …\n\nCtrl+Enter — run the query under the cursor or the selection\nCtrl+Shift+Enter — run all text"
+msgstr "SELECT * FROM …\n\nCtrl+Enter — выполнить запрос под курсором или выделение\nCtrl+Shift+Enter — весь текст"
+
+msgid "Run"
+msgstr "Выполнить"
+
+msgid "Run the query under the cursor or the selected text (Ctrl+Enter)\nRun all editor text — Ctrl+Shift+Enter"
+msgstr "Выполнить запрос под курсором или выделенный текст (Ctrl+Enter)\nВесь текст редактора — Ctrl+Shift+Enter"
+
+msgid "Stop the query, export or import"
+msgstr "Прервать запрос, экспорт или импорт"
+
+msgid "Reconnect"
+msgstr "Переподключиться"
+
+msgid "Copied: {}"
+msgstr "Скопировано: {}"
+
+msgid "Database {}"
+msgstr "База данных {}"
+
+msgid "Size: {}"
+msgstr "Размер: {}"
+
+msgid "Double-click to make it active: editor queries will run in it"
+msgstr "Двойной щелчок — сделать активной: запросы редактора пойдут в неё"
+
+msgid "Schema {1}: {0} table"
+msgid_plural "Schema {1}: {0} tables"
+msgstr[0] "Схема {1}: {0} таблица"
+msgstr[1] "Схема {1}: {0} таблицы"
+msgstr[2] "Схема {1}: {0} таблиц"
+
+msgid "View {}.{}"
+msgstr "Представление {}.{}"
+
+msgid "Table {}.{}"
+msgstr "Таблица {}.{}"
+
+msgid "≈ {} row"
+msgid_plural "≈ {} rows"
+msgstr[0] "≈ {} строка"
+msgstr[1] "≈ {} строки"
+msgstr[2] "≈ {} строк"
+
+msgid "Size including indexes: {}"
+msgstr "Размер вместе с индексами: {}"
+
+msgid "Double-click for data, right-click for the menu"
+msgstr "Двойной щелчок — данные, правая кнопка — меню"
+
+msgid "primary key"
+msgstr "первичный ключ"
+
+msgid "Connecting via SSH…"
+msgstr "Подключение через SSH…"
+
+msgid "Loading the table list…"
+msgstr "Загрузка списка таблиц…"
+
+msgid "Write a query and press Ctrl+Enter.\nDouble-click a table on the left to see its data; right-click it for structure, export and import."
+msgstr "Напишите запрос и нажмите Ctrl+Enter.\nДвойной щелчок по таблице слева показывает её данные, правая кнопка — структуру, экспорт и импорт."
+
+msgid "Not connected"
+msgstr "Нет соединения"
+
+msgid "The server rejected the password"
+msgstr "Сервер не принял пароль"
+
+msgid "Enter Password"
+msgstr "Ввести пароль"
+
+msgid "Could not connect to the database"
+msgstr "Не удалось подключиться к базе данных"
+
+msgid "Connection failed"
+msgstr "Подключение не удалось"
+
+msgid "Error"
+msgstr "Ошибка"
+
+msgid "Loaded {0} row into {1}"
+msgid_plural "Loaded {0} rows into {1}"
+msgstr[0] "Загружено {0} строка в {1}"
+msgstr[1] "Загружено {0} строки в {1}"
+msgstr[2] "Загружено {0} строк в {1}"
+
+msgid "Exported {0} row to {1}"
+msgid_plural "Exported {0} rows to {1}"
+msgstr[0] "Выгружено {0} строка в {1}"
+msgstr[1] "Выгружено {0} строки в {1}"
+msgstr[2] "Выгружено {0} строк в {1}"
+
+msgid "Import failed; the table was not changed"
+msgstr "Импорт не удался, таблица не изменилась"
+
+msgid "Export failed"
+msgstr "Экспорт не удался"
+
+msgid "Could not read the table list:\n{}"
+msgstr "Не удалось прочитать список таблиц:\n{}"
+
+msgid "The database has no tables"
+msgstr "В базе нет таблиц"
+
+msgid "No schemas"
+msgstr "Нет схем"
+
+msgid "The server rejected the password. Enter it again."
+msgstr "Сервер не принял пароль. Введите его ещё раз."
+
+msgid "Connection to the database was lost"
+msgstr "Соединение с базой данных потеряно"
+
+msgid "database {}"
+msgstr "база {}"
+
+msgid "Nothing to run: write a query in the editor"
+msgstr "Нечего выполнять: напишите запрос в редакторе"
+
+msgid "Not connected to the database"
+msgstr "Нет соединения с базой данных"
+
+msgid "Wait for the query to finish or stop it"
+msgstr "Дождитесь окончания запроса или прервите его"
+
+msgid "Structure of {}"
+msgstr "Структура {}"
+
+msgid "Error: {}"
+msgstr "Ошибка: {}"
+
+msgid "No tables"
+msgstr "Нет таблиц"
+
+msgid "Nothing found.\nOnly expanded databases are searched — expand a database to search it too."
+msgstr "Ничего не найдено.\nПоиск идёт по раскрытым базам — раскройте базу, чтобы искать и в ней."
+
+msgid "Nothing found"
+msgstr "Ничего не найдено"
+
+msgid "Editor queries now run in database {}"
+msgstr "Запросы редактора выполняются в базе {}"
+
+msgid "Make Active"
+msgstr "Сделать активной"
+
+msgid "Refresh"
+msgstr "Обновить"
+
+msgid "Copy Name"
+msgstr "Скопировать имя"
+
+msgid "Insert Name into Editor"
+msgstr "Вставить имя в редактор"
+
+msgid "Data (First {} Row)"
+msgid_plural "Data (First {} Rows)"
+msgstr[0] "Данные (первая {} строка)"
+msgstr[1] "Данные (первые {} строки)"
+msgstr[2] "Данные (первые {} строк)"
+
+msgid "Structure"
+msgstr "Структура"
+
+msgid "Export Data…"
+msgstr "Экспорт данных…"
+
+msgid "Import Data…"
+msgstr "Импорт данных…"
+
+msgid "All rows of view {}.{}"
+msgstr "Все строки представления {}.{}"
+
+msgid "All rows of table {}.{}"
+msgstr "Все строки таблицы {}.{}"
+
+msgid "Nothing to export"
+msgstr "Нечего выгружать"
+
+msgid "The query will run again, and the file will get all of its rows, not just the first {}."
+msgstr "Запрос будет выполнен ещё раз, и в файл попадут все его строки, а не только первые {}."
+
+msgid "Only the first {} row will be saved: the query changes data, so it is not run again."
+msgid_plural "Only the first {} rows will be saved: the query changes data, so it is not run again."
+msgstr[0] "В файл попадёт только первая {} строка: запрос изменяет данные, поэтому повторно он не выполняется."
+msgstr[1] "В файл попадут только первые {} строки: запрос изменяет данные, поэтому повторно он не выполняется."
+msgstr[2] "В файл попадут только первые {} строк: запрос изменяет данные, поэтому повторно он не выполняется."
+
+msgid "{} row of the result will be saved."
+msgid_plural "{} rows of the result will be saved."
+msgstr[0] "В файл попадёт {} строка результата."
+msgstr[1] "В файл попадут {} строки результата."
+msgstr[2] "В файл попадут {} строк результата."
+
+msgid "Format"
+msgstr "Формат"
+
+msgid "Export Data"
+msgstr "Экспорт данных"
+
+msgid "Save As…"
+msgstr "Сохранить как…"
+
+msgid "Save To"
+msgstr "Куда сохранить"
+
+msgid "Saved {0} row to {1}"
+msgid_plural "Saved {0} rows to {1}"
+msgstr[0] "Сохранено {0} строка в {1}"
+msgstr[1] "Сохранено {0} строки в {1}"
+msgstr[2] "Сохранено {0} строк в {1}"
+
+msgid "Could not save the file: {}"
+msgstr "Не удалось сохранить файл: {}"
+
+msgid "Export → {}"
+msgstr "Экспорт → {}"
+
+msgid "All Files"
+msgstr "Все файлы"
+
+msgid "Import into {}.{}"
+msgstr "Импорт в {}.{}"
+
+msgid "First row has column names"
+msgstr "Первая строка — имена колонок"
+
+msgid "Otherwise values go into the table columns in order"
+msgstr "Иначе значения идут в колонки таблицы по порядку"
+
+msgid "Empty values as NULL"
+msgstr "Пустые значения — NULL"
+
+msgid "Otherwise as empty strings"
+msgstr "Иначе — пустые строки"
+
+msgid "Clear the table before loading"
+msgstr "Очистить таблицу перед загрузкой"
+
+msgid "All rows of the table will be deleted"
+msgstr "Все строки таблицы будут удалены"
+
+msgid "Rows are inserted in batches: on error, rows already inserted stay."
+msgstr "Строки вставляются порциями: при ошибке уже вставленные останутся."
+
+msgid "Loading runs in a single transaction: on error, the table is not changed."
+msgstr "Загрузка идёт одной транзакцией: при ошибке таблица не изменится."
+
+msgid "{} → {}.{}\n\nFile columns are matched to table columns by name. {}"
+msgstr "{} → {}.{}\n\nКолонки файла сопоставляются с колонками таблицы по именам. {}"
+
+msgid "Import Data"
+msgstr "Импорт данных"
+
+msgid "Load"
+msgstr "Загрузить"
+
+msgid "Import {} → {}"
+msgstr "Импорт {} → {}"
+
+msgid "No columns"
+msgstr "Нет колонок"
+
+msgid "Save the result to a file (CSV, JSON, SQL)"
+msgstr "Сохранить результат в файл (CSV, JSON, SQL)"
+
+msgid "The query returned no rows"
+msgstr "Запрос не вернул строк"
+
+msgid "running…"
+msgstr "выполняется…"
+
+msgid "Exported {} row"
+msgid_plural "Exported {} rows"
+msgstr[0] "Выгружено {} строка"
+msgstr[1] "Выгружено {} строки"
+msgstr[2] "Выгружено {} строк"
+
+msgid "From file {}"
+msgstr "Из файла {}"
+
+msgid "File: {}"
+msgstr "Файл: {}"
+
+msgid "Skipped file columns that are not in the table: {}"
+msgstr "Пропущены колонки файла, которых нет в таблице: {}"
+
+msgid "Done: {} row affected"
+msgid_plural "Done: {} rows affected"
+msgstr[0] "Готово: затронуто {} строка"
+msgstr[1] "Готово: затронуто {} строки"
+msgstr[2] "Готово: затронуто {} строк"
+
+msgid "Done"
+msgstr "Готово"
+
+msgid "{} statement executed"
+msgid_plural "{} statements executed"
+msgstr[0] "Выполнено запросов: {}"
+msgstr[1] "Выполнено запросов: {}"
+msgstr[2] "Выполнено запросов: {}"
+
+msgid "first {} row"
+msgid_plural "first {} rows"
+msgstr[0] "первая {} строка"
+msgstr[1] "первые {} строки"
+msgstr[2] "первые {} строк"
+
+msgid "Row {}"
+msgstr "Строка {}"
+
+msgid "Copy"
+msgstr "Скопировать"
+
+msgid "Close"
+msgstr "Закрыть"
+
+msgid "{} row"
+msgid_plural "{} rows"
+msgstr[0] "{} строка"
+msgstr[1] "{} строки"
+msgstr[2] "{} строк"
+
+msgid "{} ms"
+msgstr "{} мс"
+
+msgid "{} s"
+msgstr "{} с"
+
+# --- files ---
+
+msgid "XDG_RUNTIME_DIR is not set"
+msgstr "переменная XDG_RUNTIME_DIR не задана"
+
+msgid "Enter an address like user@host"
+msgstr "Введите адрес в виде user@host"
+
+msgid "The address contains invalid characters"
+msgstr "Адрес содержит недопустимые символы"
+
+msgid "A port number must follow -p"
+msgstr "После -p нужно указать порт"
+
+msgid "The port is specified twice"
+msgstr "Порт указан дважды"
+
+msgid "Option “{}” is not supported: only -p <port> is allowed"
+msgstr "Параметр «{}» не поддерживается: можно указать только -p <порт>"
+
+msgid "The address must not contain spaces"
+msgstr "Адрес не должен содержать пробелов"
+
+msgid "Invalid port “{}” (must be a number from 1 to 65535)"
+msgstr "Неверный порт: «{}» (нужно число от 1 до 65535)"
+
+msgid "No active connection. Log in to the server in this tab’s terminal first."
+msgstr "Нет активного соединения. Сначала войдите на сервер в терминале этой вкладки."
+
+msgid "The server did not confirm the shell settings change"
+msgstr "Сервер не подтвердил изменение настроек оболочки"
+
+msgid "Could not change the shell settings: {}"
+msgstr "Не удалось изменить настройки оболочки: {}"
+
+msgid "{0} already exists, but there is no .pub file next to it. Restore it with: ssh-keygen -y -f {0} > {0}.pub"
+msgstr "{0} уже существует, но рядом нет файла .pub. Восстановите его командой: ssh-keygen -y -f {0} > {0}.pub"
+
+msgid "Could not start {}: {}"
+msgstr "Не удалось запустить {}: {}"
+
+msgid "ssh-keygen failed: {}"
+msgstr "ssh-keygen завершился с ошибкой: {}"
+
+msgid "{}: not an SSH public key"
+msgstr "{}: это не открытый ключ SSH"
+
+msgid "The server did not confirm that the key was installed"
+msgstr "Сервер не подтвердил установку ключа"
+
+msgid "Could not install the key on the server: {}"
+msgstr "Не удалось установить ключ на сервер: {}"
+
+msgid "Unsupported format"
+msgstr "неподдерживаемый формат"
+
+msgid "The data source is unavailable"
+msgstr "источник данных недоступен"
+
+msgid "no such file or folder"
+msgstr "нет такого файла или каталога"
+
+msgid "permission denied"
+msgstr "недостаточно прав"
+
+msgid "the server does not support this operation"
+msgstr "сервер не поддерживает эту операцию"
+
+msgid "the server rejected the operation"
+msgstr "сервер отклонил операцию"
+
+msgid "server error: {}"
+msgstr "ошибка сервера: {}"
+
+msgid "No SFTP connection"
+msgstr "Нет SFTP-соединения"
+
+msgid "Could not get the ssh input/output pipes"
+msgstr "Не удалось получить каналы ввода-вывода ssh"
+
+msgid "Could not open an SFTP session: {}"
+msgstr "Не удалось открыть SFTP-сессию: {}"
+
+msgid "The server did not respond to the SFTP request"
+msgstr "Сервер не ответил на запрос SFTP"
+
+msgid "ssh exited ({})"
+msgstr "ssh завершился ({})"
+
+msgid "ssh exited: {}"
+msgstr "ssh завершился: {}"
+
+msgid "Could not create folder “{}”: {}"
+msgstr "Не удалось создать каталог «{}»: {}"
+
+msgid "Could not rename “{}”: {}"
+msgstr "Не удалось переименовать «{}»: {}"
+
+msgid "Could not delete “{}”: {}"
+msgstr "Не удалось удалить «{}»: {}"
+
+msgid "Connection lost"
+msgstr "Соединение потеряно"
+
+msgid "the name “{}” is already taken"
+msgstr "имя «{}» уже занято"
+
+msgid "Could not connect, or the connection was lost — see the terminal for details"
+msgstr "Соединение не установлено или разорвано — подробности в терминале"
+
+msgid "ssh was terminated by a signal"
+msgstr "ssh был прерван сигналом"
+
+msgid "Your key {} will be used."
+msgstr "Будет использован ваш ключ {}."
+
+msgid "There is no local key yet: {} will be created (ed25519, no passphrase)."
+msgstr "Локального ключа пока нет: будет создан {} (ed25519, без парольной фразы)."
+
+msgid "{}\n\nIts public part will be added to ~/.ssh/authorized_keys on {}. After that, ssh will log in to this server with the key instead of asking for a password. The app never sees or stores the password itself."
+msgstr "{}\n\nЕго открытая часть будет дописана в ~/.ssh/authorized_keys на {}. После этого ssh будет входить на этот сервер по ключу, не спрашивая пароль. Сам пароль приложение не видит и не сохраняет."
+
+msgid "Set Up Passwordless Login?"
+msgstr "Настроить вход без пароля?"
+
+msgid "Set Up"
+msgstr "Настроить"
+
+msgid "A new key {} was created."
+msgstr "Создан новый ключ {}."
+
+msgid "Passwordless Login Enabled"
+msgstr "Вход без пароля настроен"
+
+msgid "Key {} is installed on {}. Next time you will log in without a password."
+msgstr "Ключ {} установлен на {}. Следующий вход пройдёт без пароля."
+
+msgid "Key Already Installed"
+msgstr "Ключ уже установлен"
+
+msgid "Key {} is already on {}; nothing had to be changed."
+msgstr "Ключ {} уже есть на {}, ничего менять не пришлось."
+
+msgid "Key login setup was interrupted by an internal error"
+msgstr "Настройка входа по ключу прервалась из-за внутренней ошибки"
+
+msgid "Follow cd in the File Panel?"
+msgstr "Включить слежение за cd?"
+
+msgid "For the file panel to follow cd in the terminal, the shell on {} must report the current folder. fish does this by itself. For bash and zsh, three lines marked sshdeck-cwd will be appended to ~/.bashrc or ~/.zshrc on the server; they take effect in new sessions."
+msgstr "Чтобы панель файлов переходила вслед за cd в терминале, оболочка на {} должна сообщать текущий каталог. fish делает это сам. Для bash и zsh в конец ~/.bashrc или ~/.zshrc на сервере будет дописано три строки с пометкой sshdeck-cwd; они действуют в новых сеансах."
+
+msgid "Enable"
+msgstr "Включить"
+
+msgid "Following cd Enabled"
+msgstr "Слежение включено"
+
+msgid "The snippet was added to the shell settings file. It takes effect after you log in again: close the tab and reconnect."
+msgstr "Фрагмент дописан в файл настроек оболочки. Он заработает после нового входа: закройте вкладку и подключитесь снова."
+
+msgid "Following cd Already Enabled"
+msgstr "Слежение уже включено"
+
+msgid "The sshdeck-cwd snippet is already in the shell settings file."
+msgstr "Фрагмент sshdeck-cwd уже есть в файле настроек оболочки."
+
+msgid "Nothing to Change"
+msgstr "Ничего менять не нужно"
+
+msgid "The server uses fish, which reports the current folder by itself."
+msgstr "На сервере оболочка fish: она сама сообщает текущий каталог."
+
+msgid "Shell Not Supported"
+msgstr "Оболочка не поддерживается"
+
+msgid "Only bash and zsh can be set up automatically. No files on the server were changed."
+msgstr "Автоматически настраиваются только bash и zsh. Файлы сервера не изменены."
+
+msgid "Setup was interrupted by an internal error"
+msgstr "Настройка прервалась из-за внутренней ошибки"
+
+msgid "Could Not Start SFTP"
+msgstr "Не удалось запустить SFTP"
+
+msgid "Home folder"
+msgstr "Домашний каталог"
+
+msgid "Up one level"
+msgstr "На уровень вверх"
+
+msgid "Refresh (F5)"
+msgstr "Обновить (F5)"
+
+msgid "Current folder. Type a path and press Enter"
+msgstr "Текущий каталог. Впишите путь и нажмите Enter"
+
+msgid "Files…"
+msgstr "Файлы…"
+
+msgid "Folder…"
+msgstr "Каталог…"
+
+msgid "Upload"
+msgstr "Загрузить"
+
+msgid "Upload to the current folder on the server"
+msgstr "Загрузить на сервер в текущий каталог"
+
+msgid "Download"
+msgstr "Скачать"
+
+msgid "Download the selection to a local folder"
+msgstr "Скачать выбранное в локальный каталог"
+
+msgid "New folder"
+msgstr "Создать каталог"
+
+msgid "Show hidden files"
+msgstr "Показывать скрытые файлы"
+
+msgid "Follow cd in the terminal"
+msgstr "Следовать за cd в терминале"
+
+msgid "Size"
+msgstr "Размер"
+
+msgid "Modified"
+msgstr "Изменён"
+
+msgid "Name"
+msgstr "Имя"
+
+msgid "Open or Edit"
+msgstr "Открыть или править"
+
+msgid "Download…"
+msgstr "Скачать…"
+
+msgid "Go Here in Terminal"
+msgstr "Перейти сюда в терминале"
+
+msgid "Copy Path"
+msgstr "Копировать путь"
+
+msgid "Upload Files…"
+msgstr "Загрузить файлы…"
+
+msgid "Upload Folder…"
+msgstr "Загрузить каталог…"
+
+msgid "New Folder…"
+msgstr "Создать каталог…"
+
+msgid "Rename…"
+msgstr "Переименовать…"
+
+msgid "Broken symbolic link"
+msgstr "Битая символическая ссылка"
+
+msgid "Symbolic link"
+msgstr "Символическая ссылка"
+
+msgid "{} and {} more"
+msgid_plural "{} and {} more"
+msgstr[0] "{} и ещё {}"
+msgstr[1] "{} и ещё {}"
+msgstr[2] "{} и ещё {}"
+
+msgid "Could not open “{}”: {}"
+msgstr "Не удалось открыть «{}»: {}"
+
+msgid "Could not read “{}”: {}"
+msgstr "Не удалось прочитать «{}»: {}"
+
+msgid "Connection Closed"
+msgstr "Соединение закрыто"
+
+msgid "Click “Reconnect” to log in again."
+msgstr "Нажмите «Переподключиться», чтобы войти снова."
+
+msgid "Waiting for Login"
+msgstr "Ожидание входа"
+
+msgid "Enter your password or key passphrase in the terminal on the right — the file panel will connect automatically."
+msgstr "Введите пароль или фразу ключа в терминале справа — панель файлов подключится сама."
+
+msgid "No SFTP Connection"
+msgstr "Нет SFTP-соединения"
+
+msgid "{}\nThe panel will connect once you log in in the terminal."
+msgstr "{}\nПанель подключится, когда в терминале будет выполнен вход."
+
+msgid "“{}” cannot be opened: it is neither a file nor a folder"
+msgstr "«{}» нельзя открыть: это не файл и не каталог"
+
+msgid "Select a single file or folder"
+msgstr "Выберите один файл или каталог"
+
+msgid "New Folder"
+msgstr "Создать каталог"
+
+msgid "Name of the new folder in {}"
+msgstr "Имя нового каталога в {}"
+
+msgid "Create"
+msgstr "Создать"
+
+msgid "The name cannot contain “/”"
+msgstr "Имя не может содержать «/»"
+
+msgid "Select a single item to rename"
+msgstr "Для переименования выберите один элемент"
+
+msgid "Rename"
+msgstr "Переименовать"
+
+msgid "New name for “{}”"
+msgstr "Новое имя для «{}»"
+
+msgid "Select what to delete"
+msgstr "Выберите, что удалить"
+
+msgid "Delete “{}” from the Server?"
+msgstr "Удалить «{}» с сервера?"
+
+msgid "Delete {} Item from the Server?"
+msgid_plural "Delete {} Items from the Server?"
+msgstr[0] "Удалить с сервера элементы: {}?"
+msgstr[1] "Удалить с сервера элементы: {}?"
+msgstr[2] "Удалить с сервера элементы: {}?"
+
+msgid "Folders are deleted with all their contents."
+msgstr "Каталоги удаляются вместе со всем содержимым."
+
+msgid "This action cannot be undone."
+msgstr "Это действие нельзя отменить."
+
+msgid "Select files or folders to download"
+msgstr "Выберите файлы или каталоги для скачивания"
+
+msgid "Download to Folder"
+msgstr "Скачать в каталог"
+
+msgid "Download Here"
+msgstr "Скачать сюда"
+
+msgid "The selected folder is not local"
+msgstr "Выбранный каталог не локальный"
+
+msgid "Downloading {}"
+msgstr "Скачивание: {}"
+
+msgid "Replace Existing Local Files?"
+msgstr "Заменить существующие локальные файлы?"
+
+msgid "The selected folder already contains: {}"
+msgstr "В выбранном каталоге уже есть: {}"
+
+msgid "Replace"
+msgstr "Заменить"
+
+msgid "Upload Folder"
+msgstr "Загрузить каталог"
+
+msgid "Upload Files"
+msgstr "Загрузить файлы"
+
+msgid "Uploading {}"
+msgstr "Загрузка: {}"
+
+msgid "Replace Existing Files on the Server?"
+msgstr "Заменить существующие файлы на сервере?"
+
+msgid "{} already contains: {}"
+msgstr "В {} уже есть: {}"
+
+msgid "Cancel transfer"
+msgstr "Отменить передачу"
+
+msgid "Preparing…"
+msgstr "Подготовка…"
+
+msgid "{} of {}"
+msgstr "{} из {}"
+
+msgid "{} — skipped (links to folders and special files): {}"
+msgstr "{} — пропущено (ссылки на каталоги и спецфайлы): {}"
+
+msgid "Could not create a temporary folder: {}"
+msgstr "Не удалось создать временный каталог: {}"
+
+msgid "the tab is closed"
+msgstr "вкладка закрыта"
+
+msgid "Dragging {}"
+msgstr "Перетаскивание: {}"
+
+msgid "the transfer was cancelled"
+msgstr "передача отменена"
+
+msgid "the transfer was interrupted"
+msgstr "передача прервана"
+
+msgid "Open “{}”?"
+msgstr "Открыть «{}»?"
+
+msgid "The file is large ({}); it will be downloaded in full to a temporary folder."
+msgstr "Файл большой ({}); он будет скачан целиком во временный каталог."
+
+msgid "Open"
+msgstr "Открыть"
+
+msgid "Opening {}"
+msgstr "Открытие: {}"
+
+msgid "Could not watch “{}” for changes: {}"
+msgstr "Не удалось включить слежение за изменениями «{}»: {}"
+
+msgid "Saving {} to the server"
+msgstr "Сохранение на сервер: {}"
+
+msgid "Saved to the server: {}"
+msgstr "Сохранено на сервер: {}"
+
+# --- shell ---
+
+msgid "Checking availability…"
+msgstr "Проверяю доступность…"
+
+msgid "Search or user@host"
+msgstr "Поиск или user@host"
+
+msgid "Quick connect: user@host, user@host -p 2222 or an alias from ~/.ssh/config"
+msgstr "Быстрое подключение: user@host, user@host -p 2222 или псевдоним из ~/.ssh/config"
+
+msgid "Save a new connection"
+msgstr "Сохранить новое подключение"
+
+msgid "Reload saved connections and ~/.ssh/config"
+msgstr "Перечитать сохранённые подключения и ~/.ssh/config"
+
+msgid "The file was renamed to {}."
+msgstr "Файл переименован в {}."
+
+msgid "Fix the file by hand: the next save will overwrite it."
+msgstr "Исправьте файл вручную: новое сохранение его перезапишет."
+
+msgid "Could not read saved connections: {}\n{}"
+msgstr "Не удалось прочитать сохранённые подключения: {}\n{}"
+
+msgid "Could not save connections: {}"
+msgstr "Не удалось сохранить подключения: {}"
+
+msgid "the check was interrupted"
+msgstr "проверка прервалась"
+
+msgid "Saved"
+msgstr "Сохранённые"
+
+msgid "Nothing here yet. Press “+” at the top to save a connection with a name and folder."
+msgstr "Пока пусто. Нажмите «+» вверху, чтобы сохранить подключение с названием и папкой."
+
+msgid "PostgreSQL, MySQL, MariaDB or SQLite — press “+” next to the heading. Servers can be reached over SSH."
+msgstr "PostgreSQL, MySQL, MariaDB или SQLite — нажмите «+» справа от заголовка. Сервер можно открыть через SSH."
+
+msgid "From ~/.ssh/config"
+msgstr "Из ~/.ssh/config"
+
+msgid "New database connection"
+msgstr "Новое подключение к базе данных"
+
+msgid "Databases"
+msgstr "Базы данных"
+
+msgid "Click to collapse or expand the folder"
+msgstr "Щелчок сворачивает и разворачивает папку"
+
+msgid "Edit…"
+msgstr "Изменить…"
+
+msgid "Duplicate…"
+msgstr "Дублировать…"
+
+msgid "Delete…"
+msgstr "Удалить…"
+
+msgid "New Connection in Folder…"
+msgstr "Новое подключение в папке…"
+
+msgid "Rename Folder…"
+msgstr "Переименовать папку…"
+
+msgid "Red"
+msgstr "Красный"
+
+msgid "Orange"
+msgstr "Оранжевый"
+
+msgid "Yellow"
+msgstr "Жёлтый"
+
+msgid "Green"
+msgstr "Зелёный"
+
+msgid "Blue"
+msgstr "Синий"
+
+msgid "Purple"
+msgstr "Фиолетовый"
+
+msgid "Brown"
+msgstr "Коричневый"
+
+msgid "No Color"
+msgstr "Без цвета"
+
+msgid "Folder Color"
+msgstr "Цвет папки"
+
+msgid "Remove Folder, Keep Connections"
+msgstr "Убрать папку, оставив подключения"
+
+msgid "Delete Folder and Connections…"
+msgstr "Удалить папку с подключениями…"
+
+msgid "Save to Connections…"
+msgstr "Сохранить в подключения…"
+
+msgid "New Connection…"
+msgstr "Новое подключение…"
+
+msgid "New Database Connection…"
+msgstr "Новое подключение к базе…"
+
+msgid "Database Extensions…"
+msgstr "Расширения СУБД…"
+
+msgid "“{}” ({}) will be removed from the list. Nothing changes on the server."
+msgstr "«{}» ({}) исчезнет из списка. На сервере ничего не меняется."
+
+msgid "Rename Folder"
+msgstr "Переименовать папку"
+
+msgid "If a folder with this name already exists, the connections will be merged into it."
+msgstr "Если папка с таким названием уже есть, подключения объединятся в ней."
+
+msgid "Folder “{}” removed, connections kept"
+msgstr "Папка «{}» убрана, подключения сохранены"
+
+msgid "Delete Folder and Connections?"
+msgstr "Удалить папку с подключениями?"
+
+msgid "Folder “{}” and the saved connections in it ({}) will be removed from the list. Nothing changes on the servers."
+msgstr "Папка «{}» и сохранённые в ней подключения ({}) исчезнут из списка. На серверах ничего не меняется."
+
+msgctxt "connection or command"
+msgid "Name"
+msgstr "Название"
+
+msgid "Address: user@host or user@host -p 2222"
+msgstr "Адрес: user@host или user@host -p 2222"
+
+msgid "Folder (optional)"
+msgstr "Папка (необязательно)"
+
+msgid "Choose an existing folder"
+msgstr "Выбрать существующую папку"
+
+msgid "Command after login (optional)"
+msgstr "Команда после входа (необязательно)"
+
+msgid "Edit Connection"
+msgstr "Изменить подключение"
+
+msgid "New Connection"
+msgstr "Новое подключение"
+
+msgid "Passwords are not saved: ssh still asks for them in the terminal."
+msgstr "Пароли не сохраняются: их по-прежнему спрашивает ssh в терминале."
+
+msgid "{} — {}\nDouble-click to connect"
+msgstr "{} — {}\nДвойной щелчок — подключиться"
+
+msgid "Match window style"
+msgstr "Как оформление окна"
+
+msgid "Light"
+msgstr "Светлая"
+
+msgid "Dark"
+msgstr "Тёмная"
+
+msgid "No Open Sessions"
+msgstr "Нет открытых сессий"
+
+msgid "Double-click a connection or database on the left, or type user@host and press Enter"
+msgstr "Дважды щёлкните подключение или базу данных слева, или введите user@host и нажмите Enter"
+
+msgid "Passwordless Login (Key) for This Tab…"
+msgstr "Вход без пароля (ключ) для этой вкладки…"
+
+msgid "File Panel Follows cd on This Server…"
+msgstr "Слежение панели за cd на этом сервере…"
+
+msgid "Theme"
+msgstr "Тема"
+
+msgid "Terminal Font…"
+msgstr "Шрифт терминала…"
+
+msgid "Reload Connection List"
+msgstr "Перечитать список подключений"
+
+msgid "Menu"
+msgstr "Меню"
+
+msgid "Show or hide the connection list"
+msgstr "Показать или скрыть список подключений"
+
+msgid "Show or hide the file panel"
+msgstr "Показать или скрыть панель файлов"
+
+msgid "Open a tab and log in to a server first"
+msgstr "Сначала откройте вкладку и войдите на сервер"
+
+msgid "Open a tab and log in to a server first — the key is installed through it"
+msgstr "Сначала откройте вкладку и войдите на сервер — ключ ставится через неё"
+
+msgid "Could Not Prepare the Socket Directory"
+msgstr "Не удалось подготовить каталог для сокетов"
+
+msgid "Could not save settings: {}"
+msgstr "Не удалось сохранить настройки: {}"
+
+msgid "Terminal Font"
+msgstr "Шрифт терминала"
+
+msgid "Add Command…"
+msgstr "Добавить команду…"
+
+msgid "Saved commands"
+msgstr "Сохранённые команды"
+
+msgid "Your commands will appear here. Click a command to run it in the terminal of the current tab."
+msgstr "Здесь будут ваши команды. Щелчок по команде выполняет её в терминале текущей вкладки."
+
+msgid "Run in the terminal:\n{}"
+msgstr "Выполнить в терминале:\n{}"
+
+msgid "Edit"
+msgstr "Изменить"
+
+msgid "No open tab to send the command to"
+msgstr "Нет открытой вкладки: команду некуда отправить"
+
+msgid "Delete Command?"
+msgstr "Удалить команду?"
+
+msgid "“{}” will be removed from the saved commands."
+msgstr "«{}» исчезнет из списка сохранённых команд."
+
+msgid "Command"
+msgstr "Команда"
+
+msgid "Edit Command"
+msgstr "Изменить команду"
+
+msgid "New Command"
+msgstr "Новая команда"
+
+msgid "Clicking a command in the list types it into the terminal of the current tab and presses Enter."
+msgstr "Щелчок по команде в списке набирает её в терминале текущей вкладки и нажимает Enter."
+
+msgid "Server CPU usage"
+msgstr "Загрузка процессора сервера"
+
+msgid "RAM"
+msgstr "ОЗУ"
+
+msgid "Memory in use out of the server’s total memory"
+msgstr "Занято памяти из всей памяти сервера"
+
+msgid "Disk /"
+msgstr "Диск /"
+
+msgid "Root partition usage"
+msgstr "Заполненность корневого раздела"
+
+msgid "Network"
+msgstr "Сеть"
+
+msgid "Receive and send rates across all server interfaces"
+msgstr "Приём и передача по всем интерфейсам сервера"
+
+msgid "Uptime"
+msgstr "Аптайм"
+
+msgid "Time since the server was last rebooted"
+msgstr "Время работы сервера без перезагрузки"
+
+msgctxt "load average"
+msgid "Load"
+msgstr "Нагрузка"
+
+msgid "One-minute load average"
+msgstr "Средняя нагрузка за минуту (load average)"
+
+msgid "{}%"
+msgstr "{} %"
+
+msgid "↓ {}/s  ↑ {}/s"
+msgstr "↓ {}/с  ↑ {}/с"
+
+msgid "Details"
+msgstr "Подробнее"
+
+msgid "Message"
+msgstr "Сообщение"
+
+msgid "B"
+msgstr "Б"
+
+msgid "KB"
+msgstr "КБ"
+
+msgid "MB"
+msgstr "МБ"
+
+msgid "GB"
+msgstr "ГБ"
+
+msgid "TB"
+msgstr "ТБ"
+
+msgid "Online · {} ms"
+msgstr "В сети · {} мс"
+
+msgid "Unreachable: {}"
+msgstr "Недоступен: {}"
+
+msgid "Not checked: {}"
+msgstr "Не проверяется: {}"
+
+msgid "could not start ssh: {}"
+msgstr "не удалось запустить ssh: {}"
+
+msgid "connects through {}"
+msgstr "подключение через {}"
+
+msgid "ssh could not parse the address"
+msgstr "ssh не смог разобрать адрес"
+
+msgid "name {} not found"
+msgstr "имя {} не найдено"
+
+msgid "{} has no addresses"
+msgstr "у {} нет адресов"
+
+msgid "the server closed the connection without an SSH greeting"
+msgstr "сервер закрыл соединение без приветствия SSH"
+
+msgid "the port is open, but there is no SSH greeting"
+msgstr "порт открыт, но приветствия SSH нет"
+
+msgid "something other than SSH answers on the port"
+msgstr "на порту отвечает не SSH"
+
+msgid "port {} is closed"
+msgstr "порт {} закрыт"
+
+msgid "the server reset the connection"
+msgstr "сервер сбросил соединение"
+
+msgid "no response"
+msgstr "нет ответа"
+
+msgid "no route to the server"
+msgstr "нет маршрута до сервера"
+
+msgid "{} d {} h"
+msgstr "{} д {} ч"
+
+msgid "{} h {} min"
+msgstr "{} ч {} мин"
+
+msgid "{} min"
+msgstr "{} мин"
+
+msgid "{}: Include is nested too deeply"
+msgstr "{}: слишком глубокая вложенность Include"
+
+msgid "{}: could not read: {}"
+msgstr "{}: не удалось прочитать: {}"

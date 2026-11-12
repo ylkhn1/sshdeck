@@ -141,7 +141,7 @@ fn free_port() -> Result<u16, String> {
     std::net::TcpListener::bind("127.0.0.1:0")
         .and_then(|listener| listener.local_addr())
         .map(|addr| addr.port())
-        .map_err(|err| format!("Не удалось найти свободный порт: {err}"))
+        .map_err(|err| tr!("Could not find a free port: {}", err))
 }
 
 /// Готов ли локальный конец туннеля.
@@ -238,12 +238,12 @@ async fn wait_for_socket(socket: &Path, port: Option<u16>) -> bool {
 /// Поднимает туннель и ждёт, пока сокет будет готов принимать соединения.
 pub async fn open(spec: Spec<'_>) -> Result<Tunnel, String> {
     let runtime = session::runtime_dir()
-        .map_err(|err| format!("Не удалось подготовить каталог для туннеля: {err}"))?;
+        .map_err(|err| tr!("Could not prepare a directory for the tunnel: {}", err))?;
     let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
     let dir = runtime.join(format!("db-{}-{id}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     session::ensure_private_dir(&dir)
-        .map_err(|err| format!("Не удалось создать {}: {err}", dir.display()))?;
+        .map_err(|err| tr!("Could not create {}: {}", dir.display(), err))?;
     let (socket, port, forward) = match spec.local {
         Local::Socket(name) => {
             let socket = dir.join(name);
@@ -280,14 +280,14 @@ pub async fn open(spec: Spec<'_>) -> Result<Tunnel, String> {
             }
             drop(tunnel);
             session::ensure_private_dir(&dir)
-                .map_err(|err| format!("Не удалось создать {}: {err}", dir.display()))?;
+                .map_err(|err| tr!("Could not create {}: {}", dir.display(), err))?;
         }
         // Мастер не ответил — пробуем отдельное соединение.
     }
 
     let mut child = command(&own_argv(&forward, spec.target))
         .spawn()
-        .map_err(|err| format!("Не удалось запустить ssh: {err}"))?;
+        .map_err(|err| tr!("Could not start ssh: {}", err))?;
     let deadline = tokio::time::Instant::now() + OPEN_TIMEOUT;
     loop {
         if ready(&socket, port).await {
@@ -304,17 +304,18 @@ pub async fn open(spec: Spec<'_>) -> Result<Tunnel, String> {
                 let _ = pipe.take(STDERR_LIMIT).read_to_end(&mut stderr).await;
             }
             let _ = std::fs::remove_dir_all(&dir);
-            let message = ssh_message(&stderr, "ssh завершился без объяснения причин");
-            return Err(format!(
-                "SSH-туннель к {} не поднялся:\n{message}\n\nОткройте вкладку с этим сервером \
-                 (туннель пойдёт через её соединение) или настройте вход по ключу.",
-                spec.target
+            let message = ssh_message(&stderr, tr!("ssh exited without giving a reason"));
+            return Err(tr!(
+                "The SSH tunnel to {} could not be opened:\n{}\n\nOpen a tab with this server \
+                 (the tunnel will use its connection) or set up passwordless login with a key.",
+                spec.target,
+                message
             ));
         }
         if tokio::time::Instant::now() >= deadline {
             let _ = std::fs::remove_dir_all(&dir);
-            return Err(format!(
-                "SSH-туннель к {} не поднялся за {} с",
+            return Err(tr!(
+                "The SSH tunnel to {} did not open within {} s",
                 spec.target,
                 OPEN_TIMEOUT.as_secs()
             ));

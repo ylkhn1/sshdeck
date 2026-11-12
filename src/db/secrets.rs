@@ -33,7 +33,7 @@ fn attributes(key: &str) -> HashMap<&'static str, String> {
 }
 
 fn describe(err: oo7::Error) -> String {
-    format!("Хранилище паролей недоступно: {err}")
+    tr!("Password storage is unavailable: {}", err)
 }
 
 async fn keyring() -> Result<oo7::Keyring, String> {

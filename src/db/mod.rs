@@ -6,8 +6,6 @@
 
 mod driver;
 pub mod extension;
-#[cfg(test)]
-mod live_tests;
 pub mod profile;
 pub mod secrets;
 pub mod sql;
@@ -144,7 +142,7 @@ fn runtime() -> Result<&'static Runtime, String> {
         .thread_name("sshdeck-db")
         .enable_all()
         .build()
-        .map_err(|err| format!("Не удалось запустить фоновые потоки: {err}"))?;
+        .map_err(|err| tr!("Could not start background threads: {}", err))?;
     Ok(RUNTIME.get_or_init(|| runtime))
 }
 
@@ -175,12 +173,17 @@ pub fn scan_extensions() -> async_channel::Receiver<Vec<extension::ExtensionInfo
 /// Похоже ли сообщение об ошибке подключения на неверный или пустой пароль.
 pub fn is_auth_error(message: &str) -> bool {
     let lower = message.to_lowercase();
+    // Наши сообщения переведены на язык интерфейса; он не меняется до
+    // перезапуска, поэтому сообщение и образец здесь на одном языке.
+    // MySQL узнаётся по SQLSTATE 28000 (1045 и др.): это слово не
+    // переводится.
+    let no_password = tr!("The server requires a password, but none was given").to_lowercase();
     [
         "password authentication failed",
-        "сервер требует пароль",
         "access denied",
-        "(код 1045",
+        "sqlstate 28000",
         "authentication failed",
+        no_password.as_str(),
     ]
     .iter()
     .any(|needle| lower.contains(needle))
@@ -255,13 +258,13 @@ async fn connect(
         .await
         .map_err(|err| err.message)?;
     let route = match &tunnel {
-        Some(tunnel) if tunnel.via_tab() => format!("через вкладку {}", profile.ssh),
-        Some(_) => format!("через SSH {}", profile.ssh),
+        Some(tunnel) if tunnel.via_tab() => tr!("via the {} tab", profile.ssh),
+        Some(_) => tr!("via SSH {}", profile.ssh),
         None if profile.is_networked() => {
             if profile.tls {
-                "напрямую, TLS".to_string()
+                tr!("direct, TLS").to_string()
             } else {
-                "напрямую".to_string()
+                tr!("direct").to_string()
             }
         }
         None => profile.summary(),
@@ -391,7 +394,7 @@ struct Worker {
 }
 
 fn cancelled() -> DbError {
-    DbError::new("Прервано")
+    DbError::new(tr!("Cancelled"))
 }
 
 /// Что выполнить в соединении редактора.
@@ -606,8 +609,9 @@ impl Worker {
                 .map(|column| column.name)
                 .collect();
             if table_columns.is_empty() {
-                return Err(DbError::new(format!(
-                    "Не удалось прочитать колонки таблицы {table}"
+                return Err(DbError::new(tr!(
+                    "Could not read the columns of table {}",
+                    table
                 )));
             }
             let bool_text = match backend.kind() {
@@ -621,7 +625,7 @@ impl Worker {
                 Ok::<_, String>((file, first))
             })
             .await
-            .map_err(|_| DbError::new("Чтение файла прервалось"))?
+            .map_err(|_| DbError::new(tr!("Reading the file was interrupted")))?
             .map_err(DbError::new)?;
             let width = first.as_ref().map_or(0, Vec::len);
             let map = transfer::ColumnMap::build(file.columns.as_deref(), &table_columns, width)
@@ -797,6 +801,11 @@ async fn run(
     drop(tunnel);
 }
 
+// Объявлен здесь, а не наверху: всё, что выше первого `#[cfg(test)]`,
+// проверяется тестами переводов (i18n.rs).
+#[cfg(test)]
+mod live_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -807,10 +816,11 @@ mod tests {
             "FATAL: password authentication failed for user \"app\""
         ));
         assert!(is_auth_error(
-            "Access denied for user 'root'@'1.2.3.4' (using password: YES) (код 1045, SQLSTATE 28000)"
+            "Access denied for user 'root'@'1.2.3.4' (using password: YES) (code 1045, SQLSTATE 28000)"
         ));
-        assert!(is_auth_error("Сервер требует пароль, а он не указан"));
-        assert!(!is_auth_error("Сервер не ответил за 20 с"));
+        assert!(is_auth_error("Accès refusé (code 1698, SQLSTATE 28000)"));
+        assert!(is_auth_error("The server requires a password, but none was given"));
+        assert!(!is_auth_error("The server did not respond within 20 s"));
     }
 
     #[test]

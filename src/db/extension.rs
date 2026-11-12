@@ -131,14 +131,14 @@ fn parse_info(text: &str, path: &Path) -> Result<ExtensionInfo, String> {
         .lines()
         .map(str::trim)
         .find(|line| line.starts_with('{'))
-        .ok_or("нет описания JSON")?;
+        .ok_or(tr!("no JSON description"))?;
     let value: Value = serde_json::from_str(line).map_err(|err| err.to_string())?;
     let protocol = value
         .get("sshdeck_driver")
         .and_then(Value::as_u64)
-        .ok_or("нет поля sshdeck_driver")?;
+        .ok_or(tr!("no sshdeck_driver field"))?;
     if protocol != PROTOCOL {
-        return Err(format!("версия протокола {protocol}, нужна {PROTOCOL}"));
+        return Err(tr!("protocol version {}, {} is required", protocol, PROTOCOL));
     }
     let text_field = |key: &str| {
         value
@@ -154,7 +154,7 @@ fn parse_info(text: &str, path: &Path) -> Result<ExtensionInfo, String> {
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
     {
-        return Err("id должен состоять из латинских букв, цифр, - и _".to_string());
+        return Err(tr!("the id must consist of Latin letters, digits, - and _").to_string());
     }
     let name = match text_field("name") {
         name if name.is_empty() => id.clone(),
@@ -182,7 +182,7 @@ fn parse_info(text: &str, path: &Path) -> Result<ExtensionInfo, String> {
 /// Разбор описания (для тестов в других модулях).
 #[cfg(test)]
 pub fn scan_info_for_test(text: &str, path: &Path) -> ExtensionInfo {
-    parse_info(text, path).expect("описание расширения")
+    parse_info(text, path).expect("extension description")
 }
 
 /// Запускает `--sshdeck-info` с ограничением по времени.
@@ -194,7 +194,7 @@ fn query_info(path: &Path) -> Result<ExtensionInfo, String> {
         .stderr(Stdio::null())
         .spawn()
         .map_err(|err| err.to_string())?;
-    let mut stdout = child.stdout.take().ok_or("нет вывода")?;
+    let mut stdout = child.stdout.take().ok_or(tr!("no output"))?;
     let reader = std::thread::spawn(move || {
         let mut text = String::new();
         let _ = stdout.by_ref().take(64 * 1024).read_to_string(&mut text);
@@ -210,7 +210,7 @@ fn query_info(path: &Path) -> Result<ExtensionInfo, String> {
             _ => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err("не ответило за 5 с".to_string());
+                return Err(tr!("did not respond within 5 s").to_string());
             }
         }
     }
@@ -332,14 +332,15 @@ impl Plugin {
             .kill_on_drop(true)
             .spawn()
             .map_err(|err| {
-                format!(
-                    "Не удалось запустить расширение {}: {err}",
-                    info.path.display()
+                tr!(
+                    "Could not start extension {}: {}",
+                    info.path.display(),
+                    err
                 )
             })?;
-        let stdin = child.stdin.take().ok_or("нет stdin")?;
-        let stdout = child.stdout.take().ok_or("нет stdout")?;
-        let stderr = child.stderr.take().ok_or("нет stderr")?;
+        let stdin = child.stdin.take().ok_or(tr!("no stdin"))?;
+        let stdout = child.stdout.take().ok_or(tr!("no stdout"))?;
+        let stderr = child.stderr.take().ok_or(tr!("no stderr"))?;
         let pending = Arc::new(Mutex::new(Pending::default()));
         let tail = Arc::new(Mutex::new(String::new()));
 
@@ -404,9 +405,9 @@ impl Plugin {
                     .map(|t| t.trim().to_string())
                     .unwrap_or_default();
                 let reason = if stderr.is_empty() {
-                    format!("Расширение {name} завершилось")
+                    tr!("Extension {} exited", name)
                 } else {
-                    format!("Расширение {name} завершилось:\n{stderr}")
+                    tr!("Extension {} exited:\n{}", name, stderr)
                 };
                 if let Ok(mut pending) = pending.lock() {
                     for (_, waiter) in pending.waiters.drain() {
@@ -460,7 +461,7 @@ impl Plugin {
             }
             return Err(CallError {
                 message: self.closed().unwrap_or_else(|| {
-                    format!("Расширение {} не принимает запросы: {err}", self.name)
+                    tr!("Extension {} does not accept requests: {}", self.name, err)
                 }),
                 lost: true,
             });
@@ -474,7 +475,7 @@ impl Plugin {
             Err(_) => Err(CallError {
                 message: self
                     .closed()
-                    .unwrap_or_else(|| format!("Расширение {} не ответило", self.name)),
+                    .unwrap_or_else(|| tr!("Extension {} did not respond", self.name)),
                 lost: true,
             }),
         }
