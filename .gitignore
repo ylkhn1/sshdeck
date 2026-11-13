@@ -55,3 +55,9 @@ id_ecdsa*
 
 # Собранные архивы релизов
 /dist/
+
+# Артефакты makepkg
+/packaging/aur/src/
+/packaging/aur/pkg/
+/packaging/aur/sshdeck/
+/packaging/aur/*.pkg.tar.*
