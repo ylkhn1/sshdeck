@@ -1,6 +1,6 @@
 # Maintainer: ylkhn1 <ylkhn1@users.noreply.github.com>
 pkgname=sshdeck
-pkgver=0.2.0
+pkgver=0.3.0
 pkgrel=1
 pkgdesc="Lightweight native SSH client: SFTP file tree, terminal and database client in one window"
 arch=('x86_64' 'aarch64')
