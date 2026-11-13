@@ -2099,3 +2099,173 @@ msgstr "Не удалось переместить в корзину {}: {}"
 
 msgid "Moved to the trash: {}"
 msgstr "Перемещено в корзину: {}"
+
+# --- updates ---
+
+msgid "Check for Updates Automatically"
+msgstr "Проверять обновления автоматически"
+
+msgid "Check for Updates…"
+msgstr "Проверить обновления…"
+
+msgid "Checking for updates requires curl"
+msgstr "Для проверки обновлений нужна программа curl"
+
+msgid "Checking the signature…"
+msgstr "Проверка подписи…"
+
+msgid "Could Not Update"
+msgstr "Не удалось обновить"
+
+msgid "Could not check for updates: {}"
+msgstr "Не удалось проверить обновления: {}"
+
+msgid "Could not install the package: {}"
+msgstr "Не удалось установить пакет: {}"
+
+msgid "GitHub is limiting requests, try again later"
+msgstr "GitHub ограничивает число запросов, попробуйте позже"
+
+msgid "GitHub sent an unexpected answer: {}"
+msgstr "GitHub прислал неожиданный ответ: {}"
+
+msgid "How to Update"
+msgstr "Как обновить"
+
+msgid "Install sshdeck {}?"
+msgstr "Установить sshdeck {}?"
+
+msgid "Install the Update Manually"
+msgstr "Установите обновление вручную"
+
+msgid "Installing the update…"
+msgstr "Установка обновления…"
+
+msgid "Installing…"
+msgstr "Установка…"
+
+msgid "Later"
+msgstr "Позже"
+
+msgid "More"
+msgstr "Ещё"
+
+msgid "Open Release Page"
+msgstr "Открыть страницу выпуска"
+
+msgid "Open sessions and tabs will be closed. Saved connections stay."
+msgstr "Открытые сессии и вкладки закроются. Сохранённые подключения останутся."
+
+msgid "Restart"
+msgstr "Перезапустить"
+
+msgid "Restart sshdeck?"
+msgstr "Перезапустить sshdeck?"
+
+msgid "Signature check failed: {}"
+msgstr "Подпись не прошла проверку: {}"
+
+msgid "Skip This Version"
+msgstr "Пропустить эту версию"
+
+msgid "The installation was cancelled."
+msgstr "Установка отменена."
+
+msgid "The package is downloaded and its signature is verified. The system will ask for your password to install it."
+msgstr "Пакет скачан, подпись проверена. Для установки система спросит ваш пароль."
+
+msgid "The update archive is damaged: {}"
+msgstr "Архив обновления повреждён: {}"
+
+msgid "This installation has no package manager"
+msgstr "Для этой установки нет менеджера пакетов"
+
+msgid "This release has no file for this installation"
+msgstr "В этом выпуске нет файла для такой установки"
+
+msgid "Unexpected download address: {}"
+msgstr "Неожиданный адрес загрузки: {}"
+
+msgid "Update"
+msgstr "Обновить"
+
+msgid "Updated to {} — restart sshdeck to use it"
+msgstr "Обновлено до {} — перезапустите sshdeck, чтобы перейти на новую версию"
+
+msgid "Updating to sshdeck {}"
+msgstr "Обновление до sshdeck {}"
+
+msgid "What’s New"
+msgstr "Что нового"
+
+msgid "You Have the Latest Version"
+msgstr "У вас последняя версия"
+
+msgid "exit code {}"
+msgstr "код выхода {}"
+
+msgid "no system password prompt is available"
+msgstr "нет системного окна запроса пароля"
+
+msgid "pkexec is not installed"
+msgstr "pkexec не установлен"
+
+msgid "sshdeck cannot replace {}"
+msgstr "sshdeck не может заменить {}"
+
+msgid "sshdeck {} is available"
+msgstr "Вышла sshdeck {}"
+
+msgid "sshdeck {} is available. This copy cannot update itself: download the new version from the release page."
+msgstr "Вышла sshdeck {}. Эта копия не умеет обновляться сама: скачайте новую версию со страницы выпуска."
+
+msgid "sshdeck {} is available. This copy was built from the PKGBUILD in the sshdeck repository. To update, run this in your clone of the repository:"
+msgstr "Вышла sshdeck {}. Эта копия собрана из PKGBUILD в репозитории sshdeck. Чтобы обновиться, выполните в своей копии репозитория:"
+
+msgid "sshdeck {} is the newest version available."
+msgstr "sshdeck {} — самая новая версия."
+
+msgid "sshdeck {} will not be offered again. “Check for Updates…” still shows it."
+msgstr "Больше не будем предлагать sshdeck {}. «Проверить обновления…» всё равно её покажет."
+
+msgid "the built-in public key is damaged"
+msgstr "встроенный открытый ключ повреждён"
+
+msgid "the file does not match its signature (it was changed or damaged)"
+msgstr "файл не совпадает с подписью (его изменили или повредили)"
+
+msgid "the file is larger than expected"
+msgstr "файл больше ожидаемого"
+
+msgid "the file was signed with a different key"
+msgstr "файл подписан другим ключом"
+
+msgid "the signature belongs to another file"
+msgstr "подпись относится к другому файлу"
+
+msgid "the signature file is damaged"
+msgstr "файл подписи повреждён"
+
+msgid "unsafe path {}"
+msgstr "небезопасный путь {}"
+
+msgid "unsupported signature format"
+msgstr "неподдерживаемый формат подписи"
+
+msgid "{}\n\nNothing was installed. You can download the new version from the release page."
+msgstr "{}\n\nНичего не установлено. Новую версию можно скачать со страницы выпуска."
+
+msgid "{}\n\nThe package is downloaded and verified. To install it, run in a terminal:"
+msgstr "{}\n\nПакет скачан и проверен. Чтобы установить его, выполните в терминале:"
+
+msgid "{} appears twice"
+msgstr "{} встречается дважды"
+
+msgid "{} is missing"
+msgstr "нет файла {}"
+
+msgid "{} is not a program"
+msgstr "{} — не программа"
+
+msgid "{} is not a regular file"
+msgstr "{} — не обычный файл"

@@ -32,16 +32,20 @@ prepare() {
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
 }
 
+# Сборка из PKGBUILD сама себя не обновляет: о новой версии программа
+# только сообщает и показывает, как пересобрать пакет.
 build() {
   cd "$pkgname"
   export RUSTUP_TOOLCHAIN=stable
   export CARGO_TARGET_DIR=target
+  export SSHDECK_INSTALL_KIND=aur
   cargo build --frozen --release
 }
 
 check() {
   cd "$pkgname"
   export RUSTUP_TOOLCHAIN=stable
+  export SSHDECK_INSTALL_KIND=aur
   cargo test --frozen --release
 }
 

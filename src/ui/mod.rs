@@ -14,6 +14,7 @@ mod snippets;
 mod statusbar;
 mod tab;
 mod terminal;
+mod update;
 pub mod window;
 
 use std::cell::Cell;

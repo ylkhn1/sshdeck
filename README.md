@@ -77,6 +77,29 @@ sshdeck does **not** implement SSH itself. The terminal runs your system `/usr/b
 
 ## Installation
 
+### Prebuilt packages
+
+Each [release](https://github.com/ylkhn1/sshdeck/releases/latest) has packages for x86_64. They need glibc ≥ 2.39, GTK ≥ 4.16, libadwaita ≥ 1.6 and VTE ≥ 0.72; on older systems, build from source.
+
+| System | How |
+|---|---|
+| Debian 13+, Ubuntu 25.04+ | `sudo apt install ./sshdeck_X.Y.Z-1_amd64.deb` |
+| Fedora 42+ | `sudo dnf install ./sshdeck-X.Y.Z-1.x86_64.rpm` |
+| Arch, CachyOS, Manjaro | `git clone https://github.com/ylkhn1/sshdeck && cd sshdeck/packaging/aur && makepkg -si` |
+| Other x86_64 distros | the `sshdeck-X.Y.Z-x86_64-linux.tar.gz` archive, see below |
+
+The archive holds a single `sshdeck-X.Y.Z/` folder with the program, the menu entry, the icon, this README and the license. Install it for the current user (no `sudo`; `~/.local/bin` must be in your `PATH`); installed this way, sshdeck can update itself:
+
+```sh
+tar xzf sshdeck-X.Y.Z-x86_64-linux.tar.gz
+cd sshdeck-X.Y.Z
+install -Dm755 sshdeck ~/.local/bin/sshdeck
+install -Dm644 dev.sshdeck.App.desktop ~/.local/share/applications/dev.sshdeck.App.desktop
+install -Dm644 dev.sshdeck.App.svg ~/.local/share/icons/hicolor/scalable/apps/dev.sshdeck.App.svg
+```
+
+The rest of this section is about building from source.
+
 ### Dependencies
 
 | Package | Why it is needed |
@@ -188,6 +211,21 @@ cargo clippy --all-targets  # no warnings
 
 *Menu → Theme* offers System default, Light, Dark or a colored theme. System default, Light and Dark use sshdeck's own palette rather than the stock GNOME greys, and System default follows the desktop's light or dark mode. A colored theme repaints the title bar, sidebar, lists, dialogs and terminal. The terminal font is set in *Menu → Terminal Font…*.
 
+### Updates
+
+Once a day, a few seconds after start and then every 24 hours while it runs, sshdeck asks GitHub for the latest release (`https://api.github.com/repos/ylkhn1/sshdeck/releases/latest`). The request carries no personal data, only the `sshdeck/<version>` User-Agent; your IP address is visible to GitHub, as with any download. Pre-releases are never offered. When a newer version is out, a bar under the title bar says so, with *What's New* (the release page) and *Skip This Version* in its ⋯ menu. *Menu → Check for Updates…* checks right away (and also shows a skipped version); *Menu → Check for Updates Automatically* turns the daily check off, and then sshdeck makes no requests at all.
+
+What *Update* does depends on how sshdeck was installed:
+
+| Installed from | Update |
+|---|---|
+| the `.tar.gz` archive into a folder you own (e.g. `~/.local/bin`) | sshdeck downloads the new archive, checks its signature and replaces its own file. The running copy keeps working; *Restart* starts the new version (open sessions close), otherwise it is used from the next launch. |
+| `.deb` / `.rpm` | sshdeck downloads the package and checks its signature, then *Install* runs `pkexec apt-get install` / `pkexec dnf install`, which asks for your password. If that is not possible, it shows the command to run in a terminal. |
+| PKGBUILD (Arch) | sshdeck only tells you about the new version and shows the command: `git pull && cd packaging/aur && makepkg -si` in your clone of the repository. |
+| built from source, or anything else | sshdeck only tells you about the new version and links to the release page. |
+
+Every release file is signed with [minisign](https://jedisct1.github.io/minisign/), and the public key is built into sshdeck. A file whose signature does not verify, that is signed for a different file name or version, or that comes from anywhere other than this repository's GitHub releases is never installed.
+
 ## Database client
 
 The database client works in the spirit of DBeaver. It supports PostgreSQL, MySQL/MariaDB and SQLite out of the box, and any other database through extensions.
@@ -279,11 +317,12 @@ po/                Russian and Spanish translations (gettext .po)
 
 | Path | Contents |
 |---|---|
-| `~/.config/sshdeck/settings.ini` | terminal font and theme, window appearance, interface language, saved commands |
+| `~/.config/sshdeck/settings.ini` | terminal font and theme, window appearance, interface language, saved commands, update check (`[updates]`: `check`, time of the last check, skipped version) |
 | `~/.config/sshdeck/connections.ini` | saved connections, nested folders, their order and colors, saved port forwards. It holds no passwords and can be edited by hand or copied to another machine. Files from older versions load unchanged. |
 | `~/.config/sshdeck/databases.ini` | database connections (no passwords) |
 | `~/.local/state/sshdeck/local-folders.ini` | the last local folder used with each server |
 | `~/.local/share/sshdeck/drivers/` | installed database extensions |
+| `~/.cache/sshdeck/updates/` | a downloaded update while it is being installed; removed afterwards |
 
 `SSHDECK_SSH_CONFIG=<file>` replaces `~/.ssh/config`. The host list is read from that file, and it is passed to every `ssh` call with `-F`.
 

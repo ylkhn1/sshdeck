@@ -14,6 +14,7 @@ use super::hosts::HostsSidebar;
 use super::snippets::SnippetsButton;
 use super::terminal;
 use super::tab::{PaneAction, SessionTab};
+use super::update::Updater;
 use super::{ANIMATION_MS, Notifier, collapsing_revealer, dialogs, reveal};
 use crate::connections::Connection;
 use crate::db::DbProfile;
@@ -311,6 +312,19 @@ columnview.sshdeck-grid.column-separators > header > button {
 }
 .sshdeck-section-button { min-width: 22px; min-height: 22px; padding: 0; margin: 6px 6px 0 0; border-radius: 3px; }
 
+/* ---------- new version notice under the header */
+.sshdeck-update-bar {
+  padding: 4px 6px 4px 14px;
+  background-color: color-mix(in srgb, var(--accent-bg-color) 16%, var(--window-bg-color));
+  box-shadow: inset 0 -1px color-mix(in srgb, currentColor 12%, transparent);
+}
+.sshdeck-update-bar button { min-height: 26px; border-radius: 3px; }
+.sshdeck-update-bar > image { color: var(--accent-bg-color); }
+.sshdeck-update-command {
+  font-family: monospace; padding: 8px 10px; border-radius: 3px;
+  background-color: color-mix(in srgb, currentColor 7%, transparent);
+}
+
 .sshdeck-folder-red { color: #ed333b; }
 .sshdeck-folder-orange { color: #ff7800; }
 .sshdeck-folder-yellow { color: #e5a50a; }
@@ -458,6 +472,7 @@ struct AppWindow {
     /// Открытые вкладки баз данных.
     db_tabs: RefCell<Vec<Rc<DbTab>>>,
     next_tab_id: Cell<u32>,
+    updater: Rc<Updater>,
 }
 
 impl AppWindow {
@@ -582,6 +597,13 @@ impl AppWindow {
         list_section.append(Some(tr!("Export Connections…")), Some("win.export-connections"));
         list_section.append(Some(tr!("Reload Connection List")), Some("win.reload-hosts"));
         menu.append_section(None, &list_section);
+        let update_section = gio::Menu::new();
+        update_section.append(Some(tr!("Check for Updates…")), Some("win.check-updates"));
+        update_section.append(
+            Some(tr!("Check for Updates Automatically")),
+            Some("win.auto-update-check"),
+        );
+        menu.append_section(None, &update_section);
         let menu_button = gtk::MenuButton::builder()
             .icon_name("open-menu-symbolic")
             .tooltip_text(tr!("Menu"))
@@ -664,6 +686,9 @@ impl AppWindow {
             .default_height(760)
             .content(&split)
             .build();
+        // Сообщение о новой версии — под шапкой.
+        let updater = Updater::new(&window, Rc::clone(&settings), notifier.clone());
+        content.add_top_bar(updater.widget());
 
         let this = Rc::new(Self {
             window,
@@ -682,6 +707,7 @@ impl AppWindow {
             databases,
             db_tabs: RefCell::new(Vec::new()),
             next_tab_id: Cell::new(1),
+            updater,
         });
 
         // Обработчики держат слабые ссылки: окно владеет виджетами, а не
@@ -953,6 +979,39 @@ impl AppWindow {
                 }
             });
             this.window.add_action(&action);
+        }
+        {
+            // Обновления: проверка из меню, переключатель автоматической
+            // проверки; перезапуск предупреждает об открытых вкладках.
+            let weak = Rc::downgrade(&this);
+            this.updater.set_sessions_check(move || {
+                weak.upgrade()
+                    .is_some_and(|this| this.tab_view.n_pages() > 0)
+            });
+            let weak = Rc::downgrade(&this);
+            let action = gio::SimpleAction::new("check-updates", None);
+            action.connect_activate(move |_, _| {
+                if let Some(this) = weak.upgrade() {
+                    this.updater.check(true);
+                }
+            });
+            this.window.add_action(&action);
+            let weak = Rc::downgrade(&this);
+            let enabled = this.settings.borrow().update_check;
+            let action = gio::SimpleAction::new_stateful(
+                "auto-update-check",
+                None,
+                &enabled.to_variant(),
+            );
+            action.connect_activate(move |action, _| {
+                let enabled = !action.state().and_then(|v| v.get::<bool>()).unwrap_or(true);
+                action.set_state(&enabled.to_variant());
+                if let Some(this) = weak.upgrade() {
+                    this.updater.set_automatic(enabled);
+                }
+            });
+            this.window.add_action(&action);
+            this.updater.start();
         }
         {
             // Замыкание владеет окном: оно живёт, пока существует GTK-окно.

@@ -23,6 +23,7 @@ mod sftp;
 mod ssh_config;
 mod sysstat;
 mod ui;
+mod update;
 
 use gtk::prelude::*;
 use gtk::{gio, glib};
@@ -33,6 +34,8 @@ fn main() -> glib::ExitCode {
     // Язык выбирается до запуска GTK и любых потоков (см. `i18n::init`).
     i18n::init(&settings::Settings::load().language);
     let targets: Vec<String> = std::env::args().skip(1).collect();
+    // Путь программы — до того, как обновление может заменить её файл.
+    update::startup_exe();
 
     // NON_UNIQUE: каждый запуск — самостоятельный процесс со своими сокетами.
     let app = adw::Application::builder()

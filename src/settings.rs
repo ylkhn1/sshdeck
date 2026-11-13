@@ -8,6 +8,10 @@
 //! Свёрнутые папки — группа `[sidebar]`, ключ `collapsed`: список GLib
 //! (через `;`) полных путей папок, записанных как в `connections.ini`
 //! (`Работа/Сервера`, см. [`join_path`]). Пустой список не пишется.
+//!
+//! Обновления — группа `[updates]`: `check` (проверять ли раз в сутки),
+//! `last_check` (время последней удачной проверки, секунды Unix) и
+//! `skipped` (версия, о которой больше не напоминать).
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
@@ -37,6 +41,10 @@ const KEY_NAME: &str = "name";
 const KEY_COMMAND: &str = "command";
 const GROUP_SIDEBAR: &str = "sidebar";
 const KEY_COLLAPSED: &str = "collapsed";
+const GROUP_UPDATES: &str = "updates";
+const KEY_CHECK: &str = "check";
+const KEY_LAST_CHECK: &str = "last_check";
+const KEY_SKIPPED: &str = "skipped";
 
 /// Сохранённая команда, которую можно отправить в терминал одним щелчком.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +70,12 @@ pub struct Settings {
     /// Пути свёрнутых папок боковой панели (по порядку — чтобы файл не
     /// менялся от запуска к запуску).
     pub collapsed_folders: BTreeSet<FolderPath>,
+    /// Проверять ли обновления автоматически.
+    pub update_check: bool,
+    /// Время последней удачной проверки (секунды Unix; 0 — не было).
+    pub update_last_check: u64,
+    /// Версия, которую пользователь решил пропустить (пусто — никакая).
+    pub update_skipped: String,
 }
 
 impl Default for Settings {
@@ -75,6 +89,9 @@ impl Default for Settings {
             language: DEFAULT_LANGUAGE.to_string(),
             snippets: Vec::new(),
             collapsed_folders: BTreeSet::new(),
+            update_check: true,
+            update_last_check: 0,
+            update_skipped: String::new(),
         }
     }
 }
@@ -144,6 +161,15 @@ impl Settings {
                 .filter(|path| !path.is_empty())
                 .collect();
         }
+        if let Ok(check) = key_file.boolean(GROUP_UPDATES, KEY_CHECK) {
+            settings.update_check = check;
+        }
+        if let Some(time) = field(GROUP_UPDATES, KEY_LAST_CHECK).and_then(|v| v.parse().ok()) {
+            settings.update_last_check = time;
+        }
+        if let Some(version) = field(GROUP_UPDATES, KEY_SKIPPED) {
+            settings.update_skipped = version;
+        }
         for group in key_file.groups().iter() {
             let group = group.as_str();
             if !group.starts_with(GROUP_SNIPPET) {
@@ -173,6 +199,17 @@ impl Settings {
         if !self.collapsed_folders.is_empty() {
             let paths = self.collapsed_folders.iter().map(|path| join_path(path));
             key_file.set_value(GROUP_SIDEBAR, KEY_COLLAPSED, &list_value(paths));
+        }
+        key_file.set_boolean(GROUP_UPDATES, KEY_CHECK, self.update_check);
+        if self.update_last_check > 0 {
+            key_file.set_string(
+                GROUP_UPDATES,
+                KEY_LAST_CHECK,
+                &self.update_last_check.to_string(),
+            );
+        }
+        if !self.update_skipped.is_empty() {
+            key_file.set_string(GROUP_UPDATES, KEY_SKIPPED, &self.update_skipped);
         }
         key_file.to_data().to_string()
     }
@@ -229,6 +266,35 @@ mod tests {
         assert_eq!(settings.language, super::DEFAULT_LANGUAGE);
         assert!(settings.snippets.is_empty());
         assert!(settings.collapsed_folders.is_empty());
+        assert!(settings.update_check);
+        assert_eq!(settings.update_last_check, 0);
+        assert!(settings.update_skipped.is_empty());
+    }
+
+    #[test]
+    fn update_keys() {
+        let settings =
+            Settings::parse("[updates]\ncheck=false\nlast_check=1763000000\nskipped= 0.5.0 \n");
+        assert!(!settings.update_check);
+        assert_eq!(settings.update_last_check, 1_763_000_000);
+        assert_eq!(settings.update_skipped, "0.5.0");
+        let data = settings.serialize();
+        assert!(
+            data.contains("[updates]\ncheck=false\nlast_check=1763000000\nskipped=0.5.0\n"),
+            "{data}"
+        );
+        assert_eq!(Settings::parse(&data), settings);
+        // Мусор в значениях — по умолчанию.
+        let broken = Settings::parse("[updates]\ncheck=maybe\nlast_check=-5\n");
+        assert!(broken.update_check);
+        assert_eq!(broken.update_last_check, 0);
+        // По умолчанию пишется только сам переключатель.
+        let data = Settings::default().serialize();
+        assert!(data.contains("[updates]\ncheck=true\n"), "{data}");
+        assert!(
+            !data.contains("last_check") && !data.contains("skipped"),
+            "{data}"
+        );
     }
 
     #[test]
@@ -275,6 +341,9 @@ mod tests {
                 },
             ],
             collapsed_folders: [folder(&["Работа"]), folder(&["Работа", "Сервера"])].into(),
+            update_check: false,
+            update_last_check: 1_763_000_000,
+            update_skipped: "0.6.1".to_string(),
         };
         assert_eq!(Settings::parse(&settings.serialize()), settings);
     }

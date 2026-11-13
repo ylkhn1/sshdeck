@@ -2079,3 +2079,173 @@ msgstr "No se pudo mover {} a la papelera: {}"
 
 msgid "Moved to the trash: {}"
 msgstr "Movido a la papelera: {}"
+
+# --- updates ---
+
+msgid "Check for Updates Automatically"
+msgstr "Buscar actualizaciones automáticamente"
+
+msgid "Check for Updates…"
+msgstr "Buscar actualizaciones…"
+
+msgid "Checking for updates requires curl"
+msgstr "Para buscar actualizaciones se necesita curl"
+
+msgid "Checking the signature…"
+msgstr "Comprobando la firma…"
+
+msgid "Could Not Update"
+msgstr "No se pudo actualizar"
+
+msgid "Could not check for updates: {}"
+msgstr "No se pudieron buscar actualizaciones: {}"
+
+msgid "Could not install the package: {}"
+msgstr "No se pudo instalar el paquete: {}"
+
+msgid "GitHub is limiting requests, try again later"
+msgstr "GitHub está limitando las solicitudes, inténtelo más tarde"
+
+msgid "GitHub sent an unexpected answer: {}"
+msgstr "GitHub envió una respuesta inesperada: {}"
+
+msgid "How to Update"
+msgstr "Cómo actualizar"
+
+msgid "Install sshdeck {}?"
+msgstr "¿Instalar sshdeck {}?"
+
+msgid "Install the Update Manually"
+msgstr "Instale la actualización manualmente"
+
+msgid "Installing the update…"
+msgstr "Instalando la actualización…"
+
+msgid "Installing…"
+msgstr "Instalando…"
+
+msgid "Later"
+msgstr "Más tarde"
+
+msgid "More"
+msgstr "Más"
+
+msgid "Open Release Page"
+msgstr "Abrir la página de la versión"
+
+msgid "Open sessions and tabs will be closed. Saved connections stay."
+msgstr "Las sesiones y pestañas abiertas se cerrarán. Las conexiones guardadas se conservan."
+
+msgid "Restart"
+msgstr "Reiniciar"
+
+msgid "Restart sshdeck?"
+msgstr "¿Reiniciar sshdeck?"
+
+msgid "Signature check failed: {}"
+msgstr "La comprobación de la firma falló: {}"
+
+msgid "Skip This Version"
+msgstr "Omitir esta versión"
+
+msgid "The installation was cancelled."
+msgstr "La instalación se canceló."
+
+msgid "The package is downloaded and its signature is verified. The system will ask for your password to install it."
+msgstr "El paquete se descargó y su firma está verificada. El sistema le pedirá su contraseña para instalarlo."
+
+msgid "The update archive is damaged: {}"
+msgstr "El archivo de la actualización está dañado: {}"
+
+msgid "This installation has no package manager"
+msgstr "Esta instalación no tiene gestor de paquetes"
+
+msgid "This release has no file for this installation"
+msgstr "Esta versión no tiene un archivo para esta instalación"
+
+msgid "Unexpected download address: {}"
+msgstr "Dirección de descarga inesperada: {}"
+
+msgid "Update"
+msgstr "Actualizar"
+
+msgid "Updated to {} — restart sshdeck to use it"
+msgstr "Actualizado a {}: reinicie sshdeck para usarla"
+
+msgid "Updating to sshdeck {}"
+msgstr "Actualizando a sshdeck {}"
+
+msgid "What’s New"
+msgstr "Novedades"
+
+msgid "You Have the Latest Version"
+msgstr "Tiene la última versión"
+
+msgid "exit code {}"
+msgstr "código de salida {}"
+
+msgid "no system password prompt is available"
+msgstr "no hay ninguna ventana del sistema para pedir la contraseña"
+
+msgid "pkexec is not installed"
+msgstr "pkexec no está instalado"
+
+msgid "sshdeck cannot replace {}"
+msgstr "sshdeck no puede reemplazar {}"
+
+msgid "sshdeck {} is available"
+msgstr "sshdeck {} está disponible"
+
+msgid "sshdeck {} is available. This copy cannot update itself: download the new version from the release page."
+msgstr "sshdeck {} está disponible. Esta copia no puede actualizarse sola: descargue la nueva versión desde la página de la versión."
+
+msgid "sshdeck {} is available. This copy was built from the PKGBUILD in the sshdeck repository. To update, run this in your clone of the repository:"
+msgstr "sshdeck {} está disponible. Esta copia se compiló con el PKGBUILD del repositorio de sshdeck. Para actualizar, ejecute esto en su clon del repositorio:"
+
+msgid "sshdeck {} is the newest version available."
+msgstr "sshdeck {} es la versión más reciente."
+
+msgid "sshdeck {} will not be offered again. “Check for Updates…” still shows it."
+msgstr "No se volverá a ofrecer sshdeck {}. «Buscar actualizaciones…» la seguirá mostrando."
+
+msgid "the built-in public key is damaged"
+msgstr "la clave pública integrada está dañada"
+
+msgid "the file does not match its signature (it was changed or damaged)"
+msgstr "el archivo no coincide con su firma (se modificó o está dañado)"
+
+msgid "the file is larger than expected"
+msgstr "el archivo es más grande de lo esperado"
+
+msgid "the file was signed with a different key"
+msgstr "el archivo se firmó con otra clave"
+
+msgid "the signature belongs to another file"
+msgstr "la firma corresponde a otro archivo"
+
+msgid "the signature file is damaged"
+msgstr "el archivo de firma está dañado"
+
+msgid "unsafe path {}"
+msgstr "ruta no segura {}"
+
+msgid "unsupported signature format"
+msgstr "formato de firma no compatible"
+
+msgid "{}\n\nNothing was installed. You can download the new version from the release page."
+msgstr "{}\n\nNo se instaló nada. Puede descargar la nueva versión desde la página de la versión."
+
+msgid "{}\n\nThe package is downloaded and verified. To install it, run in a terminal:"
+msgstr "{}\n\nEl paquete está descargado y verificado. Para instalarlo, ejecute en una terminal:"
+
+msgid "{} appears twice"
+msgstr "{} aparece dos veces"
+
+msgid "{} is missing"
+msgstr "falta {}"
+
+msgid "{} is not a program"
+msgstr "{} no es un programa"
+
+msgid "{} is not a regular file"
+msgstr "{} no es un archivo normal"
