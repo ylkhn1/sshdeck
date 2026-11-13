@@ -1637,9 +1637,6 @@ msgstr "{}: не удалось прочитать: {}"
 msgid "There is no free name for a copy of “{}”"
 msgstr "Не удалось подобрать свободное имя для копии «{}»"
 
-msgid "“{}” cannot be opened in the terminal: the path is not valid UTF-8"
-msgstr "Не удаётся перейти в «{}» в терминале: путь не в кодировке UTF-8"
-
 msgid "{} — skipped (special files, broken links and links that loop or repeat folders): {}"
 msgstr "{} — пропущено (спецфайлы, битые ссылки и ссылки, которые ведут по кругу или повторяют каталоги): {}"
 
@@ -2017,3 +2014,12 @@ msgstr "Нет сохранённых подключений для экспор
 
 msgid "This JSON file is not an sshdeck connections export"
 msgstr "Этот JSON-файл не является экспортом подключений sshdeck"
+
+msgid "Waiting for login in another terminal…"
+msgstr "Ожидание входа в другом терминале…"
+
+msgid "Press Enter to log in here instead."
+msgstr "Нажмите Enter, чтобы войти здесь."
+
+msgid "The other login did not complete — logging in here."
+msgstr "Вход в другом терминале не завершился — входим здесь."

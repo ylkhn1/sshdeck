@@ -35,14 +35,14 @@
 //! `-O cancel` не снимает заодно `LocalForward` из конфига хоста (см.
 //! `crate::forward`).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::io;
 use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 
 use crate::ssh_config::{self, Resolved};
@@ -578,6 +578,140 @@ impl Session {
     pub fn close_master(&self) {
         self.lease.release();
     }
+
+    /// Место терминала в очереди входа через мастер этой сессии (см.
+    /// [`LoginTicket`]).
+    pub fn login_ticket(&self) -> LoginTicket {
+        static NEXT_ID: AtomicU64 = AtomicU64::new(1);
+        LoginTicket {
+            control_path: self.control_path.clone(),
+            id: NEXT_ID.fetch_add(1, Ordering::Relaxed),
+        }
+    }
+}
+
+// ------------------------------------------------------- очередь входа
+
+/// Что делать терминалу, которому нужен ssh.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LoginTurn {
+    /// Мастер уже работает: ssh подключится через него без входа.
+    MasterUp,
+    /// Входить самому: никто другой сейчас не входит (или чужой вход не
+    /// удался). Терминал считается входящим, пока не уйдёт из очереди.
+    LogIn,
+    /// Ждать: на этот сервер уже входят в другом терминале.
+    Wait,
+}
+
+/// Идущий вход на один мастер: кто входит и кто ждёт за ним.
+#[derive(Debug)]
+struct PendingLogin {
+    owner: u64,
+    waiters: VecDeque<u64>,
+}
+
+/// Очереди входа процесса по сокетам мастеров. Только состояние, без
+/// проверки самого мастера — её делает [`LoginTicket::turn`].
+#[derive(Debug, Default)]
+struct Logins {
+    pending: HashMap<PathBuf, PendingLogin>,
+}
+
+impl Logins {
+    /// Очередь терминала `id`, если мастер ещё не работает. Если входа
+    /// нет, терминал становится входящим; если входит кто-то другой —
+    /// встаёт в конец очереди ожидающих. Повторный вызов ничего не меняет.
+    fn turn(&mut self, key: &Path, id: u64) -> LoginTurn {
+        let Some(login) = self.pending.get_mut(key) else {
+            let login = PendingLogin {
+                owner: id,
+                waiters: VecDeque::new(),
+            };
+            self.pending.insert(key.to_path_buf(), login);
+            return LoginTurn::LogIn;
+        };
+        if login.owner == id {
+            return LoginTurn::LogIn;
+        }
+        if !login.waiters.contains(&id) {
+            login.waiters.push_back(id);
+        }
+        LoginTurn::Wait
+    }
+
+    /// Мастер поднялся: вход завершён, ожидающие свободны.
+    fn master_up(&mut self, key: &Path) {
+        self.pending.remove(key);
+    }
+
+    /// Терминал уходит из очереди: его ssh завершился, терминал закрыт или
+    /// пользователь решил войти сам. Если уходит входящий, входить
+    /// начинает первый из ожидающих, остальные ждут уже его.
+    fn leave(&mut self, key: &Path, id: u64) {
+        let Some(login) = self.pending.get_mut(key) else {
+            return;
+        };
+        if login.owner != id {
+            login.waiters.retain(|&waiter| waiter != id);
+            return;
+        }
+        match login.waiters.pop_front() {
+            Some(next) => login.owner = next,
+            None => {
+                self.pending.remove(key);
+            }
+        }
+    }
+}
+
+static LOGINS: LazyLock<Mutex<Logins>> = LazyLock::new(|| Mutex::new(Logins::default()));
+
+/// Слушает ли кто-нибудь сокет: `ssh` создаёт его, только войдя на сервер.
+fn master_listening(control_path: &Path) -> bool {
+    UnixStream::connect(control_path).is_ok()
+}
+
+/// Место терминала в очереди входа на общий мастер.
+///
+/// Пока первый терминал ждёт пароля, сокета мастера ещё нет, и `ssh`
+/// второго терминала тоже стал бы входить сам и спросил бы пароль ещё раз.
+/// Поэтому перед запуском ssh терминал спрашивает [`LoginTicket::turn`]:
+/// если на этот сервер уже входят в другом терминале процесса, он ждёт и
+/// повторяет вопрос, пока мастер не поднимется. Если тот вход не удался или
+/// его терминал закрыли ([`LoginTicket::leave`]), входить начинает первый
+/// из ожидающих. С другими экземплярами приложения очередь не согласуется.
+#[derive(Debug)]
+pub struct LoginTicket {
+    control_path: PathBuf,
+    id: u64,
+}
+
+impl LoginTicket {
+    /// Можно ли запускать ssh. Ответ [`LoginTurn::LogIn`] делает терминал
+    /// входящим, [`LoginTurn::Wait`] ставит его в очередь; ожидающий
+    /// терминал вызывает функцию снова, пока не получит другой ответ.
+    pub fn turn(&self) -> LoginTurn {
+        let mut logins = LOGINS.lock().unwrap_or_else(|e| e.into_inner());
+        if master_listening(&self.control_path) {
+            logins.master_up(&self.control_path);
+            return LoginTurn::MasterUp;
+        }
+        logins.turn(&self.control_path, self.id)
+    }
+
+    /// Уходит из очереди (ssh терминала завершился или терминал закрыт).
+    /// Без очереди ничего не делает.
+    pub fn leave(&self) {
+        let mut logins = LOGINS.lock().unwrap_or_else(|e| e.into_inner());
+        logins.leave(&self.control_path, self.id);
+    }
+}
+
+impl Drop for LoginTicket {
+    fn drop(&mut self) {
+        self.leave();
+    }
 }
 
 #[cfg(test)]
@@ -853,5 +987,94 @@ mod tests {
         assert_eq!(&check[check.len() - 4..], ["-O", "check", "--", "user@example"]);
         let exit = s.control_argv("exit", &[]);
         assert_eq!(&exit[exit.len() - 4..], ["-O", "exit", "--", "user@example"]);
+    }
+
+    #[test]
+    fn second_terminal_waits_for_the_login_in_progress() {
+        let mut logins = Logins::default();
+        let (key, other) = (Path::new("/run/a.sock"), Path::new("/run/b.sock"));
+        assert_eq!(logins.turn(key, 1), LoginTurn::LogIn);
+        assert_eq!(logins.turn(key, 2), LoginTurn::Wait);
+        assert_eq!(logins.turn(key, 3), LoginTurn::Wait);
+        // Повторные вопросы очередь не меняют.
+        assert_eq!(logins.turn(key, 1), LoginTurn::LogIn);
+        assert_eq!(logins.turn(key, 2), LoginTurn::Wait);
+        assert_eq!(logins.pending[key].waiters, [2, 3]);
+        // Другой сервер — своя очередь.
+        assert_eq!(logins.turn(other, 4), LoginTurn::LogIn);
+
+        // Мастер поднялся: очереди больше нет, следующий вход — с нуля.
+        logins.master_up(key);
+        assert!(!logins.pending.contains_key(key));
+        logins.leave(key, 1);
+        logins.leave(key, 2);
+        assert_eq!(logins.turn(key, 5), LoginTurn::LogIn);
+        assert!(logins.pending.contains_key(other));
+    }
+
+    #[test]
+    fn exactly_one_waiter_takes_over_a_failed_login() {
+        let mut logins = Logins::default();
+        let key = Path::new("/run/a.sock");
+        logins.turn(key, 1);
+        logins.turn(key, 2);
+        logins.turn(key, 3);
+        logins.turn(key, 4);
+
+        // Вход не удался: входит первый ожидающий, остальные ждут его.
+        logins.leave(key, 1);
+        assert_eq!(logins.turn(key, 2), LoginTurn::LogIn);
+        assert_eq!(logins.turn(key, 3), LoginTurn::Wait);
+        assert_eq!(logins.turn(key, 4), LoginTurn::Wait);
+        // Бывший входящий, вернувшись (переподключение), встаёт в конец.
+        assert_eq!(logins.turn(key, 1), LoginTurn::Wait);
+
+        // Ожидающий закрыт: очередь его пропускает.
+        logins.leave(key, 3);
+        logins.leave(key, 2);
+        assert_eq!(logins.turn(key, 4), LoginTurn::LogIn);
+        assert_eq!(logins.turn(key, 1), LoginTurn::Wait);
+        logins.leave(key, 4);
+        assert_eq!(logins.turn(key, 1), LoginTurn::LogIn);
+        logins.leave(key, 1);
+        assert!(logins.pending.is_empty());
+        // Уход без очереди ничего не делает.
+        logins.leave(key, 9);
+        assert!(logins.pending.is_empty());
+    }
+
+    #[test]
+    fn tickets_see_the_master_socket() {
+        let dir = tempfile::TempDir::new().expect("tempdir");
+        let first = Session::new("h", dir.path(), 11, None);
+        let second = Session::new("h", dir.path(), 11, None);
+        let a = first.login_ticket();
+        let b = second.login_ticket();
+        let c = second.login_ticket();
+        assert_eq!(a.turn(), LoginTurn::LogIn);
+        assert_eq!(b.turn(), LoginTurn::Wait);
+        assert_eq!(c.turn(), LoginTurn::Wait);
+
+        // Терминал входящего закрыт до входа: входит следующий.
+        drop(a);
+        assert_eq!(b.turn(), LoginTurn::LogIn);
+        assert_eq!(c.turn(), LoginTurn::Wait);
+
+        // Мастер поднялся (сокет слушают): ждать больше некого.
+        let listener =
+            std::os::unix::net::UnixListener::bind(first.control_path()).expect("bind");
+        assert_eq!(c.turn(), LoginTurn::MasterUp);
+        assert_eq!(b.turn(), LoginTurn::MasterUp);
+        drop(listener);
+        let _ = fs::remove_file(first.control_path());
+
+        // Мастер исчез (разрыв): вход снова идёт по очереди.
+        assert_eq!(c.turn(), LoginTurn::LogIn);
+        assert_eq!(b.turn(), LoginTurn::Wait);
+        drop(c);
+        assert_eq!(b.turn(), LoginTurn::LogIn);
+        b.leave();
+        // Терминал без входа (как после выхода из шелла) не мешает другим.
+        assert_eq!(second.login_ticket().turn(), LoginTurn::LogIn);
     }
 }

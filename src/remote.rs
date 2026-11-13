@@ -120,8 +120,65 @@ pub fn stream(
 }
 
 /// Строка в одинарных кавычках для оболочки (bash, zsh, fish, sh).
+/// В fish внутри одинарных кавычек особые `\\` и `\'`, поэтому строку с
+/// обратной косой чертой fish прочтёт иначе (см. [`cd_command`]).
 pub fn shell_quote(text: &str) -> String {
     format!("'{}'", text.replace('\'', r"'\''"))
+}
+
+/// Команда перехода терминала в удалённый каталог `dir`, как её набрал бы
+/// пользователь. Пробел в начале не даёт команде попасть в историю
+/// оболочки (там, где это настроено).
+///
+/// Какая оболочка сейчас работает в терминале, неизвестно (пользователь
+/// мог запустить другую, `sudo -i` или `ssh` дальше), поэтому команда
+/// должна одинаково читаться в sh (dash, ash), bash, zsh, ksh и fish:
+///
+/// - обычный путь (UTF-8 без управляющих символов и `\`) — просто в
+///   одинарных кавычках: `cd '/var/log'`;
+/// - иначе путь собирает `printf`: `cd "$(printf '/srv/\377\376')"`.
+///   Восьмеричные `\NNN` понимают printf в POSIX, bash, zsh и fish, а `$(…)`
+///   в двойных кавычках — все эти оболочки (fish — с версии 3.4). Через
+///   `\NNN` идут байты не из UTF-8, управляющие символы (перевод строки или
+///   Tab, набранные в терминале, сработали бы как Enter или дополнение),
+///   а также `\`, `'`, `%` (особые для printf и кавычек) и `!` (подстановка
+///   из истории bash и zsh действует и внутри `"$(…)"`).
+pub fn cd_command(dir: &std::path::Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+    let mut bytes = dir.as_os_str().as_bytes();
+    let dotted;
+    if bytes.starts_with(b"-") {
+        // Иначе cd примет путь за ключ.
+        dotted = [b"./", bytes].concat();
+        bytes = &dotted;
+    }
+    if let Ok(text) = std::str::from_utf8(bytes)
+        && !text.chars().any(|c| c.is_control() || c == '\\')
+    {
+        return format!(" cd {}", shell_quote(text));
+    }
+    let mut format = String::new();
+    for chunk in bytes.utf8_chunks() {
+        for c in chunk.valid().chars() {
+            if c.is_control() || matches!(c, '\\' | '\'' | '%' | '!') {
+                let mut buf = [0; 4];
+                for byte in c.encode_utf8(&mut buf).bytes() {
+                    format.push_str(&format!("\\{byte:03o}"));
+                }
+            } else {
+                format.push(c);
+            }
+        }
+        for byte in chunk.invalid() {
+            format.push_str(&format!("\\{byte:03o}"));
+        }
+    }
+    if bytes.ends_with(b"\n") {
+        // `$(…)` отбрасывает переводы строки в конце вывода, а косая черта
+        // после имени каталога ничего не меняет.
+        format.push('/');
+    }
+    format!(" cd \"$(printf '{format}')\"")
 }
 
 // ------------------------------------------------- слежение за каталогом
@@ -292,6 +349,115 @@ mod tests {
         assert_eq!(shell_quote("/var/log"), "'/var/log'");
         assert_eq!(shell_quote("a b"), "'a b'");
         assert_eq!(shell_quote("it's"), r"'it'\''s'");
+    }
+
+    fn cd(bytes: &[u8]) -> String {
+        use std::os::unix::ffi::OsStrExt;
+        cd_command(Path::new(std::ffi::OsStr::from_bytes(bytes)))
+    }
+
+    #[test]
+    fn cd_command_quoting() {
+        // Обычные пути — как раньше, в одинарных кавычках.
+        assert_eq!(cd(b"/var/log"), " cd '/var/log'");
+        assert_eq!(cd(b"/srv/my files"), " cd '/srv/my files'");
+        assert_eq!(cd(b"/srv/it's"), r" cd '/srv/it'\''s'");
+        assert_eq!(cd(b"/srv/$HOME `id` \"q\""), " cd '/srv/$HOME `id` \"q\"'");
+        assert_eq!(cd(b"/srv/a!b%c"), " cd '/srv/a!b%c'");
+        assert_eq!(cd("/srv/Документы".as_bytes()), " cd '/srv/Документы'");
+        assert_eq!(cd(b"-rf"), " cd './-rf'");
+        // Остальное собирает printf.
+        assert_eq!(cd(b"/srv/\xff\xfe"), r#" cd "$(printf '/srv/\377\376')""#);
+        assert_eq!(cd(b"/srv/a\\b"), r#" cd "$(printf '/srv/a\134b')""#);
+        assert_eq!(cd(b"/srv/a\nb"), r#" cd "$(printf '/srv/a\012b')""#);
+        assert_eq!(cd(b"/srv/a\tb"), r#" cd "$(printf '/srv/a\011b')""#);
+        assert_eq!(cd(b"/srv/a\n"), r#" cd "$(printf '/srv/a\012/')""#);
+        // Кириллица остаётся читаемой и рядом с байтами не из UTF-8.
+        let mixed = ["/srv/Документы/".as_bytes(), b"\xe9t\xe9 it's 100% !$x"].concat();
+        assert_eq!(
+            cd(&mixed),
+            r#" cd "$(printf '/srv/Документы/\351t\351 it\047s 100\045 \041$x')""#
+        );
+        assert_eq!(cd(b"-\xff"), r#" cd "$(printf './-\377')""#);
+    }
+
+    /// Команды из [`cd_command`] выполняются настоящими оболочками, какие
+    /// найдутся; `pwd` после них должен показать нужный каталог байт в байт.
+    #[test]
+    fn cd_command_in_real_shells() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let root = tmp.path().canonicalize().expect("canonicalize");
+        let names: Vec<Vec<u8>> = vec![
+            b"plain".to_vec(),
+            b"my files".to_vec(),
+            b"it's".to_vec(),
+            b"$HOME `id` \"q\" (x) & y; z | w > v * ? [a] {b} #c ~d".to_vec(),
+            b"a\\b".to_vec(),
+            b"a\\".to_vec(),
+            b"a\\\\'b".to_vec(),
+            b"a\nb".to_vec(),
+            b"trail\n".to_vec(),
+            b"tab\tx".to_vec(),
+            b"esc\x1b[31m".to_vec(),
+            b"-dash".to_vec(),
+            b"100% !x !! ^y".to_vec(),
+            "Документы".as_bytes().to_vec(),
+            b"\xff\xfe".to_vec(),
+            ["Документы ".as_bytes(), b"\xe9t\xe9 it's 100% !x\\"].concat(),
+        ];
+        for name in &names {
+            std::fs::create_dir(root.join(OsStr::from_bytes(name))).expect("mkdir");
+        }
+        let shells: [(&str, &[&str]); 7] = [
+            ("sh", &["-c"]),
+            ("bash", &["--norc", "-c"]),
+            ("dash", &["-c"]),
+            ("zsh", &["-f", "-c"]),
+            ("ksh", &["-c"]),
+            ("mksh", &["-c"]),
+            ("fish", &["--no-config", "-c"]),
+        ];
+        let mut tested = Vec::new();
+        for (shell, args) in shells {
+            for locale in [None, Some("C")] {
+                for name in &names {
+                    let path = root.join(OsStr::from_bytes(name));
+                    // Путь с `-` в начале бывает только относительным.
+                    let target = if name.starts_with(b"-") {
+                        Path::new(OsStr::from_bytes(name)).to_path_buf()
+                    } else {
+                        path.clone()
+                    };
+                    let script = format!("{}\npwd", cd_command(&target));
+                    let mut command = Command::new(shell);
+                    command.args(args).arg(&script).current_dir(&root);
+                    if let Some(locale) = locale {
+                        command.env("LC_ALL", locale);
+                    }
+                    let output = match command.output() {
+                        Ok(output) => output,
+                        Err(err) if err.kind() == std::io::ErrorKind::NotFound => break,
+                        Err(err) => panic!("{shell}: {err}"),
+                    };
+                    let mut expected = path.as_os_str().as_bytes().to_vec();
+                    expected.push(b'\n');
+                    assert!(
+                        output.status.success() && output.stdout == expected,
+                        "{shell} (LC_ALL={locale:?}): {script:?}\nstdout: {:?}\nstderr: {}",
+                        String::from_utf8_lossy(&output.stdout),
+                        String::from_utf8_lossy(&output.stderr),
+                    );
+                    if !tested.contains(&shell) {
+                        tested.push(shell);
+                    }
+                }
+            }
+        }
+        eprintln!("cd_command проверена в: {tested:?}");
+        assert!(tested.contains(&"sh"), "не нашлось даже sh");
     }
 
     /// Выполняет удалённый сценарий локально с подменёнными HOME и SHELL.

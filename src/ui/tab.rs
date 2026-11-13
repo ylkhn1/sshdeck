@@ -7,6 +7,7 @@ use std::ffi::OsStr;
 use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
+use std::time::Duration;
 
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
@@ -20,13 +21,16 @@ use super::{ANIMATION_MS, Notifier, dialogs};
 use crate::connections::Connection;
 use crate::keysetup::{self, Installed, KeyPlan, LoginCheck};
 use crate::remote::{self, CwdTracking};
-use crate::session::Session;
+use crate::session::{LoginTicket, LoginTurn, Session};
 
 /// Код, с которым ssh завершается при собственных ошибках (нет связи,
 /// отказ в доступе). Остальные коды — это статус удалённой команды.
 const SSH_ERROR_CODE: i32 = 255;
 
 const INITIAL_PANEL_WIDTH: i32 = 340;
+
+/// Как часто терминал, ждущий чужого входа, проверяет мастер.
+const LOGIN_POLL: Duration = Duration::from_millis(200);
 
 /// Действие над терминалами вкладки.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +50,25 @@ struct Pane {
     widget: gtk::ScrolledWindow,
     /// Процесс ssh, пока он работает.
     pid: Cell<Option<glib::Pid>>,
+    /// Место в очереди входа на мастер вкладки.
+    login: LoginTicket,
+    /// Опрос мастера, пока терминал ждёт входа в другом терминале.
+    waiting: RefCell<Option<glib::SourceId>>,
+}
+
+impl Pane {
+    /// Перестаёт ждать чужого входа (если ждал).
+    fn stop_waiting(&self) {
+        if let Some(source) = self.waiting.take() {
+            source.remove();
+        }
+    }
+
+    /// Терминал больше не входит и не ждёт: уходит из очереди входа.
+    fn leave_login(&self) {
+        self.stop_waiting();
+        self.login.leave();
+    }
 }
 
 pub struct SessionTab {
@@ -79,6 +102,8 @@ pub struct SessionTab {
     startup: String,
     /// Отправлена ли она в текущем запуске ssh.
     startup_sent: Cell<bool>,
+    /// Панель файлов подключилась в текущем запуске ssh.
+    connected: Cell<bool>,
     /// Имя сервера вкладки: `uname -n` через мастер, а до ответа — хост из
     /// первого сообщения OSC 7. Сообщения о каталоге с других хостов (после
     /// перехода с сервера дальше по ssh) панель файлов не трогают.
@@ -162,6 +187,7 @@ impl SessionTab {
             exit_banner,
             startup: startup.trim().to_string(),
             startup_sent: Cell::new(false),
+            connected: Cell::new(false),
             server_host: RefCell::new(None),
             away_hint_shown: Cell::new(false),
             last_cwd: RefCell::new(None),
@@ -196,9 +222,7 @@ impl SessionTab {
             let weak = Rc::downgrade(&tab);
             tab.panel.set_terminal_cd_handler(move |dir| {
                 if let Some(tab) = weak.upgrade() {
-                    // Пробел в начале не даёт команде попасть в историю
-                    // оболочки (там, где это настроено).
-                    tab.run_command(&format!(" cd {}", remote::shell_quote(dir)));
+                    tab.run_command(&remote::cd_command(dir));
                 }
             });
         }
@@ -218,6 +242,8 @@ impl SessionTab {
             term,
             widget,
             pid: Cell::new(None),
+            login: self.session.login_ticket(),
+            waiting: RefCell::new(None),
         });
 
         // Терминал держит обработчики, поэтому в них — только слабые ссылки.
@@ -263,6 +289,15 @@ impl SessionTab {
                 let (Some(tab), Some(pane)) = (weak_tab.upgrade(), weak_pane.upgrade()) else {
                     return glib::Propagation::Proceed;
                 };
+                if pane.waiting.borrow().is_some()
+                    && matches!(keyval, gdk::Key::Return | gdk::Key::KP_Enter)
+                {
+                    // Не ждать чужого входа, а войти в этом терминале.
+                    pane.leave_login();
+                    pane.term.feed(b"\r\n");
+                    tab.launch_ssh(&pane);
+                    return glib::Propagation::Stop;
+                }
                 match pane_shortcut(&pane.term, keyval, keycode, state) {
                     Some(action) => {
                         tab.set_active(&pane);
@@ -365,6 +400,7 @@ impl SessionTab {
             return;
         }
         self.panes.borrow_mut().retain(|p| !Rc::ptr_eq(p, pane));
+        pane.leave_login();
         if let Some(pid) = pane.pid.take() {
             terminal::hang_up(pid);
         }
@@ -427,6 +463,9 @@ impl SessionTab {
     /// ssh в одном из терминалов завершился.
     fn on_pane_exited(self: &Rc<Self>, pane: &Rc<Pane>, status: i32) {
         pane.pid.set(None);
+        // Если этот ssh входил на сервер и не вошёл, входить начинает
+        // следующий ждущий терминал.
+        pane.login.leave();
         // Терминал, закрытый пользователем, уже убран.
         if !self.has_pane(pane) {
             return;
@@ -583,6 +622,7 @@ impl SessionTab {
         self.panel.shutdown();
         self.forwards.shutdown();
         for pane in self.panes.borrow().iter() {
+            pane.leave_login();
             if let Some(pid) = pane.pid.take() {
                 terminal::hang_up(pid);
             }
@@ -591,15 +631,26 @@ impl SessionTab {
     }
 
     fn on_connected(self: &Rc<Self>) {
+        self.connected.set(true);
         self.status.start(&self.session);
         self.query_server_host();
         let last_cwd = self.last_cwd.borrow().clone();
         if let Some(path) = last_cwd {
             self.panel.follow_dir(&path);
         }
-        if !self.startup.is_empty() && !self.startup_sent.replace(true) {
-            self.active_pane()
-                .term
+        self.send_startup();
+    }
+
+    /// Отправляет команду после входа, когда панель файлов подключилась, а
+    /// ssh текущего терминала запущен: терминал, ждавший чужого входа,
+    /// может запустить ssh уже после подключения панели.
+    fn send_startup(&self) {
+        if self.startup.is_empty() || !self.connected.get() {
+            return;
+        }
+        let pane = self.active_pane();
+        if pane.pid.get().is_some() && !self.startup_sent.replace(true) {
+            pane.term
                 .feed_child(format!("{}\n", self.startup).as_bytes());
         }
     }
@@ -856,13 +907,60 @@ impl SessionTab {
     fn start_ssh(self: &Rc<Self>, pane: &Rc<Pane>) {
         self.panel.set_ssh_running(true);
         self.startup_sent.set(false);
+        self.connected.set(false);
         self.last_cwd.borrow_mut().take();
         self.spawn_ssh(pane);
     }
 
     /// Запускает ssh в терминале. Если вход уже выполнен, ssh подключается
-    /// через мастер и пароль не спрашивает.
+    /// через мастер и пароль не спрашивает. Если на этот сервер прямо
+    /// сейчас входят в другом терминале, ssh запускается, только когда
+    /// тот вход закончится (см. `session::LoginTicket`).
     fn spawn_ssh(self: &Rc<Self>, pane: &Rc<Pane>) {
+        pane.stop_waiting();
+        match pane.login.turn() {
+            LoginTurn::MasterUp | LoginTurn::LogIn => self.launch_ssh(pane),
+            LoginTurn::Wait => self.wait_for_login(pane),
+        }
+    }
+
+    /// Ждёт, пока закончится вход в другом терминале: опрашивает мастер и
+    /// запускает ssh, когда тот поднялся или когда очередь входить дошла до
+    /// этого терминала.
+    fn wait_for_login(self: &Rc<Self>, pane: &Rc<Pane>) {
+        let note = format!(
+            "\x1b[2m{}\r\n{}\x1b[0m\r\n",
+            tr!("Waiting for login in another terminal…"),
+            tr!("Press Enter to log in here instead.")
+        );
+        pane.term.feed(note.as_bytes());
+        let weak_tab = Rc::downgrade(self);
+        let weak_pane = Rc::downgrade(pane);
+        let source = glib::timeout_add_local(LOGIN_POLL, move || {
+            let (Some(tab), Some(pane)) = (weak_tab.upgrade(), weak_pane.upgrade()) else {
+                return glib::ControlFlow::Break;
+            };
+            let turn = pane.login.turn();
+            if turn == LoginTurn::Wait {
+                return glib::ControlFlow::Continue;
+            }
+            // Источник снимается возвратом Break, а не через remove().
+            pane.waiting.take();
+            if turn == LoginTurn::LogIn {
+                let note = format!(
+                    "\x1b[2m{}\x1b[0m\r\n",
+                    tr!("The other login did not complete — logging in here.")
+                );
+                pane.term.feed(note.as_bytes());
+            }
+            tab.launch_ssh(&pane);
+            glib::ControlFlow::Break
+        });
+        *pane.waiting.borrow_mut() = Some(source);
+    }
+
+    /// Запускает процесс ssh в терминале.
+    fn launch_ssh(self: &Rc<Self>, pane: &Rc<Pane>) {
         let weak_tab = Rc::downgrade(self);
         let weak_pane = Rc::downgrade(pane);
         terminal::spawn(&pane.term, &self.session.terminal_argv(), move |result| {
@@ -874,11 +972,13 @@ impl SessionTab {
                     // Терминал могли закрыть, пока ssh запускался.
                     if tab.has_pane(&pane) {
                         pane.pid.set(Some(pid));
+                        tab.send_startup();
                     } else {
                         terminal::hang_up(pid);
                     }
                 }
                 Err(error) => {
+                    pane.login.leave();
                     let message = tr!("Could not start ssh: {}", error);
                     if tab.panes.borrow().len() > 1 {
                         tab.notifier.error(&message);

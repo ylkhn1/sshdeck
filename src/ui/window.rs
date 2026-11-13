@@ -459,7 +459,9 @@ impl AppWindow {
 
         // --- боковая панель с подключениями
         let databases = Databases::new(notifier.clone());
-        let sidebar = HostsSidebar::new(notifier.clone(), databases.clone());
+        // Настройки нужны панели сразу: в них лежат свёрнутые папки.
+        let settings = Rc::new(RefCell::new(Settings::load()));
+        let sidebar = HostsSidebar::new(notifier.clone(), databases.clone(), Rc::clone(&settings));
 
         // --- область вкладок
         let tab_view = adw::TabView::new();
@@ -502,7 +504,6 @@ impl AppWindow {
 
         notifier.set_child(&stack);
 
-        let settings = Rc::new(RefCell::new(Settings::load()));
         // Цвета выбранной темы поверх стандартных цветов libadwaita.
         let theme_css = gtk::CssProvider::new();
         if let Some(display) = gdk::Display::default() {

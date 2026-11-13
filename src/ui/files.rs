@@ -45,7 +45,7 @@ pub struct FilePanel {
 }
 
 /// Просьба терминалу перейти в каталог.
-type CdHandler = Box<dyn Fn(&str)>;
+type CdHandler = Box<dyn Fn(&Path)>;
 
 struct Inner {
     root: gtk::Box,
@@ -185,7 +185,7 @@ impl FilePanel {
         *self.inner.on_connected.borrow_mut() = Some(Box::new(handler));
     }
 
-    pub fn set_terminal_cd_handler(&self, handler: impl Fn(&str) + 'static) {
+    pub fn set_terminal_cd_handler(&self, handler: impl Fn(&Path) + 'static) {
         *self.inner.on_terminal_cd.borrow_mut() = Some(Box::new(handler));
     }
 
@@ -1248,17 +1248,10 @@ impl Inner {
             Some(entry) => sftp::parent_remote(&entry.path),
             None => self.state.borrow().cwd.clone(),
         };
-        // Терминалу путь передаётся текстом; байты не из UTF-8 в команду
-        // не набрать.
-        let Some(dir) = dir.to_str() else {
-            self.notifier.error(&tr!(
-                "“{}” cannot be opened in the terminal: the path is not valid UTF-8",
-                sftp::display(&dir)
-            ));
-            return;
-        };
+        // Путь передаётся байтами: команда cd справится и с именами не из
+        // UTF-8 (см. `remote::cd_command`).
         if let Some(handler) = self.on_terminal_cd.borrow().as_ref() {
-            handler(dir);
+            handler(&dir);
         }
     }
 

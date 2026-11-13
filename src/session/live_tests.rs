@@ -14,7 +14,9 @@
 //! `SSHDECK_TEST_KEY_HOME` (поддельный домашний каталог) и задан
 //! `IdentitiesOnly yes`; `SSHDECK_TEST_MASTER_KEY` — ключ, с которым
 //! входит сам «терминал»; `SSHDECK_TEST_EXPECT_LOGIN` — `works` или `fails`
-//! (сервер читает ключи из другого файла).
+//! (сервер читает ключи из другого файла). Для очереди входа:
+//! `SSHDECK_TEST_PASSPHRASE_SSH` — псевдоним того же сервера с ключом под
+//! фразой-паролем, `SSHDECK_TEST_PASSPHRASE` — эта фраза.
 
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -239,4 +241,140 @@ fn live_ssh_cwd_snippet_on_server() {
 
     session.close_master();
     let _ = stderr_of(tab);
+}
+
+/// Скрипт `SSH_ASKPASS`: отмечает вызов в `<скрипт>.calls`, ждёт `delay`
+/// секунд («пользователь вводит пароль») и печатает фразу-пароль.
+fn askpass(dir: &Path, name: &str, delay: u32) -> PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+    let script = dir.join(name);
+    let body = format!(
+        "#!/bin/sh\necho call >> '{}.calls'\nsleep {delay}\nprintf '%s\\n' \"$SSHDECK_TEST_PASSPHRASE\"\n",
+        script.display()
+    );
+    std::fs::write(&script, body).expect("askpass");
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o700)).expect("chmod");
+    script
+}
+
+fn askpass_calls(script: &Path) -> usize {
+    let calls = format!("{}.calls", script.display());
+    std::fs::read_to_string(calls).map_or(0, |text| text.lines().count())
+}
+
+/// Как [`spawn_like_terminal`], но фразу-пароль ключа «вводит» `askpass`.
+fn spawn_with_askpass(session: &Session, askpass: &Path, command: &str) -> Child {
+    let mut argv = session.terminal_argv();
+    let target = argv.pop().expect("target");
+    argv.pop(); // "--"
+    argv.extend(["-o".to_string(), "LogLevel=VERBOSE".to_string()]);
+    argv.extend(["--".to_string(), target, command.to_string()]);
+    Command::new(&argv[0])
+        .args(&argv[1..])
+        .env("SSH_ASKPASS", askpass)
+        .env("SSH_ASKPASS_REQUIRE", "force")
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("ssh")
+}
+
+/// Ждёт, пока очередь входа не скажет что-то кроме «жди».
+fn wait_turn(ticket: &LoginTicket) -> LoginTurn {
+    let deadline = Instant::now() + Duration::from_secs(20);
+    loop {
+        let turn = ticket.turn();
+        if turn != LoginTurn::Wait {
+            return turn;
+        }
+        assert!(Instant::now() < deadline, "очередь входа не сдвинулась");
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Две вкладки открыты одновременно, первая ещё ждёт фразу-пароль: вторая
+/// не входит сама, а дожидается мастера первой и подключается через него.
+#[test]
+#[ignore = "нужны SSHDECK_TEST_PASSPHRASE_SSH и SSHDECK_TEST_PASSPHRASE"]
+fn live_ssh_tabs_opened_together_log_in_once() {
+    let alias = env("SSHDECK_TEST_PASSPHRASE_SSH");
+    env("SSHDECK_TEST_PASSPHRASE");
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let slow = askpass(dir.path(), "slow", 2);
+    let runtime = runtime_dir().expect("runtime dir");
+    let first = Session::shared(&alias, &runtime, config_override());
+    let second = Session::shared(&alias, &runtime, config_override());
+
+    let ticket1 = first.login_ticket();
+    assert_eq!(ticket1.turn(), LoginTurn::LogIn);
+    let tab1 = spawn_with_askpass(&first, &slow, "sleep 6");
+    // Вторая вкладка открыта, пока первая ждёт фразу-пароль.
+    let ticket2 = second.login_ticket();
+    assert_eq!(ticket2.turn(), LoginTurn::Wait);
+    assert_eq!(wait_turn(&ticket2), LoginTurn::MasterUp);
+    // Если бы вторая вкладка входила сама, askpass вызвали бы ещё раз.
+    let tab2 = spawn_with_askpass(&second, &slow, "echo tab2-alive");
+
+    let output = tab2.wait_with_output().expect("wait");
+    let log2 = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{log2}");
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "tab2-alive");
+    assert!(!log2.contains("Authenticated to"), "вторая вкладка вошла сама: {log2}");
+    let (ok1, log1) = stderr_of(tab1);
+    assert!(ok1 && log1.contains("Authenticated to"), "{log1}");
+    assert_eq!(askpass_calls(&slow), 1, "фразу-пароль должны спросить один раз");
+
+    drop((ticket1, ticket2));
+    first.close_master();
+    second.close_master();
+}
+
+/// Вкладку, в которой шёл вход, закрыли до входа: входить начинает ровно
+/// одна из ждавших, а третья дожидается уже её мастера.
+#[test]
+#[ignore = "нужны SSHDECK_TEST_PASSPHRASE_SSH и SSHDECK_TEST_PASSPHRASE"]
+fn live_ssh_waiting_tab_takes_over_an_abandoned_login() {
+    let alias = env("SSHDECK_TEST_PASSPHRASE_SSH");
+    env("SSHDECK_TEST_PASSPHRASE");
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let never = askpass(dir.path(), "never", 30);
+    let quick = askpass(dir.path(), "quick", 1);
+    let runtime = runtime_dir().expect("runtime dir");
+    let sessions: Vec<Session> = (0..3)
+        .map(|_| Session::shared(&alias, &runtime, config_override()))
+        .collect();
+    let tickets: Vec<LoginTicket> = sessions.iter().map(Session::login_ticket).collect();
+
+    assert_eq!(tickets[0].turn(), LoginTurn::LogIn);
+    let mut tab1 = spawn_with_askpass(&sessions[0], &never, "true");
+    assert_eq!(tickets[1].turn(), LoginTurn::Wait);
+    assert_eq!(tickets[2].turn(), LoginTurn::Wait);
+
+    // Первую вкладку закрыли, не дождавшись фразы-пароля.
+    std::thread::sleep(Duration::from_millis(500));
+    tab1.kill().expect("kill");
+    let _ = tab1.wait();
+    tickets[0].leave();
+    sessions[0].close_master();
+
+    assert_eq!(tickets[1].turn(), LoginTurn::LogIn);
+    assert_eq!(tickets[2].turn(), LoginTurn::Wait);
+    let tab2 = spawn_with_askpass(&sessions[1], &quick, "sleep 5");
+    assert_eq!(wait_turn(&tickets[2]), LoginTurn::MasterUp);
+    let tab3 = spawn_with_askpass(&sessions[2], &quick, "echo tab3-alive");
+
+    let output = tab3.wait_with_output().expect("wait");
+    let log3 = String::from_utf8_lossy(&output.stderr);
+    assert!(output.status.success(), "{log3}");
+    assert_eq!(String::from_utf8_lossy(&output.stdout).trim(), "tab3-alive");
+    assert!(!log3.contains("Authenticated to"), "третья вкладка вошла сама: {log3}");
+    let (ok2, log2) = stderr_of(tab2);
+    assert!(ok2 && log2.contains("Authenticated to"), "{log2}");
+    assert_eq!(askpass_calls(&quick), 1);
+
+    drop(tickets);
+    for session in &sessions {
+        session.close_master();
+    }
 }

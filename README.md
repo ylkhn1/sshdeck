@@ -149,7 +149,7 @@ cargo clippy --all-targets  # no warnings
 
 - **Quick connect.** Type `user@host` or an alias into the field at the top of the sidebar. You can give a port the way `ssh` does (`user@host -p 2222`) or after a colon (`user@host:2222`, `ssh://user@host:2222`). Other `ssh` options are not accepted in this field.
 - **Saved connections.** The **+** button saves a connection with a name, an address and an optional folder. Double-click a connection to open a tab with that name. Right-click it to connect, edit, duplicate or delete. A host from `~/.ssh/config` can be saved from its context menu.
-- **Folders.** Folders can be nested, for example `Work/Servers`. A folder appears when you save the first connection into it and disappears with the last one. Click a folder to collapse it. Its context menu lets you add a connection to it, rename it, pick one of seven colors, remove the folder and move its contents up one level, or delete it with everything in it.
+- **Folders.** Folders can be nested, for example `Work/Servers`. A folder appears when you save the first connection into it and disappears with the last one. Click a folder to collapse it; collapsed folders stay collapsed after a restart. Its context menu lets you add a connection to it, rename it, pick one of seven colors, remove the folder and move its contents up one level, or delete it with everything in it.
 - **Order.** Connections and folders stay in the order you give them. Drag them in the sidebar, or use *Move Up*, *Move Down* and *Move to Folder…* in the context menu.
 - **Hosts from `~/.ssh/config`.** `Host` entries are listed below the saved connections. Wildcard entries are skipped, and `Include` is followed.
 - **Search.** The same field filters connections by name, address and folder. Matches are shown inside their folders.
@@ -160,7 +160,7 @@ cargo clippy --all-targets  # no warnings
 
 ### Files
 
-- **Login.** You enter your password or key passphrase once, in the tab's terminal. The file panel waits and connects by itself as soon as you are logged in. Further tabs to the same server reuse that login.
+- **Login.** You enter your password or key passphrase once, in the tab's terminal. The file panel waits and connects by itself as soon as you are logged in. Further tabs to the same server reuse that login. A tab opened while another one is still logging in waits for that login instead of asking again (press Enter to log in there instead).
 - **Tree.** The tree starts in your home directory. Arrows expand directories in place, and their contents load on demand. Double-click a directory to enter it. The path field accepts `~`, `..` and relative paths. The **eye** button shows dotfiles.
 - **Operations.** You can upload files or a whole directory, download the selection, create a directory, rename (F2), delete (Delete, after confirmation) and refresh (F5). Directories are transferred and deleted recursively. sshdeck asks before overwriting files.
 - **Drag and drop.** Drop files from your file manager onto a folder in the tree to upload them there, or anywhere else in the panel to upload them to the current directory. Drag rows out of the panel to download them.
@@ -297,11 +297,9 @@ Strings in the code are English and are wrapped in `tr!("…")`, or in `trn!` wh
 
 - Linux only, and no X11 forwarding. Passwords are saved only for databases; SSH passwords are never stored, by design.
 - Words like *error* or *warning* in terminal output are not recolored, because VTE cannot do that. Only links and IP addresses under the pointer are highlighted.
-- Tabs to the same server opened at the very same moment, before the first login finishes, each log in separately.
 - Key setup appends to `~/.ssh/authorized_keys`. If the server's sshd reads keys from another file, sshdeck can only tell you that key login still fails.
 - SFTP reports times in whole seconds, so a change on the server within the same second and with the same size is not noticed when saving from the editor.
-- *Go Here in Terminal* does not work for folders whose names are not valid UTF-8.
-- The sidebar does not remember which folders were collapsed between runs.
+- *Go Here in Terminal* for folders whose names contain bytes that are not valid UTF-8 needs fish 3.4 or newer when the shell is fish (bash, zsh and sh are fine).
 </details>
 
 ## License

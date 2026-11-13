@@ -8,7 +8,7 @@
 mod arrange;
 
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::path::PathBuf;
 use std::rc::{Rc, Weak};
 
@@ -26,6 +26,7 @@ use crate::connections::{
 use arrange::{DropRow, FolderChoice, Mark, display_path};
 use crate::probe::{self, Status};
 use crate::session;
+use crate::settings::Settings;
 use crate::ssh_config::{self, HostEntry};
 
 const CANCEL: &str = "cancel";
@@ -166,8 +167,10 @@ struct Inner {
     connections: RefCell<Connections>,
     hosts: RefCell<Vec<HostEntry>>,
     rows: RefCell<Vec<Row>>,
-    /// Пути свёрнутых папок.
+    /// Пути свёрнутых папок. Хранятся в настройках окна
+    /// (`Settings::collapsed_folders`) и пишутся туда при каждом изменении.
     collapsed: RefCell<HashSet<FolderPath>>,
+    settings: Rc<RefCell<Settings>>,
     actions: gio::SimpleActionGroup,
     /// Что сейчас перетаскивается (место в дереве).
     dragging: RefCell<Option<Loc>>,
@@ -186,7 +189,7 @@ struct Inner {
 }
 
 impl HostsSidebar {
-    pub fn new(notifier: Notifier, databases: Databases) -> Self {
+    pub fn new(notifier: Notifier, databases: Databases, settings: Rc<RefCell<Settings>>) -> Self {
         let entry = gtk::Entry::builder()
             .placeholder_text(tr!("Search or user@host"))
             .tooltip_text(tr!(
@@ -270,6 +273,9 @@ impl HostsSidebar {
             scroll.connect_destroy(move |_| menu.unparent());
         }
 
+        // Свёрнутые папки прошлого запуска — до первой перестройки списка
+        // в reload().
+        let collapsed: HashSet<FolderPath> = settings.borrow().collapsed_folders.iter().cloned().collect();
         let inner = Rc::new_cyclic(|me| Inner {
             me: me.clone(),
             root,
@@ -283,7 +289,8 @@ impl HostsSidebar {
             connections: RefCell::new(Connections::default()),
             hosts: RefCell::new(Vec::new()),
             rows: RefCell::new(Vec::new()),
-            collapsed: RefCell::new(HashSet::new()),
+            collapsed: RefCell::new(collapsed),
+            settings,
             actions: gio::SimpleActionGroup::new(),
             dragging: RefCell::new(None),
             drop_mark: RefCell::new(None),
@@ -548,7 +555,11 @@ impl Inner {
         *self.hosts.borrow_mut() = parsed.hosts;
 
         match Connections::load(&self.path) {
-            Ok(list) => *self.connections.borrow_mut() = list,
+            Ok(list) => {
+                *self.connections.borrow_mut() = list;
+                // Файл могли поправить руками: забываем пропавшие папки.
+                self.forget_missing_folders();
+            }
             Err(err) => {
                 // Повреждённый файл откладываем в сторону, чтобы следующее
                 // сохранение не затёрло то, что в нём ещё можно прочитать.
@@ -675,6 +686,7 @@ impl Inner {
             self.notifier
                 .error(&tr!("Could not save connections: {}", err));
         }
+        self.forget_missing_folders();
         self.rebuild();
         self.probe(true);
     }
@@ -742,6 +754,27 @@ impl Inner {
         self.commit();
         if let Some(loc) = loc {
             self.select_loc(&loc);
+        }
+    }
+
+    /// Убирает из свёрнутых исчезнувшие папки (удалённые, убранные,
+    /// опустевшие) и сохраняет свёрнутые папки, если они изменились.
+    fn forget_missing_folders(&self) {
+        let folders = self.connections.borrow().folders();
+        arrange::keep_existing(&mut self.collapsed.borrow_mut(), &folders);
+        self.save_collapsed();
+    }
+
+    /// Записывает свёрнутые папки в настройки, если они изменились.
+    fn save_collapsed(&self) {
+        let current: BTreeSet<FolderPath> = self.collapsed.borrow().iter().cloned().collect();
+        if self.settings.borrow().collapsed_folders == current {
+            return;
+        }
+        self.settings.borrow_mut().collapsed_folders = current;
+        if let Err(err) = self.settings.borrow().save() {
+            self.notifier
+                .error(&tr!("Could not save settings: {}", err));
         }
     }
 
@@ -945,6 +978,7 @@ impl Inner {
                 collapsed.insert(folder.to_vec());
             }
         }
+        self.save_collapsed();
         self.apply_collapsed(true);
     }
 
@@ -1547,11 +1581,7 @@ impl Inner {
         if !self.connections.borrow_mut().dissolve_folder(&loc) {
             return;
         }
-        {
-            let mut collapsed = self.collapsed.borrow_mut();
-            collapsed.remove(&path);
-            arrange::rebase_paths(&mut collapsed, &path, &path[..path.len() - 1]);
-        }
+        arrange::lift_paths(&mut self.collapsed.borrow_mut(), &path);
         self.commit();
         self.notifier
             .info(&tr!("Folder “{}” removed, connections kept", display_path(&path)));

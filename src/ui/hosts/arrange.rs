@@ -122,6 +122,27 @@ pub fn forget_paths(set: &mut HashSet<FolderPath>, prefix: &[String]) {
     set.retain(|path| !path.starts_with(prefix));
 }
 
+/// Папку `path` убрали, а содержимое подняли на уровень выше: сама она
+/// забывается, вложенные папки остаются свёрнутыми под новым путём.
+pub fn lift_paths(set: &mut HashSet<FolderPath>, path: &[String]) {
+    let Some((_, parent)) = path.split_last() else {
+        return;
+    };
+    set.remove(path);
+    rebase_paths(set, path, parent);
+}
+
+/// Оставляет только пути папок, которые есть в списке `folders`: папки,
+/// удалённые, убранные или опустевшие (ушло последнее подключение),
+/// забываются, чтобы не копиться в настройках. Возвращает, изменилось ли
+/// что-нибудь.
+pub fn keep_existing(set: &mut HashSet<FolderPath>, folders: &[FolderPath]) -> bool {
+    let before = set.len();
+    let existing: HashSet<&FolderPath> = folders.iter().collect();
+    set.retain(|path| existing.contains(path));
+    set.len() != before
+}
+
 /// Путь для чтения: «Работа / Сервера».
 pub fn display_path(path: &[String]) -> String {
     path.join(" / ")
@@ -190,8 +211,8 @@ pub fn folder_picker(
 mod tests {
     use std::collections::HashSet;
 
-    use super::{DropRow, Mark, drop_target, forget_paths, rebase_paths};
-    use crate::connections::{FolderPath, Target};
+    use super::{DropRow, Mark, drop_target, forget_paths, keep_existing, lift_paths, rebase_paths};
+    use crate::connections::{Connection, Connections, FolderPath, Target};
 
     fn p(text: &str) -> FolderPath {
         crate::connections::split_path(text)
@@ -242,5 +263,94 @@ mod tests {
         assert_eq!(set, expected);
         forget_paths(&mut set, &p("Архив"));
         assert_eq!(set, [p("Продажи"), p("Тест")].into());
+    }
+
+    #[test]
+    fn rebase_only_touches_the_subtree_not_namesakes_by_prefix() {
+        // «Прод» — не префикс пути «Продажи»: сравниваются части, а не текст.
+        let mut set: HashSet<FolderPath> = [p("Прод/EU"), p("Продажи/EU"), p("a\\/b/c")].into();
+        rebase_paths(&mut set, &p("Прод"), &p("Архив"));
+        rebase_paths(&mut set, &p("a\\/b"), &p("x/a\\/b"));
+        assert_eq!(set, [p("Архив/EU"), p("Продажи/EU"), p("x/a\\/b/c")].into());
+        // Перенос на то же место ничего не меняет.
+        let before = set.clone();
+        rebase_paths(&mut set, &p("Архив"), &p("Архив"));
+        assert_eq!(set, before);
+    }
+
+    #[test]
+    fn lifted_folder_is_forgotten_and_its_subfolders_move_up() {
+        let mut set: HashSet<FolderPath> = [p("Прод"), p("Прод/EU"), p("Прод/EU/Резерв"), p("Тест")].into();
+        lift_paths(&mut set, &p("Прод"));
+        assert_eq!(set, [p("EU"), p("EU/Резерв"), p("Тест")].into());
+        lift_paths(&mut set, &p("EU/Резерв"));
+        assert_eq!(set, [p("EU"), p("Тест")].into());
+        // Корень убрать нельзя.
+        lift_paths(&mut set, &[]);
+        assert_eq!(set, [p("EU"), p("Тест")].into());
+    }
+
+    #[test]
+    fn only_existing_folders_are_kept() {
+        let mut set: HashSet<FolderPath> = [p("Прод"), p("Прод/EU"), p("Удалённая"), p("Тест/Пусто")].into();
+        let folders = vec![p("Прод"), p("Прод/EU"), p("Тест")];
+        assert!(keep_existing(&mut set, &folders));
+        assert_eq!(set, [p("Прод"), p("Прод/EU")].into());
+        assert!(!keep_existing(&mut set, &folders));
+        assert!(keep_existing(&mut set, &[]));
+        assert!(set.is_empty());
+    }
+
+    /// Свёрнутые папки вслед за правками настоящего списка — так же, как
+    /// это делает боковая панель: перенос и переименование — `rebase_paths`,
+    /// «убрать папку» — `lift_paths`, удаление — `forget_paths`, после
+    /// любой правки — `keep_existing`.
+    #[test]
+    fn collapsed_paths_follow_real_list_edits() {
+        let mut list = Connections::default();
+        list.add(Connection::new("web", "root@web"), &p("Прод"));
+        list.add(Connection::new("fra1", "root@fra1"), &p("Прод/EU"));
+        list.add(Connection::new("ams", "root@ams"), &p("Прод/EU/Резерв"));
+        list.add(Connection::new("стенд", "root@стенд"), &p("Тест"));
+        list.add(Connection::new("lab", "root@lab"), &p("a/b;c"));
+        let mut set: HashSet<FolderPath> =
+            [p("Прод"), p("Прод/EU/Резерв"), p("Тест"), p("a/b;c")].into();
+        let sync = |set: &mut HashSet<FolderPath>, list: &Connections| {
+            keep_existing(set, &list.folders());
+        };
+
+        // Переименование: «Прод» → «Production», поддерево следом.
+        let loc = list.folder_loc(&p("Прод")).expect("Прод");
+        let new = list.rename_folder(&loc, "Production").expect("rename");
+        rebase_paths(&mut set, &p("Прод"), &list.folder_path(&new).expect("path"));
+        sync(&mut set, &list);
+        assert_eq!(set, [p("Production"), p("Production/EU/Резерв"), p("Тест"), p("a/b;c")].into());
+
+        // Перенос «EU» в «Тест».
+        let loc = list.folder_loc(&p("Production/EU")).expect("EU");
+        let new = list.move_into(&loc, &p("Тест")).expect("move");
+        rebase_paths(&mut set, &p("Production/EU"), &list.folder_path(&new).expect("path"));
+        sync(&mut set, &list);
+        assert_eq!(set, [p("Production"), p("Тест"), p("Тест/EU/Резерв"), p("a/b;c")].into());
+
+        // «Убрать папку» «Тест»: содержимое поднимается в корень.
+        let loc = list.folder_loc(&p("Тест")).expect("Тест");
+        assert!(list.dissolve_folder(&loc));
+        lift_paths(&mut set, &p("Тест"));
+        sync(&mut set, &list);
+        assert_eq!(set, [p("Production"), p("EU/Резерв"), p("a/b;c")].into());
+
+        // Ушло последнее подключение — папка исчезла и забыта.
+        let loc = list.find_connection(&Connection::new("ams", "root@ams")).expect("ams");
+        list.remove(&loc);
+        sync(&mut set, &list);
+        assert_eq!(set, [p("Production"), p("a/b;c")].into());
+
+        // Удаление папки вместе с содержимым.
+        let loc = list.folder_loc(&p("a")).expect("a");
+        list.delete_folder(&loc);
+        forget_paths(&mut set, &p("a"));
+        sync(&mut set, &list);
+        assert_eq!(set, [p("Production")].into());
     }
 }

@@ -1,12 +1,20 @@
 //! Настройки приложения: `~/.config/sshdeck/settings.ini`.
 //!
-//! Здесь хранятся шрифт и тема терминала, оформление окна и сохранённые
-//! команды. Сохранённые подключения лежат отдельно (`crate::connections`);
-//! паролей и истории приложение не хранит.
+//! Здесь хранятся шрифт и тема терминала, оформление окна, сохранённые
+//! команды и то, какие папки боковой панели свёрнуты. Сохранённые
+//! подключения лежат отдельно (`crate::connections`); паролей и истории
+//! приложение не хранит.
+//!
+//! Свёрнутые папки — группа `[sidebar]`, ключ `collapsed`: список GLib
+//! (через `;`) полных путей папок, записанных как в `connections.ini`
+//! (`Работа/Сервера`, см. [`join_path`]). Пустой список не пишется.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 use gtk::glib;
+
+use crate::connections::{FolderPath, join_path, split_path};
 
 pub const DEFAULT_FONT: &str = "Monospace 10";
 /// Тема терминала, которая следует за светлым или тёмным оформлением окна.
@@ -26,6 +34,8 @@ const KEY_LANGUAGE: &str = "language";
 const GROUP_SNIPPET: &str = "snippet";
 const KEY_NAME: &str = "name";
 const KEY_COMMAND: &str = "command";
+const GROUP_SIDEBAR: &str = "sidebar";
+const KEY_COLLAPSED: &str = "collapsed";
 
 /// Сохранённая команда, которую можно отправить в терминал одним щелчком.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,6 +56,9 @@ pub struct Settings {
     /// Язык интерфейса; применяется при следующем запуске.
     pub language: String,
     pub snippets: Vec<Snippet>,
+    /// Пути свёрнутых папок боковой панели (по порядку — чтобы файл не
+    /// менялся от запуска к запуску).
+    pub collapsed_folders: BTreeSet<FolderPath>,
 }
 
 impl Default for Settings {
@@ -57,6 +70,7 @@ impl Default for Settings {
             show_files: true,
             language: DEFAULT_LANGUAGE.to_string(),
             snippets: Vec::new(),
+            collapsed_folders: BTreeSet::new(),
         }
     }
 }
@@ -116,6 +130,13 @@ impl Settings {
         if let Some(language) = field(GROUP_APPEARANCE, KEY_LANGUAGE) {
             settings.language = language;
         }
+        if let Ok(list) = key_file.string_list(GROUP_SIDEBAR, KEY_COLLAPSED) {
+            settings.collapsed_folders = list
+                .iter()
+                .map(|item| split_path(item.as_str()))
+                .filter(|path| !path.is_empty())
+                .collect();
+        }
         for group in key_file.groups().iter() {
             let group = group.as_str();
             if !group.starts_with(GROUP_SNIPPET) {
@@ -141,13 +162,44 @@ impl Settings {
             key_file.set_string(&group, KEY_NAME, &snippet.name);
             key_file.set_string(&group, KEY_COMMAND, &snippet.command);
         }
+        if !self.collapsed_folders.is_empty() {
+            let paths = self.collapsed_folders.iter().map(|path| join_path(path));
+            key_file.set_value(GROUP_SIDEBAR, KEY_COLLAPSED, &list_value(paths));
+        }
         key_file.to_data().to_string()
     }
+}
+
+/// Значение-список ключевого файла GLib: каждый элемент экранирован так же,
+/// как это делает `g_key_file_set_string_list` (в привязках glib-rs её
+/// нет), и заканчивается `;`. Читается обратно `KeyFile::string_list`.
+fn list_value(items: impl IntoIterator<Item = String>) -> String {
+    let mut value = String::new();
+    for item in items {
+        for (index, c) in item.chars().enumerate() {
+            match c {
+                ' ' if index == 0 => value.push_str("\\s"),
+                '\n' => value.push_str("\\n"),
+                '\t' => value.push_str("\\t"),
+                '\r' => value.push_str("\\r"),
+                '\\' => value.push_str("\\\\"),
+                ';' => value.push_str("\\;"),
+                _ => value.push(c),
+            }
+        }
+        value.push(';');
+    }
+    value
 }
 
 #[cfg(test)]
 mod tests {
     use super::{DEFAULT_FONT, DEFAULT_SCHEME, DEFAULT_THEME, Settings, Snippet};
+    use crate::connections::FolderPath;
+
+    fn folder(parts: &[&str]) -> FolderPath {
+        parts.iter().map(|part| part.to_string()).collect()
+    }
 
     #[test]
     fn defaults_for_empty_or_broken_file() {
@@ -167,6 +219,7 @@ mod tests {
         assert!(settings.show_files);
         assert_eq!(settings.language, super::DEFAULT_LANGUAGE);
         assert!(settings.snippets.is_empty());
+        assert!(settings.collapsed_folders.is_empty());
     }
 
     #[test]
@@ -187,8 +240,83 @@ mod tests {
                     command: "df -h".to_string(),
                 },
             ],
+            collapsed_folders: [folder(&["Работа"]), folder(&["Работа", "Сервера"])].into(),
         };
         assert_eq!(Settings::parse(&settings.serialize()), settings);
+    }
+
+    #[test]
+    fn collapsed_folders_with_any_characters_survive_a_round_trip() {
+        // Разделители пути и списка, экранирующие символы, синтаксис
+        // ключевого файла (`=`, `#`, `[]`), кавычки, не-ASCII.
+        let names = [
+            "a/b",
+            "back\\slash",
+            "trailing\\",
+            "\\/",
+            "semi;colon",
+            "\\;",
+            ";",
+            "x = y # z",
+            "[group]",
+            "\"quoted\" 'single'",
+            "\\n not a newline",
+            "Сервера 🚀",
+        ];
+        let mut settings = Settings::default();
+        for name in names {
+            settings.collapsed_folders.insert(folder(&[name]));
+            settings
+                .collapsed_folders
+                .insert(folder(&["Корень", name, "Вложенная"]));
+        }
+        let data = settings.serialize();
+        assert_eq!(Settings::parse(&data), settings, "{data}");
+    }
+
+    #[test]
+    fn collapsed_folders_are_written_in_a_stable_readable_form() {
+        let mut settings = Settings::default();
+        settings
+            .collapsed_folders
+            .insert(folder(&["Работа", "Сервера"]));
+        settings.collapsed_folders.insert(folder(&["A/B"]));
+        let data = settings.serialize();
+        assert!(
+            data.contains("[sidebar]\ncollapsed=A\\\\/B;Работа/Сервера;\n"),
+            "{data}"
+        );
+        // Без свёрнутых папок группы нет вовсе.
+        assert!(!Settings::default().serialize().contains("sidebar"));
+    }
+
+    #[test]
+    fn hand_edited_collapsed_list_is_cleaned() {
+        let settings = Settings::parse("[sidebar]\ncollapsed= Работа / Сервера ;;/;EU\n");
+        assert_eq!(
+            settings.collapsed_folders,
+            [folder(&["Работа", "Сервера"]), folder(&["EU"])].into()
+        );
+    }
+
+    #[test]
+    fn list_value_is_read_back_by_glib() {
+        // Таких символов в путях папок не бывает (имена чистятся), но
+        // экранирование должно совпадать с GLib и для них.
+        let items = [
+            " lead", "a\nb", "t\tr\r", "\\;", ";", "\\", "end\\", "x;y\\z",
+        ];
+        let value = super::list_value(items.iter().map(|item| item.to_string()));
+        let key_file = gtk::glib::KeyFile::new();
+        key_file.set_value("g", "k", &value);
+        let data = key_file.to_data();
+        let reread = gtk::glib::KeyFile::new();
+        reread
+            .load_from_data(&data, gtk::glib::KeyFileFlags::NONE)
+            .expect("load");
+        let list = reread.string_list("g", "k").expect("list");
+        let list: Vec<&str> = list.iter().map(|item| item.as_str()).collect();
+        assert_eq!(list, items);
     }
 
     #[test]
