@@ -308,7 +308,11 @@ impl Inner {
         let labeled_ops = transfer_buttons(true);
         let compact_ops = transfer_buttons(false);
         // Не забирает фокус: F5 после щелчка продолжает работать в дереве.
+        // Значок обмена (↓↑) один для обоих направлений: одиночная стрелка
+        // go-down/go-up в Adwaita — это галочка, и кнопка выглядела бы как
+        // выпадающий список. Направление объясняет подсказка.
         let copy_button = gtk::Button::builder()
+            .icon_name("mail-send-receive-symbolic")
             .focus_on_click(false)
             .visible(false)
             .build();
@@ -710,19 +714,12 @@ impl Inner {
             .set_sensitive(connected || side == Side::Local);
         self.copy_button.set_visible(local_shown);
         self.copy_button.set_sensitive(connected);
-        let (icon, tooltip) = match side {
-            // Локальное дерево сверху, серверное снизу: стрелка показывает,
-            // куда пойдут файлы.
-            Side::Local => (
-                "go-down-symbolic",
-                tr!("Upload the selection to the server folder below (F5)"),
-            ),
-            Side::Remote => (
-                "go-up-symbolic",
-                tr!("Download the selection to the local folder above (F5)"),
-            ),
+        // Локальное дерево сверху, серверное снизу: подсказка говорит, куда
+        // пойдут файлы из активного дерева.
+        let tooltip = match side {
+            Side::Local => tr!("Upload the selection to the server folder below (F5)"),
+            Side::Remote => tr!("Download the selection to the local folder above (F5)"),
         };
-        self.copy_button.set_icon_name(icon);
         self.copy_button.set_tooltip_text(Some(tooltip));
         self.mkdir_button.set_tooltip_text(Some(match side {
             Side::Local => tr!("New folder on this computer"),

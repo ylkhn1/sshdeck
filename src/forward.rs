@@ -846,7 +846,19 @@ mod tests {
         let forward = Forward::from_fields(Kind::Local, "", &port.to_string(), "h", "80").expect("fwd");
         assert!(local_bind_problem(&forward).is_some());
         drop(listener);
-        assert_eq!(local_bind_problem(&forward), None);
+        // Освобождённый порт может тут же получить соседний тест (он тоже
+        // просит у системы свободный порт), поэтому свободный порт ищется
+        // несколькими попытками, а не проверяется только что закрытый.
+        let free = (0..20).any(|_| {
+            let port = TcpListener::bind("127.0.0.1:0")
+                .and_then(|l| l.local_addr())
+                .expect("bind")
+                .port();
+            let forward =
+                Forward::from_fields(Kind::Local, "", &port.to_string(), "h", "80").expect("fwd");
+            local_bind_problem(&forward).is_none()
+        });
+        assert!(free, "a just-freed port was reported busy every time");
     }
 
     #[test]
