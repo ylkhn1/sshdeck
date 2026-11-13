@@ -125,7 +125,7 @@ impl Live {
         String::from_utf8_lossy(&self.shell(script)).trim().to_string()
     }
 
-    fn list(&self, path: &Path) -> Vec<RemoteEntry> {
+    fn list(&self, path: &Path) -> Vec<FileEntry> {
         self.send(Command::List {
             path: path.to_path_buf(),
         });
@@ -164,9 +164,12 @@ impl Drop for Live {
     fn drop(&mut self) {
         if !self.dir.as_os_str().is_empty() {
             let dir = std::mem::take(&mut self.dir);
-            let argv = self
-                .session
-                .command_argv(&format!("rm -rf '{}'", display(&dir)));
+            // Каталоги без права записи (их оставляет упавшая проверка
+            // прав) иначе не удалились бы.
+            let argv = self.session.command_argv(&format!(
+                "chmod -R u+rwx '{0}'; rm -rf '{0}'",
+                display(&dir)
+            ));
             let _ = std::process::Command::new(&argv[0]).args(&argv[1..]).status();
         }
         self.worker.take();
@@ -198,6 +201,15 @@ fn set_mtime(path: &Path, secs: u64) {
     let file = std::fs::File::open(path).expect("open");
     file.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(secs))
         .expect("set mtime");
+}
+
+/// Права файла без битов типа.
+fn mode(path: &Path) -> u32 {
+    std::fs::metadata(path)
+        .expect("metadata")
+        .permissions()
+        .mode()
+        & 0o7777
 }
 
 fn mtime(path: &Path) -> u64 {
@@ -342,17 +354,66 @@ fn live_times_and_permissions() {
     }));
     assert_eq!(live.shell_text("stat -c '%a %Y' keep.txt; cat keep.txt"), "600 1650000000\nnew contents");
 
-    // Скачивание переносит время изменения с сервера.
-    live.shell("mkdir -p dl/sub && printf r > dl/sub/r && touch -d @1300000000 dl/sub/r && touch -d @1200000000 dl/sub dl");
+    // Скачивание переносит время изменения и права с сервера (без записи
+    // для группы и остальных, без setuid). Каталог только для чтения
+    // получает права в конце: файл внутрь записывается, время ставится.
+    live.shell(
+        "mkdir -p dl/sub dl/ro && printf r > dl/sub/r && touch -d @1300000000 dl/sub/r \
+         && printf '#!/bin/sh\\n' > dl/run.sh && chmod 4755 dl/run.sh \
+         && printf s > dl/secret && chmod 600 dl/secret \
+         && printf w > dl/shared && chmod 666 dl/shared \
+         && printf f > dl/ro/f && chmod 444 dl/ro/f \
+         && chmod 775 dl/sub && chmod 555 dl/ro && chmod 700 dl \
+         && touch -d @1100000000 dl/ro && touch -d @1200000000 dl/sub dl",
+    );
     let out = tempfile::tempdir().expect("tempdir");
+    let dl = out.path().join("dl");
     completed(live.transfer(|id| Command::Download {
         id,
         sources: vec![live.path("dl")],
         dest_dir: out.path().to_path_buf(),
     }));
-    assert_eq!(mtime(&out.path().join("dl/sub/r")), 1_300_000_000);
-    assert_eq!(mtime(&out.path().join("dl/sub")), 1_200_000_000);
-    assert_eq!(mtime(&out.path().join("dl")), 1_200_000_000);
+    assert_eq!(mtime(&dl.join("sub/r")), 1_300_000_000);
+    assert_eq!(mtime(&dl.join("sub")), 1_200_000_000);
+    assert_eq!(mtime(&dl), 1_200_000_000);
+    assert_eq!(mtime(&dl.join("ro")), 1_100_000_000);
+    assert_eq!(mode(&dl.join("run.sh")), 0o755);
+    assert_eq!(mode(&dl.join("secret")), 0o600);
+    assert_eq!(mode(&dl.join("shared")), 0o644);
+    assert_eq!(mode(&dl.join("ro/f")), 0o444);
+    assert_eq!(std::fs::read(dl.join("ro/f")).expect("read"), b"f");
+    assert_eq!(mode(&dl.join("sub")), 0o755);
+    assert_eq!(mode(&dl.join("ro")), 0o555);
+    assert_eq!(mode(&dl), 0o700);
+
+    // Перезаписанный файл получает права с сервера; существующий каталог,
+    // в который скачивание лишь добавляет файлы, свои права сохраняет.
+    std::fs::set_permissions(&dl, std::fs::Permissions::from_mode(0o750)).expect("chmod");
+    std::fs::set_permissions(dl.join("ro"), std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    std::fs::set_permissions(dl.join("run.sh"), std::fs::Permissions::from_mode(0o600))
+        .expect("chmod");
+    completed(live.transfer(|id| Command::Download {
+        id,
+        sources: vec![live.path("dl")],
+        dest_dir: out.path().to_path_buf(),
+    }));
+    assert_eq!(mode(&dl), 0o750);
+    assert_eq!(mode(&dl.join("ro")), 0o755);
+    assert_eq!(mode(&dl.join("run.sh")), 0o755);
+
+    // Отдельно выбранные файлы тоже получают права с сервера.
+    let single = tempfile::tempdir().expect("tempdir");
+    completed(live.transfer(|id| Command::Download {
+        id,
+        sources: vec![live.path("dl/run.sh"), live.path("dl/secret")],
+        dest_dir: single.path().to_path_buf(),
+    }));
+    assert_eq!(mode(&single.path().join("run.sh")), 0o755);
+    assert_eq!(mode(&single.path().join("secret")), 0o600);
+
+    // Каталог только для чтения иначе не дал бы удалить временные каталоги.
+    std::fs::set_permissions(dl.join("ro"), std::fs::Permissions::from_mode(0o755)).expect("chmod");
+    live.shell("chmod 755 dl/ro");
 }
 
 #[test]

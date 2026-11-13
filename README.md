@@ -162,9 +162,10 @@ cargo clippy --all-targets  # no warnings
 
 - **Login.** You enter your password or key passphrase once, in the tab's terminal. The file panel waits and connects by itself as soon as you are logged in. Further tabs to the same server reuse that login. A tab opened while another one is still logging in waits for that login instead of asking again (press Enter to log in there instead).
 - **Tree.** The tree starts in your home directory. Arrows expand directories in place, and their contents load on demand. Double-click a directory to enter it. The path field accepts `~`, `..` and relative paths. The **eye** button shows dotfiles.
-- **Operations.** You can upload files or a whole directory, download the selection, create a directory, rename (F2), delete (Delete, after confirmation) and refresh (F5). Directories are transferred and deleted recursively. sshdeck asks before overwriting files.
+- **Operations.** You can upload files or a whole directory, download the selection, create a directory, rename (F2), delete (Delete, after confirmation) and refresh (F5 or Ctrl+R). Directories are transferred and deleted recursively. sshdeck asks before overwriting files.
 - **Drag and drop.** Drop files from your file manager onto a folder in the tree to upload them there, or anywhere else in the panel to upload them to the current directory. Drag rows out of the panel to download them.
-- **Transfers.** Each transfer shows its progress and a cancel button. A cancelled transfer does not leave half-written files behind. Modification times are kept in both directions, and new files on the server get the permissions of the local file. Symlinks to folders are followed, with protection against loops; special files are skipped with a notice. File names that are not valid UTF-8 work too.
+- **Files on this computer.** The **computer** button at the top of the panel shows a local file tree above the server tree; the divider between them can be dragged. Select files in one tree and press F5 (or the copy button, or *Upload to Server* / *Download to Local Folder* in the context menu) to copy them into the folder open in the other tree, or drag them from one tree to the other. The local tree can open files and folders, create folders, rename (F2), move to the trash (Delete) and copy paths; it never deletes anything permanently. It opens in the folder you last used with this server, and the button's state is shared by all tabs and kept after a restart.
+- **Transfers.** Each transfer shows its progress and a cancel button. A cancelled transfer does not leave half-written files behind. Modification times are kept in both directions, new files on the server get the permissions of the local file, and downloaded files and folders get the permissions they have on the server (without write access for group and others). Symlinks to folders are followed, with protection against loops; special files are skipped with a notice. File names that are not valid UTF-8 work too.
 - **Remote editing.** Double-click a file to download it and open it with `xdg-open`. Every time you save it in the editor, it is uploaded back while the tab is open. If the file changed on the server since you opened it, sshdeck asks whether to overwrite it, save your version as a copy next to it, or keep it local.
 - **Panel follows `cd`.** When the shell reports its current directory, the panel follows. fish does this out of the box. For bash and zsh, choose *Menu → File Panel Follows cd on This Server…*. This adds a few lines tagged `sshdeck-cwd` to `~/.bashrc` or `~/.zshrc` on the server; if you set it up with an older version, choose the item again to update them. Paths with spaces and non-ASCII characters work. If you hop from the server to another server, the panel stays where it is and tells you. The opposite action is *Go Here in Terminal* in the file's context menu.
 
@@ -209,8 +210,9 @@ The database client works in the spirit of DBeaver. It supports PostgreSQL, MySQ
 | Terminal | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>E</kbd> / <kbd>O</kbd> | Split the terminal to the right / down |
 | Terminal | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>W</kbd> | Close the current terminal of a split tab |
 | Files | <kbd>F2</kbd> | Rename |
-| Files | <kbd>Delete</kbd> | Delete (after confirmation) |
-| Files | <kbd>F5</kbd> | Refresh |
+| Files | <kbd>Delete</kbd> | Delete (after confirmation); in the local tree, move to the trash |
+| Files | <kbd>F5</kbd> | Refresh; with the local tree shown, copy the selection to the other tree |
+| Files | <kbd>Ctrl</kbd>+<kbd>R</kbd> | Refresh |
 | SQL editor | <kbd>Ctrl</kbd>+<kbd>Enter</kbd> | Run the statement under the cursor or the selection |
 | SQL editor | <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Enter</kbd> | Run everything |
 
@@ -280,6 +282,7 @@ po/                Russian and Spanish translations (gettext .po)
 | `~/.config/sshdeck/settings.ini` | terminal font and theme, window appearance, interface language, saved commands |
 | `~/.config/sshdeck/connections.ini` | saved connections, nested folders, their order and colors, saved port forwards. It holds no passwords and can be edited by hand or copied to another machine. Files from older versions load unchanged. |
 | `~/.config/sshdeck/databases.ini` | database connections (no passwords) |
+| `~/.local/state/sshdeck/local-folders.ini` | the last local folder used with each server |
 | `~/.local/share/sshdeck/drivers/` | installed database extensions |
 
 `SSHDECK_SSH_CONFIG=<file>` replaces `~/.ssh/config`. The host list is read from that file, and it is passed to every `ssh` call with `-F`.

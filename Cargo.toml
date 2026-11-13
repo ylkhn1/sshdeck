@@ -24,6 +24,8 @@ mysql_async = { version = "0.37", default-features = false, features = ["minimal
 oo7 = "0.7"
 bytes = "1.12.1"
 serde_json = "1.0.154"
+# Уже есть в дереве зависимостей (через GTK); нужен для renameat2.
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = "3"

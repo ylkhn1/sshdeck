@@ -32,6 +32,7 @@ use tokio_util::sync::CancellationToken;
 use crate::session::Session;
 use proto::{Attrs, Client};
 
+pub use crate::entry::{EntryKind, FileEntry};
 pub use transfer::copy_name;
 
 /// Идентификатор передачи; назначается интерфейсом.
@@ -53,43 +54,6 @@ const MAX_TREE_DEPTH: usize = 256;
 const MAX_TREE_ENTRIES: usize = 1_000_000;
 /// Сколько ждать, пока ssh завершится сам, после закрытия соединения.
 const EXIT_GRACE: Duration = Duration::from_millis(500);
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum EntryKind {
-    Dir,
-    File,
-    /// Сокеты, устройства, битые ссылки и прочее, что нельзя ни открыть,
-    /// ни раскрыть.
-    Other,
-}
-
-/// Элемент удалённого каталога. Имя и путь хранятся байтами, как их
-/// прислал сервер: они не обязаны быть UTF-8. Для показа есть
-/// [`RemoteEntry::display_name`] и [`display`].
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RemoteEntry {
-    pub name: OsString,
-    /// Полный путь на сервере.
-    pub path: PathBuf,
-    /// Тип с учётом перехода по ссылке.
-    pub kind: EntryKind,
-    pub is_link: bool,
-    pub size: Option<u64>,
-    /// Время изменения, секунды Unix.
-    pub modified: Option<u64>,
-}
-
-impl RemoteEntry {
-    /// Имя для показа: недопустимые в UTF-8 байты заменяются на «�».
-    pub fn display_name(&self) -> String {
-        self.name.to_string_lossy().into_owned()
-    }
-
-    /// Скрытый файл (имя начинается с точки).
-    pub fn is_hidden(&self) -> bool {
-        self.name.as_bytes().starts_with(b".")
-    }
-}
 
 /// Что известно о версии файла на сервере: по этому видно, менялся ли он.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -194,11 +158,11 @@ pub enum Event {
     Navigated {
         requested: PathBuf,
         /// Нормализованный путь и содержимое.
-        result: Result<(PathBuf, Vec<RemoteEntry>), String>,
+        result: Result<(PathBuf, Vec<FileEntry>), String>,
     },
     Listing {
         path: PathBuf,
-        result: Result<Vec<RemoteEntry>, String>,
+        result: Result<Vec<FileEntry>, String>,
     },
     /// Завершилась операция создания, переименования или удаления.
     OpDone {
@@ -777,7 +741,7 @@ fn spawn_transfer(
     });
 }
 
-async fn navigate(sftp: &Client, path: &Path) -> Result<(PathBuf, Vec<RemoteEntry>), proto::Error> {
+async fn navigate(sftp: &Client, path: &Path) -> Result<(PathBuf, Vec<FileEntry>), proto::Error> {
     let canonical = sftp.realpath(path).await?;
     let entries = list_dir(sftp, &canonical).await?;
     Ok((canonical, entries))
@@ -795,21 +759,22 @@ fn kind_of(attrs: &Attrs) -> EntryKind {
 
 /// Читает каталог. Для символических ссылок дополнительно выясняется, на
 /// что они указывают, чтобы ссылку на каталог можно было раскрыть.
-pub(crate) async fn list_dir(sftp: &Client, path: &Path) -> Result<Vec<RemoteEntry>, proto::Error> {
+pub(crate) async fn list_dir(sftp: &Client, path: &Path) -> Result<Vec<FileEntry>, proto::Error> {
     // Недопустимые имена уже отброшены при чтении; проверка пути — ещё
     // один рубеж.
-    let mut entries: Vec<RemoteEntry> = sftp
+    let mut entries: Vec<FileEntry> = sftp
         .read_dir(path)
         .await?
         .into_iter()
         .filter_map(|(name, attrs)| {
-            Some(RemoteEntry {
+            Some(FileEntry {
                 path: remote_child(path, &name)?,
                 name,
                 kind: kind_of(&attrs),
                 is_link: attrs.is_symlink(),
                 size: attrs.size,
                 modified: attrs.modified().map(u64::from),
+                mode: attrs.mode(),
             })
         })
         .collect();
@@ -832,6 +797,7 @@ pub(crate) async fn list_dir(sftp: &Client, path: &Path) -> Result<Vec<RemoteEnt
             entry.kind = kind_of(&attrs);
             entry.size = attrs.size;
             entry.modified = attrs.modified().map(u64::from);
+            entry.mode = attrs.mode();
         }
     }
     Ok(entries)
@@ -919,13 +885,14 @@ mod tests {
         assert_eq!(parent_remote(&file), dir);
         assert_eq!(base_name(&file).as_bytes(), b"caf\xe9.txt");
         assert_eq!(display(&file), "/srv/\u{fffd}\u{fffd}/caf\u{fffd}.txt");
-        let entry = RemoteEntry {
+        let entry = FileEntry {
             name: OsString::from_vec(b".\xff".to_vec()),
             path: p(b"/srv/.\xff"),
             kind: EntryKind::File,
             is_link: false,
             size: None,
             modified: None,
+            mode: None,
         };
         assert!(entry.is_hidden());
         assert_eq!(entry.display_name(), ".\u{fffd}");

@@ -1036,8 +1036,6 @@ msgstr "Домашний каталог"
 msgid "Up one level"
 msgstr "На уровень вверх"
 
-msgid "Refresh (F5)"
-msgstr "Обновить (F5)"
 
 msgid "Current folder. Type a path and press Enter"
 msgstr "Текущий каталог. Впишите путь и нажмите Enter"
@@ -1201,8 +1199,6 @@ msgstr "Скачивание: {}"
 msgid "Replace Existing Local Files?"
 msgstr "Заменить существующие локальные файлы?"
 
-msgid "The selected folder already contains: {}"
-msgstr "В выбранном каталоге уже есть: {}"
 
 msgid "Replace"
 msgstr "Заменить"
@@ -2026,3 +2022,80 @@ msgstr "Вход в другом терминале не завершился �
 
 msgid "Someone is logging in to this server in another tab — the file panel will connect automatically."
 msgstr "Вход на этот сервер выполняется в другой вкладке — панель файлов подключится сама."
+
+# --- local files ---
+
+msgid "Show files on this computer"
+msgstr "Показать файлы этого компьютера"
+
+msgid "Files on this computer"
+msgstr "Файлы этого компьютера"
+
+msgid "Files on the server"
+msgstr "Файлы на сервере"
+
+msgid "Refresh (Ctrl+R)"
+msgstr "Обновить (Ctrl+R)"
+
+msgid "Upload the selection to the server folder below (F5)"
+msgstr "Загрузить выбранное в каталог сервера ниже (F5)"
+
+msgid "Download the selection to the local folder above (F5)"
+msgstr "Скачать выбранное в локальный каталог выше (F5)"
+
+msgid "Upload to Server"
+msgstr "Загрузить на сервер"
+
+msgid "Download to Local Folder"
+msgstr "Скачать в локальный каталог"
+
+msgid "New folder on this computer"
+msgstr "Создать каталог на этом компьютере"
+
+msgid "Select files or folders to upload"
+msgstr "Выберите файлы или каталоги для загрузки"
+
+msgid "There is no open folder to copy to"
+msgstr "Нет открытого каталога, куда копировать"
+
+msgid "Folders with the same name are merged: files with the same name are replaced, other files are kept."
+msgstr "Одноимённые каталоги объединяются: совпадающие файлы заменяются, остальные остаются."
+
+msgid "Open in File Manager"
+msgstr "Открыть в файловом менеджере"
+
+msgid "Move to Trash"
+msgstr "Переместить в корзину"
+
+msgid "Could Not Open a Local Folder"
+msgstr "Не удалось открыть локальный каталог"
+
+msgid "internal error"
+msgstr "внутренняя ошибка"
+
+msgid "Could not remember the local folder: {}"
+msgstr "Не удалось запомнить локальный каталог: {}"
+
+msgid "Enter a name"
+msgstr "Введите имя"
+
+msgid "“{}” already exists"
+msgstr "«{}» уже существует"
+
+msgid "Could not create “{}”: {}"
+msgstr "Не удалось создать «{}»: {}"
+
+msgid "Could not rename to “{}”: {}"
+msgstr "Не удалось переименовать в «{}»: {}"
+
+msgid "Could not open the file manager: {}"
+msgstr "Не удалось открыть файловый менеджер: {}"
+
+msgid "Select what to move to the trash"
+msgstr "Выберите, что переместить в корзину"
+
+msgid "Could not move {} to the trash: {}"
+msgstr "Не удалось переместить в корзину {}: {}"
+
+msgid "Moved to the trash: {}"
+msgstr "Перемещено в корзину: {}"

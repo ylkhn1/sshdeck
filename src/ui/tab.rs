@@ -128,6 +128,7 @@ impl SessionTab {
         runtime_dir: &Path,
         font: &str,
         show_files: bool,
+        show_local_files: bool,
         startup: &str,
         saved: Option<Connection>,
         on_finished: impl Fn() + 'static,
@@ -137,7 +138,7 @@ impl SessionTab {
         let session = Session::shared(target, runtime_dir, crate::session::config_override());
         let scratch_dir = runtime_dir.join(format!("files-{}-{tab_id}", std::process::id()));
         let notifier = Notifier::new();
-        let panel = FilePanel::new(&session, scratch_dir, notifier.clone());
+        let panel = FilePanel::new(&session, scratch_dir, notifier.clone(), show_local_files);
         panel.widget().set_visible(show_files);
         let terms = gtk::Box::builder()
             .hexpand(true)
@@ -532,6 +533,17 @@ impl SessionTab {
     /// Диалог «Проброс портов» для этой вкладки.
     pub fn show_forwards(&self) {
         forwards::show_dialog(self.widget(), &self.forwards);
+    }
+
+    /// Показывает или прячет дерево этого компьютера в панели файлов (без
+    /// вызова обработчика переключения).
+    pub fn set_local_files_visible(&self, visible: bool) {
+        self.panel.set_local_files_visible(visible);
+    }
+
+    /// Пользователь включил или выключил дерево этого компьютера.
+    pub fn set_local_files_handler(&self, handler: impl Fn(bool) + 'static) {
+        self.panel.set_local_toggle_handler(handler);
     }
 
     /// Плавно показывает или прячет панель файлов: она выезжает слева,

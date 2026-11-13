@@ -2039,6 +2039,7 @@ dependencies = [
  "futures-util",
  "gtk4",
  "libadwaita",
+ "libc",
  "mysql_async",
  "native-tls",
  "oo7",

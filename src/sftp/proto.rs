@@ -164,6 +164,11 @@ impl Attrs {
         self.times.map(|(_, modified)| modified)
     }
 
+    /// Права доступа без битов типа файла.
+    pub fn mode(&self) -> Option<u32> {
+        self.permissions.map(|mode| mode & 0o7777)
+    }
+
     fn encode(&self, packet: &mut Packet) {
         let mut flags = 0;
         if self.size.is_some() {
@@ -901,6 +906,7 @@ mod tests {
         assert!(reader.0.is_empty());
         assert!(attrs.is_file() && !attrs.is_dir() && !attrs.is_symlink());
         assert_eq!(attrs.modified(), Some(1_700_000_100));
+        assert_eq!(attrs.mode(), Some(0o644));
 
         let empty = Attrs::default();
         let mut packet = Packet::new(0);

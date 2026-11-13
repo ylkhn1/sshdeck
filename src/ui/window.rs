@@ -170,6 +170,14 @@ columnview.sshdeck-files > listview > row:selected {
   background-color: color-mix(in srgb, var(--accent-bg-color) 14%, transparent);
   box-shadow: inset 2px 0 var(--accent-bg-color);
 }
+/* local tree above the server tree: the tree F5 copies from is marked by an accent line */
+paned.sshdeck-files-split > separator {
+  background-color: color-mix(in srgb, currentColor 12%, transparent);
+}
+paned.sshdeck-files-split.split > .sshdeck-files-section { border-top: 2px solid transparent; }
+paned.sshdeck-files-split.split > .sshdeck-files-section.active {
+  border-top-color: color-mix(in srgb, var(--accent-bg-color) 70%, transparent);
+}
 .sshdeck-transfers { padding: 0 6px 6px 6px; }
 .sshdeck-transfer { padding: 6px 6px 10px 12px; }
 .sshdeck-section { margin: 10px 14px 2px 14px; }
@@ -1025,9 +1033,13 @@ impl AppWindow {
                 }
             }
         };
-        let (font, show_files) = {
+        let (font, show_files, show_local_files) = {
             let settings = self.settings.borrow();
-            (settings.terminal_font.clone(), settings.show_files)
+            (
+                settings.terminal_font.clone(),
+                settings.show_files,
+                settings.show_local_files,
+            )
         };
         let tab = SessionTab::new(
             &target,
@@ -1035,11 +1047,25 @@ impl AppWindow {
             &runtime_dir,
             &font,
             show_files,
+            show_local_files,
             startup,
             saved.cloned(),
             on_finished,
         );
         *slot.borrow_mut() = Some(Rc::downgrade(&tab));
+        {
+            // Дерево этого компьютера, как и панель файлов, одно на все
+            // вкладки; его состояние сохраняется.
+            let weak = Rc::downgrade(self);
+            tab.set_local_files_handler(move |visible| {
+                let Some(this) = weak.upgrade() else { return };
+                for tab in this.tabs.borrow().iter() {
+                    tab.set_local_files_visible(visible);
+                }
+                this.settings.borrow_mut().show_local_files = visible;
+                this.save_settings();
+            });
+        }
         if saved.is_some() {
             let weak = Rc::downgrade(self);
             tab.set_forwards_save_handler(Rc::new(move |original, edit| {

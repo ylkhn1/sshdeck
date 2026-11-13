@@ -4,8 +4,8 @@
 //! объём), затем копирует файлы по одному. Отмена проверяется на каждой
 //! сетевой операции. Ссылки на каталоги обходятся как обычные каталоги,
 //! но не по кругу и не повторно (см. [`LinkGuard`]). Время изменения
-//! переносится в обе стороны, новые файлы на сервере получают права
-//! исходных.
+//! переносится в обе стороны. Новые файлы на сервере получают права
+//! исходных, скачанные — права с сервера (см. [`download_mode`]).
 //!
 //! Сервер считается недоверенным: имена с него превращаются в пути только
 //! через [`local_child`]/[`remote_child`], глубина и размер обходимого
@@ -14,9 +14,10 @@
 
 use std::collections::{HashSet, VecDeque};
 use std::ffi::{OsStr, OsString};
+use std::fs::Permissions;
 use std::hash::{BuildHasher, RandomState};
 use std::os::unix::ffi::{OsStrExt, OsStringExt};
-use std::os::unix::fs::MetadataExt;
+use std::os::unix::fs::{MetadataExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -40,6 +41,9 @@ const MAX_DEPTH: usize = 64;
 const MAX_COPIES: u32 = 999;
 /// Права, которые переносятся на сервер: без setuid, setgid и sticky.
 const MODE_MASK: u32 = 0o777;
+/// Права, которые переносятся с сервера: вдобавок без записи для группы и
+/// остальных.
+const DOWNLOAD_MODE_MASK: u32 = 0o755;
 /// Насколько скачанный файл может перерасти заявленный размер (файл
 /// дописывают во время скачивания): не больше ещё одного такого же размера
 /// и не меньше этого запаса. Дальше скачивание останавливается.
@@ -206,6 +210,8 @@ enum DownloadItem {
     Dir {
         local: PathBuf,
         modified: Option<u64>,
+        /// Права на сервере (без типа файла).
+        mode: Option<u32>,
     },
     File {
         remote: PathBuf,
@@ -213,7 +219,25 @@ enum DownloadItem {
         /// Размер по словам сервера.
         size: Option<u64>,
         modified: Option<u64>,
+        /// Права на сервере (без типа файла).
+        mode: Option<u32>,
     },
+}
+
+/// Права скачанного файла или созданного каталога по правам на сервере:
+/// без записи для группы и остальных и без setuid, setgid и sticky; более
+/// строгие права (например, 0600) остаются как есть. umask здесь не
+/// применяется — права переносятся, как у `sftp -p`. Сервер не прислал
+/// прав — `None`: остаются права по умолчанию (по umask).
+///
+/// Какие локальные права меняются:
+/// - файл всегда пишется во временный файл и переименовывается, поэтому
+///   и новый, и перезаписанный файл получает права с сервера;
+/// - каталог получает права, только если его создала эта передача;
+///   права существующего каталога, в который скачивание лишь добавляет
+///   файлы, не трогаются — это каталог пользователя.
+fn download_mode(remote: Option<u32>) -> Option<u32> {
+    remote.map(|mode| mode & DOWNLOAD_MODE_MASK)
 }
 
 pub(super) async fn download(job: &mut Job, sources: Vec<PathBuf>, dest_dir: PathBuf) -> Step<()> {
@@ -233,12 +257,14 @@ pub(super) async fn download(job: &mut Job, sources: Vec<PathBuf>, dest_dir: Pat
         // на что она указывает.
         let attrs = guard(&cancel, &context, sftp.stat(source)).await?;
         let modified = attrs.modified().map(u64::from);
+        let mode = attrs.mode();
         if attrs.is_dir() {
             let real = guard(&cancel, &context, sftp.realpath(source)).await?;
             links.followed.insert(real.clone());
             plan.push(DownloadItem::Dir {
                 local: local.clone(),
                 modified,
+                mode,
             });
             scan_remote(job, source, real, &local, &mut links, &mut plan).await?;
         } else if attrs.is_file() {
@@ -253,6 +279,7 @@ pub(super) async fn download(job: &mut Job, sources: Vec<PathBuf>, dest_dir: Pat
                 local,
                 size: attrs.size,
                 modified,
+                mode,
             });
         } else {
             job.skipped.push(source.clone());
@@ -271,12 +298,16 @@ pub(super) async fn download(job: &mut Job, sources: Vec<PathBuf>, dest_dir: Pat
     let mut created = Vec::new();
     for item in plan {
         match item {
-            DownloadItem::Dir { local, modified } => {
+            DownloadItem::Dir {
+                local,
+                modified,
+                mode,
+            } => {
                 let context = local.display().to_string();
                 let existed = tokio::fs::try_exists(&local).await.unwrap_or(false);
                 guard(&cancel, &context, tokio::fs::create_dir_all(&local)).await?;
                 if !existed {
-                    created.push((local, modified));
+                    created.push((local, modified, download_mode(mode)));
                 }
             }
             DownloadItem::File {
@@ -284,16 +315,26 @@ pub(super) async fn download(job: &mut Job, sources: Vec<PathBuf>, dest_dir: Pat
                 local,
                 size,
                 modified,
+                mode,
             } => {
-                download_file(job, &remote, &local, size, modified).await?;
+                download_file(job, &remote, &local, size, modified, mode).await?;
             }
         }
     }
-    // Время созданных каталогов ставится в конце, от глубоких к верхним:
-    // запись файлов внутрь его меняет.
-    for (dir, modified) in created.iter().rev() {
+    // Время и права созданных каталогов ставятся в конце, от глубоких к
+    // верхним: запись файлов внутрь меняет время, а каталог без права
+    // записи или чтения не дал бы записать содержимое и поставить время
+    // вложенным каталогам. До этого места каталоги остаются с правами по
+    // умолчанию (у владельца rwx). У каждого каталога сначала ставится
+    // время (для этого каталог открывается), затем права; верхние каталоги
+    // ещё доступны, пока обрабатываются вложенные. Ошибки здесь не мешают
+    // передаче (например, файловая система без прав Unix).
+    for (dir, modified, mode) in created.iter().rev() {
         if let Some(modified) = modified {
             let _ = set_local_mtime(dir, *modified);
+        }
+        if let Some(mode) = mode {
+            let _ = std::fs::set_permissions(dir, Permissions::from_mode(*mode));
         }
     }
     job.progress("", true);
@@ -340,6 +381,7 @@ async fn scan_remote(
                     plan.push(DownloadItem::Dir {
                         local: local.clone(),
                         modified: entry.modified,
+                        mode: entry.mode,
                     });
                     pending.push((remote, local, chain));
                 }
@@ -355,6 +397,7 @@ async fn scan_remote(
                     plan.push(DownloadItem::Dir {
                         local: local.clone(),
                         modified: entry.modified,
+                        mode: entry.mode,
                     });
                     pending.push((remote, local, extend_chain(&chain, target)));
                 }
@@ -363,6 +406,7 @@ async fn scan_remote(
                     local,
                     size: entry.size,
                     modified: entry.modified,
+                    mode: entry.mode,
                 }),
                 (EntryKind::Other, _) => job.skipped.push(remote),
             }
@@ -381,11 +425,12 @@ async fn download_file(
     local: &Path,
     size: Option<u64>,
     modified: Option<u64>,
+    mode: Option<u32>,
 ) -> Step<()> {
     let dir = local.parent().unwrap_or_else(|| Path::new("."));
     let (part, writer) = create_part(&job.cancel, dir).await?;
     let result = async {
-        copy_down(job, remote, writer, &part, size, modified).await?;
+        copy_down(job, remote, writer, &part, size, modified, mode).await?;
         let context = local.display().to_string();
         guard(&job.cancel, &context, tokio::fs::rename(&part, local)).await
     }
@@ -440,6 +485,7 @@ async fn copy_down(
     part: &Path,
     size: Option<u64>,
     modified: Option<u64>,
+    mode: Option<u32>,
 ) -> Step<()> {
     let cancel = job.cancel.clone();
     let name = name_of(remote);
@@ -499,9 +545,18 @@ async fn copy_down(
     if !at_end || size.is_some_and(|size| size != written) {
         job.size_mismatch.push(remote.to_path_buf());
     }
-    if let Some(modified) = modified {
+    let mode = download_mode(mode);
+    if modified.is_some() || mode.is_some() {
         let writer = writer.into_std().await;
-        let _ = writer.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(modified));
+        if let Some(modified) = modified {
+            let _ = writer.set_modified(SystemTime::UNIX_EPOCH + Duration::from_secs(modified));
+        }
+        // Права ставятся временному файлу до переименования: под настоящим
+        // именем файл сразу появляется с ними. Ошибка (например, файловая
+        // система без прав Unix) скачиванию не мешает.
+        if let Some(mode) = mode {
+            let _ = writer.set_permissions(Permissions::from_mode(mode));
+        }
     }
     Ok(())
 }
@@ -916,6 +971,27 @@ mod tests {
         assert_eq!(copy_name(OsStr::new("a.tar.gz"), 1), "a.tar (local copy).gz");
         assert_eq!(copy_name(OsStr::new("x."), 1), "x. (local copy)");
         assert_eq!(copy_name(&os(b"\xff.txt"), 1), os(b"\xff (local copy).txt"));
+    }
+
+    #[test]
+    fn download_modes() {
+        // Права без записи для группы и остальных переносятся как есть.
+        assert_eq!(download_mode(Some(0o755)), Some(0o755));
+        assert_eq!(download_mode(Some(0o644)), Some(0o644));
+        assert_eq!(download_mode(Some(0o700)), Some(0o700));
+        assert_eq!(download_mode(Some(0o600)), Some(0o600));
+        assert_eq!(download_mode(Some(0o500)), Some(0o500));
+        assert_eq!(download_mode(Some(0o000)), Some(0o000));
+        // Запись для группы и остальных снимается.
+        assert_eq!(download_mode(Some(0o777)), Some(0o755));
+        assert_eq!(download_mode(Some(0o666)), Some(0o644));
+        assert_eq!(download_mode(Some(0o620)), Some(0o600));
+        // setuid, setgid и sticky не переносятся.
+        assert_eq!(download_mode(Some(0o4755)), Some(0o755));
+        assert_eq!(download_mode(Some(0o2775)), Some(0o755));
+        assert_eq!(download_mode(Some(0o1777)), Some(0o755));
+        // Сервер не прислал прав — права по умолчанию.
+        assert_eq!(download_mode(None), None);
     }
 
     #[test]

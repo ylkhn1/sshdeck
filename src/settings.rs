@@ -30,6 +30,7 @@ const KEY_THEME: &str = "theme";
 const GROUP_APPEARANCE: &str = "appearance";
 const KEY_SCHEME: &str = "scheme";
 const KEY_FILES_PANEL: &str = "files_panel";
+const KEY_LOCAL_FILES: &str = "local_files";
 const KEY_LANGUAGE: &str = "language";
 const GROUP_SNIPPET: &str = "snippet";
 const KEY_NAME: &str = "name";
@@ -53,6 +54,8 @@ pub struct Settings {
     pub color_scheme: String,
     /// Видна ли панель файлов во вкладках.
     pub show_files: bool,
+    /// Видно ли в панели файлов дерево локальных файлов.
+    pub show_local_files: bool,
     /// Язык интерфейса; применяется при следующем запуске.
     pub language: String,
     pub snippets: Vec<Snippet>,
@@ -68,6 +71,7 @@ impl Default for Settings {
             terminal_theme: DEFAULT_THEME.to_string(),
             color_scheme: DEFAULT_SCHEME.to_string(),
             show_files: true,
+            show_local_files: false,
             language: DEFAULT_LANGUAGE.to_string(),
             snippets: Vec::new(),
             collapsed_folders: BTreeSet::new(),
@@ -127,6 +131,9 @@ impl Settings {
         if let Ok(show) = key_file.boolean(GROUP_APPEARANCE, KEY_FILES_PANEL) {
             settings.show_files = show;
         }
+        if let Ok(show) = key_file.boolean(GROUP_APPEARANCE, KEY_LOCAL_FILES) {
+            settings.show_local_files = show;
+        }
         if let Some(language) = field(GROUP_APPEARANCE, KEY_LANGUAGE) {
             settings.language = language;
         }
@@ -156,6 +163,7 @@ impl Settings {
         key_file.set_string(GROUP_TERMINAL, KEY_THEME, &self.terminal_theme);
         key_file.set_string(GROUP_APPEARANCE, KEY_SCHEME, &self.color_scheme);
         key_file.set_boolean(GROUP_APPEARANCE, KEY_FILES_PANEL, self.show_files);
+        key_file.set_boolean(GROUP_APPEARANCE, KEY_LOCAL_FILES, self.show_local_files);
         key_file.set_string(GROUP_APPEARANCE, KEY_LANGUAGE, &self.language);
         for (index, snippet) in self.snippets.iter().enumerate() {
             let group = format!("{GROUP_SNIPPET}-{}", index + 1);
@@ -217,9 +225,34 @@ mod tests {
         assert_eq!(settings.terminal_font, "JetBrains Mono 12");
         assert_eq!(settings.terminal_theme, DEFAULT_THEME);
         assert!(settings.show_files);
+        assert!(!settings.show_local_files);
         assert_eq!(settings.language, super::DEFAULT_LANGUAGE);
         assert!(settings.snippets.is_empty());
         assert!(settings.collapsed_folders.is_empty());
+    }
+
+    #[test]
+    fn local_files_key() {
+        // Файл версии без локального дерева: дерево скрыто.
+        let old = Settings::parse("[appearance]\nfiles_panel=false\nscheme=dark\n");
+        assert!(!old.show_files);
+        assert!(!old.show_local_files);
+        assert!(Settings::parse("[appearance]\nlocal_files=true\n").show_local_files);
+        // Мусор в значении — по умолчанию.
+        assert!(!Settings::parse("[appearance]\nlocal_files=maybe\n").show_local_files);
+
+        let settings = Settings {
+            show_local_files: true,
+            ..Settings::default()
+        };
+        let data = settings.serialize();
+        assert!(data.contains("local_files=true\n"), "{data}");
+        assert_eq!(Settings::parse(&data), settings);
+        assert!(
+            Settings::default()
+                .serialize()
+                .contains("local_files=false\n")
+        );
     }
 
     #[test]
@@ -229,6 +262,7 @@ mod tests {
             terminal_theme: "dracula".to_string(),
             color_scheme: "dark".to_string(),
             show_files: false,
+            show_local_files: true,
             language: "es".to_string(),
             snippets: vec![
                 Snippet {

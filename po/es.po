@@ -1021,8 +1021,6 @@ msgstr "Carpeta personal"
 msgid "Up one level"
 msgstr "Subir un nivel"
 
-msgid "Refresh (F5)"
-msgstr "Actualizar (F5)"
 
 msgid "Current folder. Type a path and press Enter"
 msgstr "Carpeta actual. Escribe una ruta y pulsa Intro"
@@ -1184,8 +1182,6 @@ msgstr "Descargando: {}"
 msgid "Replace Existing Local Files?"
 msgstr "¿Reemplazar los archivos locales existentes?"
 
-msgid "The selected folder already contains: {}"
-msgstr "La carpeta seleccionada ya contiene: {}"
 
 msgid "Replace"
 msgstr "Reemplazar"
@@ -2006,3 +2002,80 @@ msgstr "El otro inicio de sesión no se completó; se inicia sesión aquí."
 
 msgid "Someone is logging in to this server in another tab — the file panel will connect automatically."
 msgstr "Se está iniciando sesión en este servidor en otra pestaña; el panel de archivos se conectará automáticamente."
+
+# --- local files ---
+
+msgid "Show files on this computer"
+msgstr "Mostrar los archivos de este equipo"
+
+msgid "Files on this computer"
+msgstr "Archivos de este equipo"
+
+msgid "Files on the server"
+msgstr "Archivos del servidor"
+
+msgid "Refresh (Ctrl+R)"
+msgstr "Actualizar (Ctrl+R)"
+
+msgid "Upload the selection to the server folder below (F5)"
+msgstr "Subir la selección a la carpeta del servidor de abajo (F5)"
+
+msgid "Download the selection to the local folder above (F5)"
+msgstr "Descargar la selección a la carpeta local de arriba (F5)"
+
+msgid "Upload to Server"
+msgstr "Subir al servidor"
+
+msgid "Download to Local Folder"
+msgstr "Descargar a la carpeta local"
+
+msgid "New folder on this computer"
+msgstr "Nueva carpeta en este equipo"
+
+msgid "Select files or folders to upload"
+msgstr "Selecciona archivos o carpetas para subir"
+
+msgid "There is no open folder to copy to"
+msgstr "No hay ninguna carpeta abierta a la que copiar"
+
+msgid "Folders with the same name are merged: files with the same name are replaced, other files are kept."
+msgstr "Las carpetas con el mismo nombre se combinan: los archivos con el mismo nombre se reemplazan y los demás se conservan."
+
+msgid "Open in File Manager"
+msgstr "Abrir en el gestor de archivos"
+
+msgid "Move to Trash"
+msgstr "Mover a la papelera"
+
+msgid "Could Not Open a Local Folder"
+msgstr "No se pudo abrir una carpeta local"
+
+msgid "internal error"
+msgstr "error interno"
+
+msgid "Could not remember the local folder: {}"
+msgstr "No se pudo recordar la carpeta local: {}"
+
+msgid "Enter a name"
+msgstr "Escribe un nombre"
+
+msgid "“{}” already exists"
+msgstr "«{}» ya existe"
+
+msgid "Could not create “{}”: {}"
+msgstr "No se pudo crear «{}»: {}"
+
+msgid "Could not rename to “{}”: {}"
+msgstr "No se pudo cambiar el nombre a «{}»: {}"
+
+msgid "Could not open the file manager: {}"
+msgstr "No se pudo abrir el gestor de archivos: {}"
+
+msgid "Select what to move to the trash"
+msgstr "Selecciona lo que quieres mover a la papelera"
+
+msgid "Could not move {} to the trash: {}"
+msgstr "No se pudo mover {} a la papelera: {}"
+
+msgid "Moved to the trash: {}"
+msgstr "Movido a la papelera: {}"
