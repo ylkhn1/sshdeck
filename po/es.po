@@ -2003,3 +2003,6 @@ msgstr "Pulse Intro para iniciar sesión aquí."
 
 msgid "The other login did not complete — logging in here."
 msgstr "El otro inicio de sesión no se completó; se inicia sesión aquí."
+
+msgid "Someone is logging in to this server in another tab — the file panel will connect automatically."
+msgstr "Se está iniciando sesión en este servidor en otra pestaña; el panel de archivos se conectará automáticamente."

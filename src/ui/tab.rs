@@ -294,6 +294,7 @@ impl SessionTab {
                 {
                     // Не ждать чужого входа, а войти в этом терминале.
                     pane.leave_login();
+                    tab.update_login_note();
                     pane.term.feed(b"\r\n");
                     tab.launch_ssh(&pane);
                     return glib::Propagation::Stop;
@@ -405,6 +406,7 @@ impl SessionTab {
             terminal::hang_up(pid);
         }
         self.remove_from_layout(pane);
+        self.update_login_note();
     }
 
     /// Убирает терминал из раскладки: его место занимает соседняя половина.
@@ -922,6 +924,17 @@ impl SessionTab {
             LoginTurn::MasterUp | LoginTurn::LogIn => self.launch_ssh(pane),
             LoginTurn::Wait => self.wait_for_login(pane),
         }
+        self.update_login_note();
+    }
+
+    /// Если все терминалы вкладки ждут чужого входа, панель файлов говорит,
+    /// что вход идёт в другой вкладке, а не просит ввести пароль здесь.
+    fn update_login_note(&self) {
+        let elsewhere = {
+            let panes = self.panes.borrow();
+            !panes.is_empty() && panes.iter().all(|p| p.waiting.borrow().is_some())
+        };
+        self.panel.set_login_elsewhere(elsewhere);
     }
 
     /// Ждёт, пока закончится вход в другом терминале: опрашивает мастер и
@@ -946,6 +959,7 @@ impl SessionTab {
             }
             // Источник снимается возвратом Break, а не через remove().
             pane.waiting.take();
+            tab.update_login_note();
             if turn == LoginTurn::LogIn {
                 let note = format!(
                     "\x1b[2m{}\x1b[0m\r\n",

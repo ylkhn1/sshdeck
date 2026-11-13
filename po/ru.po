@@ -2023,3 +2023,6 @@ msgstr "Нажмите Enter, чтобы войти здесь."
 
 msgid "The other login did not complete — logging in here."
 msgstr "Вход в другом терминале не завершился — входим здесь."
+
+msgid "Someone is logging in to this server in another tab — the file panel will connect automatically."
+msgstr "Вход на этот сервер выполняется в другой вкладке — панель файлов подключится сама."

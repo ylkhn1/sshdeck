@@ -68,6 +68,8 @@ struct Inner {
     worker: RefCell<Option<SftpWorker>>,
     /// Работает ли ssh в терминале вкладки.
     ssh_running: Cell<bool>,
+    /// Все терминалы вкладки ждут входа, который идёт в другой вкладке.
+    login_elsewhere: Cell<bool>,
     /// Переходить ли вслед за `cd` в терминале.
     follow: Cell<bool>,
     /// Вызывается каждый раз, когда SFTP-соединение установлено.
@@ -164,6 +166,19 @@ impl FilePanel {
     /// Сообщает панели, работает ли ssh в терминале вкладки.
     pub fn set_ssh_running(&self, running: bool) {
         self.inner.set_ssh_running(running);
+    }
+
+    /// Сообщает панели, что терминалы вкладки ждут входа в другой вкладке:
+    /// тогда просьба ввести пароль «в терминале справа» была бы неверной.
+    pub fn set_login_elsewhere(&self, elsewhere: bool) {
+        let inner = &self.inner;
+        if inner.login_elsewhere.replace(elsewhere) == elsewhere {
+            return;
+        }
+        let last = inner.state.borrow().last_conn.clone();
+        if let Some(state @ ConnState::Waiting { last_error: None }) = last {
+            inner.on_state(state);
+        }
     }
 
     /// Терминал сообщил свой текущий каталог: панель переходит туда же,
@@ -548,6 +563,7 @@ impl Inner {
             scratch_dir,
             worker: RefCell::new(None),
             ssh_running: Cell::new(true),
+            login_elsewhere: Cell::new(false),
             follow: Cell::new(true),
             on_connected: RefCell::new(None),
             on_terminal_cd: RefCell::new(None),
@@ -944,6 +960,14 @@ impl Inner {
                 false,
                 tr!("Connection Closed"),
                 tr!("Click “Reconnect” to log in again."),
+            ),
+            ConnState::Waiting { last_error: None } if self.login_elsewhere.get() => self.show_status(
+                true,
+                tr!("Waiting for Login"),
+                tr!(
+                    "Someone is logging in to this server in another tab — the file panel will \
+                     connect automatically."
+                ),
             ),
             ConnState::Waiting { last_error: None } => self.show_status(
                 true,
